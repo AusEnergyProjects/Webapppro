@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { SiteFooter } from "@/components/ComparatorChrome";
+import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { JsonLd } from "@/components/JsonLd";
-import { AeaProductLink, TLinkBrand } from "@/components/TLinkChrome";
+import { TLinkBrand } from "@/components/TLinkChrome";
 import { buildPlatformMetadata, PUBLIC_SITE } from "@/lib/public-site";
 import styles from "./page.module.css";
 
@@ -72,44 +72,43 @@ function DemoMap() {
 }
 
 export default function ForTradesPage() {
-  return <main className={styles.page}>
-    <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", "@id": `${PUBLIC_SITE.apexUrl}/direct-trade/for-trades#webpage`, url: `${PUBLIC_SITE.apexUrl}/direct-trade/for-trades`, name: "TLink free trade business software", description: metadata.description, dateModified: "2026-10-09", inLanguage: "en-AU", isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId }, publisher: { "@id": PUBLIC_SITE.organizationId } }} />
-    <header className={styles.header}>
-      <Link href="/direct-trade/for-trades" aria-label="TLink for trades"><TLinkBrand context="Trade business software" /></Link>
-      <nav aria-label="TLink for trades"><a href="#features">What you can do</a><a href="#getting-started">Getting started</a><Link href="/direct-trade/dashboard" className={styles.signIn}>Sign in <span aria-hidden="true">↗</span></Link></nav>
-      <AeaProductLink placement="site-header" />
-    </header>
+  return <main className={`wrap ${styles.page}`}>
+    <SiteHeader active="direct-trade-access" />
+    <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", "@id": `${PUBLIC_SITE.apexUrl}/direct-trade/for-trades#webpage`, url: `${PUBLIC_SITE.apexUrl}/direct-trade/for-trades`, name: "TLink free trade business software", description: metadata.description, dateModified: "2026-10-10", inLanguage: "en-AU", isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId }, publisher: { "@id": PUBLIC_SITE.organizationId } }} />
 
     <section className={styles.hero} aria-labelledby="trades-title">
       <div className={styles.heroCopy}>
-        <span className={styles.eyebrow}>FREE CORE SOFTWARE FOR TRADE BUSINESSES</span>
-        <h1 id="trades-title">Good work.<br /><span>Connected business.</span></h1>
+        <div className={styles.heroBrand}><TLinkBrand context="Trades and service businesses" /><Link href="/direct-trade/dashboard" className={styles.signIn}>Sign in <span aria-hidden="true">↗</span></Link></div>
+        <span className={styles.eyebrow}>FREE CORE SOFTWARE. YOUR WORK, CONNECTED.</span>
+        <h1 id="trades-title">Run the business.<br /><span>Keep work moving.</span></h1>
         <p className={styles.heroLead}>Your customers, quotes, jobs, schedule and team. Together in TLink.</p>
-        <p className={styles.heroDetail}>From the first enquiry to the final invoice, keep the work and the people behind it connected. Built for the office, the field and the households counting on you.</p>
+        <p className={styles.heroDetail}>From the first enquiry to the final invoice. Bring the office, the field and the customer journey into the same story.</p>
         <div className={styles.actions}><Link href={setupHref} className={styles.primary}>Set up your free business <span aria-hidden="true">↗</span></Link><a href="#features" className={styles.secondary}>Explore TLink <span aria-hidden="true">↓</span></a></div>
         <p className={styles.heroNote}>A valid ABN and business approval are required before workspace access.</p>
       </div>
-      <DemoDashboard />
+      <div className={styles.heroVisual}><div className={styles.visualHeading}><span>FROM FIRST HELLO TO JOB WELL DONE</span><strong>The whole job. In view.</strong></div><DemoDashboard /><div className={styles.workflow} aria-label="Connected TLink job workflow"><span>Enquiry</span><span aria-hidden="true">↗</span><span>Quote</span><span aria-hidden="true">↗</span><span>Job</span><span aria-hidden="true">↗</span><span>Invoice</span></div></div>
     </section>
+
+    <nav className={styles.topicNav} aria-label="TLink trades page topics"><a href="#features">Why TLink</a><a href="#trade-map">Jobs on the map</a><a href="#customer-experience">Your customers</a><a href="#connections">Your connections</a><a href="#getting-started">Get started</a></nav>
 
     <div className={styles.valueStrip} aria-label="TLink at a glance"><div><strong>A$0</strong><span>Core trade software</span></div><div><strong>One job journey</strong><span>Customers, quotes, field work and finance</span></div><div><strong>Your team, your access</strong><span>Role presets and individual permissions</span></div></div>
 
     <section id="features" className={styles.section} aria-labelledby="features-title">
       <div className={styles.sectionHeading}><span className={styles.eyebrow}>WHY TLINK</span><h2 id="features-title">Less hunting around.<br /><span>More context where you work.</span></h2><p>A customer record should lead to their job. A quote should lead to the agreed work. The office and field team should be able to pick up the same story.</p></div>
-      <div className={styles.featureGrid}>{features.map(feature => <article key={feature.title} className={styles.feature}><h3>{feature.title}</h3><p>{feature.detail}</p><strong>{feature.benefit}</strong></article>)}</div>
+      <div className={styles.featureGrid}>{features.map((feature, index) => <article key={feature.title} className={styles.feature}><span className={styles.featureNumber} aria-hidden="true">0{index + 1}</span><h3>{feature.title}</h3><p>{feature.detail}</p><strong>{feature.benefit}</strong></article>)}</div>
     </section>
 
-    <section className={styles.mapSection} aria-labelledby="map-title">
+    <section className={styles.mapSection} id="trade-map" aria-labelledby="map-title">
       <div className={styles.mapCopy}><span className={styles.eyebrow}>FROM RECORDS TO THE REAL WORLD</span><h2 id="map-title">See where your<br /><span>work comes together.</span></h2><p>View jobs and customers on a map, then open the linked record. Keep location, customer context and the work itself within reach.</p><p>Design and measurement tools can also support quote preparation. Check site conditions and measurements before relying on a proposed layout.</p></div>
       <DemoMap />
     </section>
 
-    <section className={styles.customerSection} aria-labelledby="customer-title">
+    <section className={styles.customerSection} id="customer-experience" aria-labelledby="customer-title">
       <div><span className={styles.eyebrow}>BETTER FOR THE PEOPLE YOU SERVE</span><h2 id="customer-title">Clear decisions.<br /><span>A clearer next step.</span></h2><p>Good business software should make the customer&apos;s journey easier too.</p></div>
       <div className={styles.customerBenefits}><article><span aria-hidden="true">↗</span><div><h3>A quote they can understand</h3><p>Put scope, options and equipment in one secure review link, with a matching PDF. Customers can respond without creating an account.</p></div></article><article><span aria-hidden="true">◷</span><div><h3>Arrival times they can review</h3><p>Propose appointment windows and let the customer review the next step before work starts.</p></div></article><article><span aria-hidden="true">✓</span><div><h3>Their sharing choices matter</h3><p>Marketplace enquiries follow recorded service areas, capabilities and household consent. Private plans and documents are not opened up to every trade.</p></div></article></div>
     </section>
 
-    <section className={styles.connections} aria-labelledby="connections-title">
+    <section className={styles.connections} id="connections" aria-labelledby="connections-title">
       <div className={styles.sectionHeading}><span className={styles.eyebrow}>CONNECT ON YOUR TERMS</span><h2 id="connections-title">Keep the tools<br /><span>that work for you.</span></h2><p>TLink has optional connections for accounting, calendars and business email. Availability and setup are shown inside your business workspace.</p></div>
       <div className={styles.connectionGrid}>
         <article><span>ACCOUNTING</span><h3>Xero · MYOB · QuickBooks</h3><p>Sync eligible issued invoices to your connected accounting account. A PDF download is a document export; accounting sync requires a configured connection and account setup.</p></article>
@@ -124,7 +123,7 @@ export default function ForTradesPage() {
       <ol className={styles.steps}><li><span>01</span><div><h3>Create your business account</h3><p>Provide a valid ABN, business details, service areas and capabilities.</p></div></li><li><span>02</span><div><h3>Complete business review</h3><p>Supply the required evidence. An authorised reviewer must approve the business before workspace access.</p></div></li><li><span>03</span><div><h3>Bring your team and work together</h3><p>Set permissions, add customers and jobs, and configure the optional connections you choose.</p></div></li></ol>
     </section>
 
-    <div className={styles.finalLinks}><p>Marketplace matching gives eligible approved trades access to consented enquiries. It does not guarantee leads, exclusive placement or booked work.</p><Link href="/direct-trade/standards">Read the TLink standards <span aria-hidden="true">↗</span></Link><Link href="/direct-trade/integrations">How optional connections work <span aria-hidden="true">↗</span></Link></div>
+    <div className={styles.finalLinks}><p>Marketplace matching gives eligible approved trades access to consented enquiries. It does not guarantee leads, exclusive placement or booked work.</p><Link href="/direct-trade/standards">Read the TLink standards <span aria-hidden="true">↗</span></Link><Link href="/direct-trade/integrations">How optional connections work <span aria-hidden="true">↗</span></Link><Link href="/direct-trade/for-councils">TLink for councils <span aria-hidden="true">↗</span></Link><Link href="/">AEA home <span aria-hidden="true">↗</span></Link></div>
     <SiteFooter>TLink is a product of Australian Energy Assessments. Business approval does not replace trade licensing, insurance or scheme eligibility.</SiteFooter>
   </main>;
 }

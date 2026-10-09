@@ -77,7 +77,7 @@ const lastModifiedByRoute = new Map<(typeof routes)[number], string>([
   ["/case-studies", "2026-10-09"],
   ["/platform", "2026-10-09"],
   ["/faq", "2026-10-09"],
-  ["/direct-trade/for-trades", "2026-10-09"],
+  ["/direct-trade/for-trades", "2026-10-10"],
   ["/direct-trade/for-councils", "2026-10-09"],
   ["/direct-trade/integrations", "2026-10-09"],
   ["/wholesale-electricity", "2026-09-04"],
