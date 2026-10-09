@@ -27,7 +27,7 @@ import { RENTAL_ASSESSMENT_TEMPLATE_VERSION } from '../../../src/lib/trade-renta
 import { RENTAL_ASSESSOR_TITLE, rentalAssessorMetadataField, rentalAssessorOutcomePatch, rentalWindowIsFixed,
   rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorSections,
   RENTAL_SHOWER_CHOICES, rentalShowerChoicePatch, rentalShowerChoiceValue } from '../../../src/lib/rental-assessor-workflow.mjs';
-import { acknowledgeRentalSave, loadRentalResult, restoreRentalSaveForEditing, enqueueRentalSave, enqueueRentalFinish, enqueueRentalPhotoRemoval, getRentalSaveState,
+import { acknowledgeRentalSave, loadRentalResult, restoreRentalSaveForEditing, enqueueRentalSave, enqueueRentalFinish, enqueueRentalPhotoRemoval, resolveRentalPhotoRemoval, getRentalSaveState,
   processRentalSaveQueue, rememberRentalPhotoLocation, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
 
@@ -38,7 +38,7 @@ type Draft = { outcome: string; locationLabel: string; publicNotes: string; inte
   quantity: string; unitLabel: string; quotation: Record<string, string>;
   severity: string; immediateAction: string; notified: boolean; response: Record<string, unknown>; photos: Photo[] };
 type Cursor = { sectionKey: string; checkIndex: number; instanceKey: string };
-type Page = 'earlier' | 'categories' | 'answer' | 'details' | 'finding' | 'safety' | 'metadata' | 'review';
+type Page = 'earlier' | 'categories' | 'answer' | 'details' | 'finding' | 'safety' | 'metadata' | 'review' | 'photo-removal';
 type Cache = { drafts: Record<string, Draft>; answers: Record<string, Record<string, unknown>> };
 const emptyCache: Cache = { drafts: {}, answers: {} };
 const readable = (s: string) => s.replaceAll('_', ' ');
@@ -162,6 +162,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const [saves, setSaves] = useState<RentalSaveRecord[]>([]);
   const [documents, setDocuments] = useState<PendingRentalDocument[]>([]);
   const [photoPreview, setPhotoPreview] = useState<{ photo: RentalPhotoPreviewTarget; owner: LocalDataOwner } | null>(null);
+  const [photoRemovalReviewId, setPhotoRemovalReviewId] = useState('');
+  const [photoRemovalNotice, setPhotoRemovalNotice] = useState('');
   const closePhotoPreview = useCallback(() => setPhotoPreview(null), []);
   const busyRef = useRef(false);
   const mounted = useRef(true);
@@ -383,7 +385,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const timing = useFormTimeTracking({ formKind: 'rental_inspection', formId: data.inspection?.id || '', workOrderId,
     pageKey: [active?.key || 'inspection', page, page === 'metadata' ? field?.key : page === 'review' ? '' : `${section?.key || ''}:${check?.key || ''}:${page === 'details' ? detailField?.key || '' : ''}`].filter(Boolean).join(':'),
     pageTitle: page === 'metadata' ? field?.label || 'Assessment details' : page === 'review' ? 'Review and complete' : detailField && page === 'details' ? detailField.label : check?.prompt || section?.title || 'Assessment',
-    enabled: loaded && editable && !(finishRequest?.finish?.issueReport && finishRequest.status !== 'conflict') && Boolean(active) && !['categories', 'earlier'].includes(page) });
+    enabled: loaded && editable && !(finishRequest?.finish?.issueReport && finishRequest.status !== 'conflict') && Boolean(active) && !['categories', 'earlier', 'photo-removal'].includes(page) });
   const queuedMetadata = pendingSaves.find((entry) => entry.draftKey === `metadata:${active?.id}:${field?.key}`);
   const report = data.reports?.find((r) => r.status === 'issued');
   const allComplete = data.modules?.every((m) => m.status === 'complete') === true;
@@ -394,6 +396,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       || unfinishedMetadata(entry, cache, saves).length > 0));
   const issueReport = remainingModules.length === 0;
   const canEmailReport = Boolean(data.deliveryRecipient?.email) && (report ? data.permissions?.canRevokeLink === true : issueReport && data.permissions?.canIssue === true);
+  const finishActionLabel = canEmailReport ? 'Finish and email report' : issueReport ? 'Finish assessment' : `Finish ${active?.title || 'assessment'}`;
   const photoRemovals = saves.filter((entry) => entry.photoRemoval && entry.status !== 'conflict');
   const removedMedia = new Set(photoRemovals.flatMap((entry) => {
     const source = saves.find((save) => save.id === entry.photoRemoval?.sourceSaveId);
@@ -402,6 +405,19 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const evidence = item ? data.evidence?.filter((e) => e.itemId === item.id && e.status === 'active'
     && !photoRemovals.some((entry) => entry.photoRemoval?.evidenceId === e.id) && !removedMedia.has(e.jobMediaId)) || [] : [];
   const visiblePhotos = draft?.photos.filter((photo) => !photoRemovals.some((entry) => entry.photoRemoval?.uri === photo.uri)) || [];
+  const removalReview = saves.find((entry) => entry.id === photoRemovalReviewId && entry.photoRemoval);
+  const removalSource = saves.find((entry) => entry.id === removalReview?.photoRemoval?.sourceSaveId);
+  const removalPhoto = removalSource?.photos.find((entry) => entry.uri === removalReview?.photoRemoval?.uri);
+  const removalEvidence = removalReview?.photoRemoval?.evidenceId
+    ? data.evidence?.find((entry) => entry.id === removalReview.photoRemoval?.evidenceId)
+    : removalPhoto?.mediaId ? data.evidence?.find((entry) => entry.moduleId === removalReview?.module.id && entry.itemId === removalSource?.savedItem?.id && entry.jobMediaId === removalPhoto.mediaId) : undefined;
+  const removalItem = data.items?.find((entry) => entry.id === removalEvidence?.itemId && entry.moduleId === removalReview?.module.id);
+  const removalModule = data.modules?.find((entry) => entry.id === removalReview?.module.id);
+  const removalCheck = removalModule?.template.sections.find((entry) => entry.key === (removalItem?.sectionKey || removalSource?.body.sectionKey))
+    ?.checks.find((entry) => entry.key === (removalItem?.checkKey || removalSource?.body.checkKey));
+  const removalAlreadyDone = removalReview?.status === 'succeeded' || Boolean(removalEvidence && removalEvidence.status !== 'active');
+  const canResolveRemoval = Boolean(removalReview?.status === 'conflict' && data.permissions?.canEdit === true
+    && removalModule && ['draft', 'not_started'].includes(removalModule.status) && (removalEvidence?.status === 'active' || removalPhoto));
   const canRemovePhotos = data.permissions?.canEdit === true && Boolean(active && ['draft', 'not_started'].includes(active.status))
     && !['issued', 'issuing'].includes(data.inspection?.status || '');
   function change(values: Partial<Draft>) {
@@ -431,6 +447,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     await perform('leave', async () => { await persist(); onReturnToJob(); });
   }
   function backToSectionsOrJob() {
+    if (page === 'photo-removal') { setPage('review'); return; }
     if (page !== 'categories') { setFirstSetupModuleId(''); setPage('categories'); return; }
     if (busyRef.current) return Alert.alert('Saving on phone', 'Your latest change is being saved. Try again in a moment.');
     void leave();
@@ -720,21 +737,41 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       if (page !== 'metadata') setPage('answer');
     });
   }
+  async function openPhotoRemovalReview(record: RentalSaveRecord) {
+    await perform('review-photo', async () => {
+      setPhotoRemovalNotice('');
+      if (!online) throw new Error('Reconnect to load this photo. Your answers and photos are saved.');
+      const latest = await loadRentalResult(workOrderId);
+      const state = await getRentalSaveState(workOrderId);
+      applyResult(latest); setSaves(state.records);
+      const pending = state.records.find((entry) => entry.id === record.id && entry.photoRemoval);
+      if (!pending || pending.status === 'succeeded') { setPage('review'); setPhotoRemovalNotice(`Photo removal is resolved. Tap ${finishActionLabel}.`); return; }
+      setModuleId(pending.module.id); setPhotoRemovalReviewId(pending.id); setPage('photo-removal');
+    });
+  }
+  async function resolveReviewedPhotoRemoval(decision: 'remove' | 'keep') {
+    if (!removalReview) return;
+    await perform('resolve-photo', async () => {
+      if (!online) throw new Error('Reconnect to confirm this photo choice. Your answers and photos are saved.');
+      const resolution = await resolveRentalPhotoRemoval(removalReview.id, decision, data);
+      void processRentalSaveQueue(workOrderId).catch(() => { /* The retained queue error appears with its recovery action. */ });
+      const state = await getRentalSaveState(workOrderId);
+      setSaves(state.records); if (state.result) applyResult(state.result);
+      if (state.records.some((entry) => entry.id === removalReview.id && entry.status === 'conflict')) {
+        setError('This photo could not be removed. Open its preview again, or choose Keep this photo to cancel the removal.'); return;
+      }
+      setPhotoRemovalReviewId(''); setPage('review');
+      setPhotoRemovalNotice(resolution === 'cancelled' ? `Photo removal cancelled. Tap ${finishActionLabel}.`
+        : state.records.some((entry) => entry.id === removalReview.id && entry.status !== 'succeeded')
+          ? `Photo removal is saved and will sync. Tap ${finishActionLabel}.` : `Photo removed. Tap ${finishActionLabel}.`);
+    });
+  }
   function openQueuedAnswer(record: RentalSaveRecord) {
-    const removal = record.photoRemoval;
-    const source = removal?.sourceSaveId ? saves.find((entry) => entry.id === removal.sourceSaveId) : undefined;
-    const photoItemId = removal?.evidenceId ? data.evidence?.find((entry) => entry.id === removal.evidenceId)?.itemId : source?.savedItem?.id;
-    const photoItem = removal ? data.items?.find((entry) => entry.id === photoItemId && entry.moduleId === record.module.id) : undefined;
-    const assessmentModule = data.modules?.find((entry) => entry.id === (removal ? record.module.id : record.body.moduleId));
+    if (record.photoRemoval) { void openPhotoRemovalReview(record); return; }
+    const assessmentModule = data.modules?.find((entry) => entry.id === record.body.moduleId);
     if (!assessmentModule) return;
     setModuleId(assessmentModule.id);
-    if (removal) {
-      const section = assessmentModule.template.sections.find((entry) => entry.key === (photoItem?.sectionKey || source?.body.sectionKey));
-      const checkIndex = section?.checks.findIndex((entry) => entry.key === (photoItem?.checkKey || source?.body.checkKey)) ?? -1;
-      if (!section || checkIndex < 0) { setPage('categories'); setError('Reopen the photo\'s question and review its latest photos before removing it again.'); return; }
-      setCursor({ sectionKey: section.key, checkIndex, instanceKey: photoItem?.instanceKey || String(source?.body.instanceKey || 'property') });
-      setPage('answer');
-    } else if (record.body.action === 'save_module_answers') {
+    if (record.body.action === 'save_module_answers') {
       if (record.body.answers && typeof record.body.answers === 'object' && 'roomRoster' in record.body.answers) { setPage('categories'); setError(record.error); return; }
       const fields = assessmentModule.template.metadataFields.map(rentalAssessorMetadataField).filter((entry) => entry.key !== 'roomRoster'
         && entry.phase !== 'profile' && entry.source !== 'team_profile' && entry.source !== 'automatic'
@@ -764,6 +801,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   }
   async function finishAssessment() {
     if (!active) return;
+    const conflict = pendingSaves.find((entry) => !entry.finish && entry.status === 'conflict' && (issueReport || entry.module.id === active.id));
+    if (conflict?.photoRemoval) { await openPhotoRemovalReview(conflict); return; }
     if (finishRequest && finishRequest.status !== 'conflict') {
       void processRentalSaveQueue(workOrderId).catch(() => { /* Sync displays the retained error. */ });
       return;
@@ -771,8 +810,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (earlierDrafts.some(([draftKey]) => draftKey.endsWith(':property'))) {
       setError('An earlier saved answer needs review. Use the saved-answer button below.'); return;
     }
-    const conflict = pendingSaves.find((entry) => !entry.finish && entry.status === 'conflict' && (issueReport || entry.module.id === active.id));
-    if (conflict) { setError('A saved answer needs review before the report can finish. Use Open saved answer above. ' + conflict.error); return; }
+    if (conflict) { openQueuedAnswer(conflict); setError('Check this saved answer, then tap Edit saved answer to correct it before finishing.'); return; }
     const blockers = completionBlockers;
     if (blockers.length) { setError('Finish needs this answer: ' + blockers[0].label + ' Tap the answer above to complete it.'); return; }
     if (activeHasDraft) { setError('An answer has unsaved changes. Open the saved-answer button below and press Next to save it.'); return; }
@@ -794,6 +832,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     ]);
   }
   function previous() {
+    if (page === 'photo-removal') { setPage('review'); return; }
     setError('');
     if (page === 'metadata' && field?.key === 'homeStarCommissioned' && firstSetupModuleId === active?.id) { setFirstSetupModuleId(''); return setPage('categories'); }
     if (page === 'safety') return setPage(check?.responseType === 'outcome' ? 'answer' : 'finding');
@@ -822,13 +861,29 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       {!loaded ? <Text style={styles.body}>Opening assessment...</Text> : !active ? <Text style={styles.body}>{error || (!online ? 'Reconnect once to open this assessment. Your draft is saved on this phone.' : 'This assessment is not available.')}</Text> : <>
       {!online ? <Text style={styles.small}>Working offline. Answers and photos stay on this phone and sync when reception returns.</Text> : null}
-      {pendingSaves.length ? <View style={styles.syncNotice}><Text style={styles.small}>{finishRequest ? 'Your finish request is saved. You can return to the job while it completes.' : `${pendingSaves.length} saved ${pendingSaves.length === 1 ? 'answer' : 'answers'}. You can keep assessing while they sync.`}{pendingPhotos ? ` ${pendingPhotos} ${pendingPhotos === 1 ? 'photo remains' : 'photos remain'} on this phone until linked to the report.` : ''}</Text>
-        {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.error}</Text>
-          <FieldButton variant="quiet" onPress={() => record.finish ? setPage('review') : openQueuedAnswer(record)}>{record.finish ? 'Review finish request' : record.photoRemoval ? 'Review photo removal' : 'Open saved answer'}</FieldButton>
+      {pendingSaves.length ? <View style={styles.syncNotice}><Text style={styles.small}>{pendingSaves.some((entry) => entry.photoRemoval && entry.status === 'conflict') ? 'Your answers are saved. A photo removal needs your choice before you can finish.' : finishRequest ? 'Your finish request is saved. You can return to the job while it completes.' : `${pendingSaves.length} saved ${pendingSaves.length === 1 ? 'answer' : 'answers'}. You can keep assessing while they sync.`}{pendingPhotos ? ` ${pendingPhotos} ${pendingPhotos === 1 ? 'photo remains' : 'photos remain'} on this phone until linked to the report.` : ''}</Text>
+        {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.photoRemoval && record.status === 'conflict' ? 'A photo has not been removed yet. Choose Remove or Keep before finishing.' : record.error}</Text>
+          {page !== 'photo-removal' ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => record.finish ? setPage('review') : openQueuedAnswer(record)}>{record.finish ? 'Review finish request' : record.photoRemoval ? 'Choose what to do with this photo' : 'Open saved answer'}</FieldButton> : null}
           {record.status !== 'conflict' ? <FieldButton variant="quiet" disabled={!online} onPress={() => { void processRentalSaveQueue(workOrderId).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not sync. Your answers remain on this phone.')); }}>Retry sync</FieldButton> : null}
         </View>)}
       </View> : null}
-      {page === 'categories' ? <>
+      {page === 'review' && photoRemovalNotice ? <Text style={styles.body}>{photoRemovalNotice}</Text> : null}
+      {page === 'photo-removal' ? <>
+        <Text style={styles.title}>Remove or keep this photo?</Text>
+        {removalCheck?.prompt || removalEvidence?.caption ? <Text style={styles.body}>{removalCheck?.prompt || removalEvidence?.caption}</Text> : null}
+        <Text style={styles.body}>{removalAlreadyDone ? 'This photo has already been removed.' : removalEvidence || removalPhoto
+          ? 'This is the photo you previously chose to remove. Preview it, then choose below. Your answers will stay saved.'
+          : 'This photo could not be found. Cancel the removal to return to Finish. Your other photos stay saved.'}</Text>
+        {removalEvidence || removalPhoto ? <View style={styles.pendingPhoto}>
+          {removalPhoto?.uri ? <Image source={{ uri: removalPhoto.uri }} style={styles.thumbnail} alt="Photo selected for removal" accessibilityLabel="Photo selected for removal" /> : null}
+          <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => openPhotoPreview({ jobMediaId: removalEvidence?.jobMediaId || removalPhoto?.mediaId,
+            uri: removalPhoto?.uri, contentType: removalEvidence?.contentType, title: 'Photo selected for removal' })}>Preview this photo</FieldButton>
+        </View> : null}
+        {removalAlreadyDone ? <FieldButton disabled={Boolean(busy) || !online} onPress={() => void resolveReviewedPhotoRemoval('keep')}>Return to Finish</FieldButton> : <>
+          <FieldButton disabled={Boolean(busy) || !online || !canResolveRemoval} loading={busy === 'resolve-photo'} onPress={() => void resolveReviewedPhotoRemoval('remove')}>Remove this photo</FieldButton>
+          <FieldButton variant="secondary" disabled={Boolean(busy) || !online} onPress={() => void resolveReviewedPhotoRemoval('keep')}>{removalEvidence || removalPhoto ? 'Keep this photo' : 'Cancel removal'}</FieldButton>
+        </>}
+      </> : page === 'categories' ? <>
         <Text style={styles.title}>{active.key === 'minimum_standards' ? RENTAL_ASSESSOR_TITLE : active.title}</Text>
         {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={(id) => { setModuleId(id); selectedModuleId.current = id; setFirstSetupModuleId(''); openInitialSetup(data, saves, id); }} /> : null}
         {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < RENTAL_ASSESSMENT_TEMPLATE_VERSION) ? <>
@@ -983,7 +1038,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     </KeyboardAwareScrollView>
     {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
-      {page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy) || queuedAnswer?.status === 'syncing'} loading={busy === 'save' || busy === 'restore'} onPress={() => { if (canReviewQueuedAnswer) void reviewQueuedAnswer(); else void next(); }}>{canReviewQueuedAnswer ? 'Edit saved answer' : queuedAnswer?.status === 'syncing' ? 'Syncing answer...' : 'Next'}</FieldButton>}
+      {page === 'photo-removal' ? <FieldButton style={styles.flex} variant="secondary" disabled={Boolean(busy)} onPress={() => setPage('review')}>Back to Finish</FieldButton> : page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy) || queuedAnswer?.status === 'syncing'} loading={busy === 'save' || busy === 'restore'} onPress={() => { if (canReviewQueuedAnswer) void reviewQueuedAnswer(); else void next(); }}>{canReviewQueuedAnswer ? 'Edit saved answer' : queuedAnswer?.status === 'syncing' ? 'Syncing answer...' : 'Next'}</FieldButton>}
     </View> : null}
     {photoPreview ? <RentalPhotoPreview photo={photoPreview.photo} owner={photoPreview.owner} online={online} onClose={closePhotoPreview} /> : null}
   </View>;

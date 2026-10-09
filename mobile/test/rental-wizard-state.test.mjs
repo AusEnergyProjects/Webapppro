@@ -49,47 +49,255 @@ const findingHelper = ts.transpileModule(source.slice(source.indexOf('function f
 const { findingDescription, findingChoices } = new Function(`${findingHelper}; return { findingDescription, findingChoices };`)();
 
 function mountedOpenQueuedAnswer(environment) {
-  const implementation = source.slice(source.indexOf('  function openQueuedAnswer('), source.indexOf('  function openCompletionIssue('));
-  const compiled = ts.transpileModule(`export ${implementation.trim()}`, {
+  return mountedWorkflowFunction('openQueuedAnswer', environment);
+}
+
+function mountedWorkflowFunction(name, environment) {
+  const ast = ts.createSourceFile('rental-inspection-workflow.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let implementation;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) implementation = node.getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(implementation, `Execute the actual ${name} handler`);
+  const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'));
+  const compiled = ts.transpileModule(`${helpers}\nexport ${implementation}`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
-  return new Function('environment', `with (environment) { const exports = {}; ${compiled}; return exports.openQueuedAnswer; }`)(environment);
+  return new Function('environment', `with (environment) { const exports = {}; ${compiled}; return exports.${name}; }`)(environment);
 }
 
 function photoReviewEnvironment() {
   const changes = {};
-  return {
-    changes, saves: [],
+  const env = {
+    changes, saves: [], online: true, workOrderId: 'job', calls: [], finishActionLabel: 'Finish and email report',
     data: {
-      modules: [{ id: 'assessment', template: { sections: [{ key: 'heating', checks: [{ key: 'heater_works' }] }] } }],
-      evidence: [{ id: 'mistaken-photo', itemId: 'heater-answer' }],
+      modules: [{ id: 'assessment', status: 'draft', revision: 5, template: { metadataFields: [], sections: [{ key: 'heating', checks: [{ key: 'heater_works', prompt: 'Does the main living room heater work?' }] }] } }],
+      permissions: { canEdit: true },
+      evidence: [{ id: 'mistaken-photo', itemId: 'heater-answer', moduleId: 'assessment', jobMediaId: 'selected-media', contentType: 'image/jpeg', status: 'active', caption: 'Selected heater photo' },
+        { id: 'keep-photo', itemId: 'heater-answer', moduleId: 'assessment', jobMediaId: 'other-media', contentType: 'image/jpeg', status: 'active' }],
       items: [{ id: 'heater-answer', moduleId: 'assessment', sectionKey: 'heating', checkKey: 'heater_works', instanceKey: 'property' }],
     },
     setModuleId(value) { changes.moduleId = value; }, setCursor(value) { changes.cursor = value; },
     setPage(value) { changes.page = value; }, setError(value) { changes.error = value; },
+    setPhotoRemovalNotice(value) { changes.notice = value; },
+    setPhotoRemovalReviewId(value) { env.photoRemovalReviewId = value; },
+    setSaves(value) { env.saves = value; }, applyResult(value) { env.data = value; },
+    async perform(name, action) { env.calls.push(name); try { await action(); } catch (error) { env.setError(error.message); } },
+    async loadRentalResult(id) { assert.equal(id, 'job'); env.calls.push('load'); return env.latest; },
+    async getRentalSaveState(id) { assert.equal(id, 'job'); return { records: env.records, result: env.latest }; },
+    styles: {}, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button', busy: '', page: 'photo-removal',
+    openPhotoPreview(value) { env.preview = value; },
   };
+  env.latest = structuredClone(env.data);
+  env.removal = { id: 'pending-removal', status: 'conflict', module: env.data.modules[0], body: { action: 'unlink_evidence' }, photos: [],
+    error: 'This assessment changed before the photo was removed. Review the latest photos and try again.', photoRemoval: { evidenceId: 'mistaken-photo' } };
+  env.records = [env.removal]; env.saves = env.records;
+  env.openPhotoRemovalReview = mountedWorkflowFunction('openPhotoRemovalReview', env);
+  return env;
 }
 
-test('a legacy photo-removal conflict opens its actual saved photo question without body module fields', () => {
+function derivePhotoRemovalReview(environment) {
+  const implementation = source.slice(source.indexOf('  const removalReview ='), source.indexOf('  const canRemovePhotos ='));
+  const compiled = ts.transpileModule(`${implementation}\nreturn { removalReview, removalPhoto, removalEvidence, removalCheck, removalAlreadyDone, canResolveRemoval };`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  return new Function('environment', `with (environment) { ${compiled} }`)(environment);
+}
+
+test('a legacy photo-removal conflict opens an explicit current-photo decision without a target snapshot or body module fields', async () => {
   const env = photoReviewEnvironment();
-  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'unlink_evidence' }, photoRemoval: { evidenceId: 'mistaken-photo' } });
-  assert.deepEqual(env.changes, { moduleId: 'assessment', cursor: { sectionKey: 'heating', checkIndex: 0, instanceKey: 'property' }, page: 'answer', error: '' });
+  mountedOpenQueuedAnswer(env)(env.removal);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(env.calls, ['review-photo', 'load']);
+  assert.equal(env.photoRemovalReviewId, env.removal.id);
+  assert.equal(env.changes.moduleId, 'assessment'); assert.equal(env.changes.page, 'photo-removal');
+  assert.equal(env.changes.cursor, undefined, 'Photo review never opens a read-only answer');
+  Object.assign(env, derivePhotoRemovalReview(env));
+  assert.equal(env.removalEvidence.jobMediaId, 'selected-media');
+  assert.equal(env.removalCheck.prompt, 'Does the main living room heater work?');
+  assert.equal(env.canResolveRemoval, true);
 });
 
-test('a pending-photo removal opens the source answer before that answer has synced', () => {
+test('a pending-photo removal previews its exact source photo before the answer has synced', async () => {
   const env = photoReviewEnvironment();
-  env.saves = [{ id: 'local-save', body: { sectionKey: 'heating', checkKey: 'heater_works', instanceKey: 'heater-2' } }];
-  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'unlink_evidence' }, photoRemoval: { sourceSaveId: 'local-save', uri: 'local-photo' } });
-  assert.deepEqual(env.changes.cursor, { sectionKey: 'heating', checkIndex: 0, instanceKey: 'heater-2' });
-  assert.equal(env.changes.page, 'answer');
+  env.removal.photoRemoval = { sourceSaveId: 'local-save', uri: 'local-photo' };
+  env.records.push({ id: 'local-save', body: { sectionKey: 'heating', checkKey: 'heater_works', instanceKey: 'heater-2' },
+    photos: [{ uri: 'different-photo' }, { uri: 'local-photo', mediaId: 'uploaded-media' }] });
+  await env.openPhotoRemovalReview(env.removal);
+  Object.assign(env, derivePhotoRemovalReview(env));
+  assert.equal(env.changes.page, 'photo-removal'); assert.equal(env.removalPhoto.uri, 'local-photo');
+  assert.equal(env.removalCheck.prompt, 'Does the main living room heater work?');
+  const tree = renderedNativeBranch((node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "page === 'photo-removal'" && ts.isJsxFragment(node.whenTrue), env);
+  const preview = renderedNodes(tree, node => node.type === 'button' && renderedText(node) === 'Preview this photo')[0];
+  preview.props.onPress();
+  assert.deepEqual(env.preview, { jobMediaId: 'uploaded-media', uri: 'local-photo', contentType: undefined, title: 'Photo selected for removal' });
+  assert.equal(renderedNodes(tree, node => node.type === 'image')[0].props.source.uri, 'local-photo');
 });
 
-test('a missing photo target returns to sections with an explanation instead of opening an unrelated answer', () => {
+test('a missing photo target offers Cancel removal instead of requiring an unrelated answer', async () => {
   const env = photoReviewEnvironment();
-  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'unlink_evidence' }, photoRemoval: { evidenceId: 'missing-photo' } });
-  assert.equal(env.changes.page, 'categories');
-  assert.match(env.changes.error, /review its latest photos/);
+  env.removal.photoRemoval.evidenceId = 'missing-photo';
+  await env.openPhotoRemovalReview(env.removal);
+  Object.assign(env, derivePhotoRemovalReview(env));
+  const decisions = [];
+  env.resolveReviewedPhotoRemoval = decision => decisions.push(decision);
+  const tree = renderedNativeBranch((node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "page === 'photo-removal'" && ts.isJsxFragment(node.whenTrue), env);
+  assert.equal(env.changes.page, 'photo-removal');
+  assert.match(renderedText(tree), /could not be found.*Cancel the removal.*Finish/);
+  assert.equal(renderedNodes(tree, node => node.type === 'button' && renderedText(node) === 'Remove this photo')[0].props.disabled, true);
+  renderedNodes(tree, node => node.type === 'button' && renderedText(node) === 'Cancel removal')[0].props.onPress();
+  assert.deepEqual(decisions, ['keep']);
   assert.equal(env.changes.cursor, undefined);
+});
+
+test('failed or offline latest-photo review retains the exact pending action and never authorises removal', async () => {
+  for (const offline of [false, true]) {
+    const env = photoReviewEnvironment(), original = structuredClone(env.records);
+    env.online = !offline;
+    env.loadRentalResult = async () => { throw new Error('Latest photos could not load'); };
+    env.resolveRentalPhotoRemoval = () => assert.fail('A failed preview refresh cannot resolve a removal');
+    await env.openPhotoRemovalReview(env.removal);
+    assert.deepEqual(env.records, original);
+    assert.equal(env.photoRemovalReviewId, undefined); assert.equal(env.changes.page, undefined);
+    assert.match(env.changes.error, offline ? /Reconnect.*answers and photos are saved/ : /Latest photos could not load/);
+  }
+});
+
+test('a photo-removal action that finished during refresh returns directly to Finish', async () => {
+  for (const exists of [false, true]) {
+    const env = photoReviewEnvironment();
+    env.records = exists ? [{ ...env.removal, status: 'succeeded' }] : [];
+    await env.openPhotoRemovalReview(env.removal);
+    assert.equal(env.changes.page, 'review'); assert.match(env.changes.notice, /resolved.*Finish/);
+    assert.equal(env.changes.error, undefined, 'Successful resolution is guidance, not an error');
+    assert.equal(env.photoRemovalReviewId, undefined);
+  }
+});
+
+test('ordinary queued answers continue to open their actual question without entering photo recovery', () => {
+  const env = photoReviewEnvironment();
+  env.openPhotoRemovalReview = () => assert.fail('Ordinary answers do not need photo recovery');
+  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'save_item', moduleId: 'assessment', sectionKey: 'heating', checkKey: 'heater_works', instanceKey: 'heater-2' } });
+  assert.deepEqual(env.changes.cursor, { sectionKey: 'heating', checkIndex: 0, instanceKey: 'heater-2' });
+  assert.equal(env.changes.page, 'answer'); assert.equal(env.changes.error, '');
+});
+
+test('the actual recovery controls preview the selected image and resolve Remove or Keep before returning to Finish', async () => {
+  for (const decision of ['remove', 'keep']) {
+    const env = photoReviewEnvironment();
+    await env.openPhotoRemovalReview(env.removal);
+    Object.assign(env, derivePhotoRemovalReview(env));
+    const before = structuredClone(env.data), choices = [];
+    env.resolveRentalPhotoRemoval = async (id, selected, reviewed) => {
+      choices.push({ id, selected, reviewed });
+      assert.equal(reviewed, env.data, 'The exact latest result displayed during preview authorises this action');
+      env.records = selected === 'keep' ? [] : [{ ...env.removal, status: 'queued' }];
+      return selected === 'keep' ? 'cancelled' : 'removed';
+    };
+    env.processRentalSaveQueue = async id => {
+      assert.equal(id, 'job'); env.calls.push('sync');
+      env.records = env.records.map(record => ({ ...record, status: 'succeeded' }));
+      if (decision === 'remove') env.latest.evidence[0].status = 'superseded';
+    };
+    const handler = mountedWorkflowFunction('resolveReviewedPhotoRemoval', env);
+    env.resolveReviewedPhotoRemoval = selected => { env.resolution = handler(selected); return env.resolution; };
+    const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "page === 'photo-removal'" && ts.isJsxFragment(node.whenTrue);
+    const tree = renderedNativeBranch(select, env), buttons = renderedNodes(tree, node => node.type === 'button');
+    assert.match(renderedText(tree), /Does the main living room heater work\?/);
+    assert.doesNotMatch(renderedText(tree), /selected-media|mistaken-photo|Edit saved answer|This assessment changed/);
+    const preview = buttons.find(button => renderedText(button) === 'Preview this photo');
+    preview.props.onPress();
+    assert.equal(env.preview.jobMediaId, 'selected-media'); assert.equal(env.preview.contentType, 'image/jpeg');
+    const choice = buttons.find(button => renderedText(button) === (decision === 'remove' ? 'Remove this photo' : 'Keep this photo'));
+    assert.equal(choice.props.disabled, false); choice.props.onPress(); await env.resolution;
+    assert.equal(choices.length, 1); assert.equal(choices[0].id, 'pending-removal'); assert.equal(choices[0].selected, decision);
+    assert.equal(env.changes.page, 'review'); assert.equal(env.photoRemovalReviewId, '');
+    assert.match(env.changes.notice, decision === 'keep' ? /cancelled.*Finish and email report/ : /Photo removed.*Finish and email report/);
+    assert.equal(env.changes.error, undefined);
+    assert.deepEqual(env.latest.items, before.items); assert.deepEqual(env.latest.modules, before.modules);
+    assert.equal(env.latest.evidence[1].status, 'active', 'The other photo remains linked');
+  }
+});
+
+test('recovery Remove is guarded while locked, offline or busy and already removed evidence needs no new removal', async () => {
+  const env = photoReviewEnvironment();
+  await env.openPhotoRemovalReview(env.removal);
+  Object.assign(env, derivePhotoRemovalReview(env));
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "page === 'photo-removal'" && ts.isJsxFragment(node.whenTrue);
+  const button = label => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button' && renderedText(node) === label)[0];
+  for (const patch of [{ busy: 'resolve-photo' }, { online: false }, { canResolveRemoval: false }]) {
+    const prior = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch);
+    assert.equal(button('Remove this photo').props.disabled, true, JSON.stringify(patch)); Object.assign(env, prior);
+  }
+  env.data.permissions.canEdit = false; Object.assign(env, derivePhotoRemovalReview(env));
+  assert.equal(button('Remove this photo').props.disabled, true);
+  env.data.evidence[0].status = 'superseded'; Object.assign(env, derivePhotoRemovalReview(env));
+  const choices = []; env.resolveReviewedPhotoRemoval = selected => choices.push(selected);
+  assert.equal(button('Remove this photo'), undefined); assert.match(renderedText(renderedNativeBranch(select, env)), /already been removed/);
+  button('Return to Finish').props.onPress(); assert.deepEqual(choices, ['keep']);
+});
+
+test('a changed photo keeps recovery open while a queued removal returns to Finish with an honest sync message', async () => {
+  for (const status of ['conflict', 'retry']) {
+    const env = photoReviewEnvironment();
+    await env.openPhotoRemovalReview(env.removal); Object.assign(env, derivePhotoRemovalReview(env));
+    env.resolveRentalPhotoRemoval = async () => 'removed';
+    env.processRentalSaveQueue = async () => { env.records = [{ ...env.removal, status }]; };
+    await mountedWorkflowFunction('resolveReviewedPhotoRemoval', env)('remove');
+    if (status === 'conflict') {
+      assert.equal(env.changes.page, 'photo-removal'); assert.equal(env.photoRemovalReviewId, 'pending-removal');
+      assert.match(env.changes.error, /preview again.*Keep this photo/i);
+    } else {
+      assert.equal(env.changes.page, 'review'); assert.equal(env.photoRemovalReviewId, '');
+      assert.match(env.changes.notice, /saved and will sync.*Finish/); assert.equal(env.changes.error, undefined);
+    }
+  }
+});
+
+test('a durable photo choice returns to Finish while the queue worker is still uploading other photos', async () => {
+  const env = photoReviewEnvironment();
+  await env.openPhotoRemovalReview(env.removal); Object.assign(env, derivePhotoRemovalReview(env));
+  let release;
+  const worker = new Promise(resolve => { release = resolve; });
+  env.resolveRentalPhotoRemoval = async (id, decision, reviewed) => {
+    assert.equal(id, env.removal.id); assert.equal(decision, 'remove'); assert.equal(reviewed, env.data);
+    env.records = [{ ...env.removal, status: 'queued' }]; return 'removed';
+  };
+  env.processRentalSaveQueue = () => { env.workerStarted = true; return worker; };
+  const resolution = mountedWorkflowFunction('resolveReviewedPhotoRemoval', env)('remove');
+  try {
+    const returned = await Promise.race([resolution.then(() => true), new Promise(resolve => setImmediate(() => resolve(false)))]);
+    assert.equal(returned, true, 'The recovery action waits only for local durability, not all pending uploads');
+    assert.equal(env.workerStarted, true); assert.equal(env.changes.page, 'review');
+    assert.match(env.changes.notice, /saved and will sync.*Finish and email report/);
+    assert.equal(env.saves[0].status, 'queued');
+  } finally { release(); await resolution; }
+});
+
+test('Finish routes a conflicted photo to explicit recovery even with an older queued Finish request', async () => {
+  for (const finishRequest of [undefined, { status: 'queued' }]) {
+    const env = photoReviewEnvironment();
+    Object.assign(env, { active: env.data.modules[0], pendingSaves: [env.removal], issueReport: true, finishRequest });
+    env.processRentalSaveQueue = () => assert.fail('A conflicted photo needs a decision before retrying Finish');
+    env.Alert = { alert() { assert.fail('Do not authorise Finish before resolving this photo'); } };
+    await mountedWorkflowFunction('finishAssessment', env)();
+    assert.equal(env.changes.page, 'photo-removal'); assert.equal(env.photoRemovalReviewId, 'pending-removal');
+    assert.equal(env.changes.cursor, undefined);
+  }
+});
+
+test('the actual photo-conflict banner explains Remove or Keep and opens the same exact pending photo', async () => {
+  const env = photoReviewEnvironment();
+  Object.assign(env, { pendingSaves: [env.removal], pendingPhotos: 0, finishRequest: undefined, page: 'review' });
+  env.openQueuedAnswer = mountedOpenQueuedAnswer(env);
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === 'pendingSaves.length' && ts.isJsxElement(node.whenTrue) && node.whenTrue.openingElement.getText(ast) === '<View style={styles.syncNotice}>';
+  const tree = renderedNativeBranch(select, env);
+  assert.match(renderedText(tree), /Choose Remove or Keep before finishing/);
+  assert.doesNotMatch(renderedText(tree), /This assessment changed|Review the latest photos and try again/);
+  const button = renderedNodes(tree, node => node.type === 'button' && renderedText(node) === 'Choose what to do with this photo')[0];
+  button.props.onPress(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(env.changes.page, 'photo-removal'); assert.equal(env.photoRemovalReviewId, 'pending-removal');
 });
 
 test('rental metadata inputs remain visible above the device keyboard', () => {
@@ -763,7 +971,7 @@ test('an older future-shower blocker opens the single visible shower check', () 
 });
 
 test('a retained draft on the removed shower page explains recovery without leaving review', async () => {
-  const env = { active: { id: 'module' }, finishRequest: undefined,
+  const env = { active: { id: 'module' }, finishRequest: undefined, pendingSaves: [],
     earlierDrafts: [['module:scope:3:showers:0:property', { photos: [{ uri: 'retained.jpg' }] }]],
     setPage(value) { env.page = value; }, setError(value) { env.message = value; },
     Alert: { alert() { assert.fail('Do not authorise a report while earlier photos need recovery'); } } };
@@ -1092,12 +1300,21 @@ test('each optional module confirms its own credential and finishes without prom
 });
 
 test('issued report email uses current sharing access after issuance closes canIssue', () => {
-  const declaration = source.slice(source.indexOf('  const canEmailReport ='), source.indexOf('  const photoRemovals ='));
+  const declaration = source.slice(source.indexOf('  const canEmailReport ='), source.indexOf('  const finishActionLabel ='));
   const compiled = ts.transpileModule(declaration + '\nreturn canEmailReport;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const evaluate = new Function('data', 'report', 'issueReport', compiled);
   assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: false, canRevokeLink: true } }, { id: 'issued' }, true), true);
   assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: false, canRevokeLink: false } }, { id: 'issued' }, true), false);
   assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: true } }, undefined, false), false);
+});
+
+test('photo recovery guidance uses the actual available Finish action instead of always promising an email', () => {
+  const declaration = source.slice(source.indexOf('  const finishActionLabel ='), source.indexOf('  const photoRemovals ='));
+  const compiled = ts.transpileModule(`${declaration}\nreturn finishActionLabel;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const evaluate = new Function('canEmailReport', 'issueReport', 'active', compiled);
+  assert.equal(evaluate(true, true, { title: 'Rental assessment' }), 'Finish and email report');
+  assert.equal(evaluate(false, true, { title: 'Rental assessment' }), 'Finish assessment');
+  assert.equal(evaluate(false, false, { title: 'Gas safety check' }), 'Finish Gas safety check');
 });
 
 test('unverified or inaccessible optional checks record limitations without requiring invented test readings', async () => {

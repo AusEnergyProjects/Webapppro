@@ -701,6 +701,15 @@ function withoutPhoto(snapshot: unknown, uri: string | undefined) {
   return Array.isArray(draft.photos) ? { ...draft, photos: draft.photos.filter((photo) => object(photo).uri !== uri) } : snapshot;
 }
 
+async function forgetRemovedPhoto(owner: LocalDataOwner, source: RentalSaveRecord, uri: string | undefined) {
+  source.photos = source.photos.filter((entry) => entry.uri !== uri);
+  source.draftSnapshot = withoutPhoto(source.draftSnapshot, uri);
+  if (source.sourceDraftSnapshot !== undefined) source.sourceDraftSnapshot = withoutPhoto(source.sourceDraftSnapshot, uri);
+  // The answer remains queued; retry its existing safeguards after the mistaken photo is removed.
+  if (source.status !== 'succeeded') { source.status = 'queued'; source.error = ''; source.errorCode = ''; }
+  await persist(owner, source);
+}
+
 async function processPhotoRemoval(owner: LocalDataOwner, record: RentalSaveRecord, result: RentalAssessmentResult) {
   const removal = record.photoRemoval!;
   if (result.permissions?.canEdit !== true) throw new ApiError('Your current Team access does not allow removing assessment photos.', 403, 'RENTAL_EDIT_PERMISSION_REQUIRED');
@@ -742,14 +751,7 @@ async function processPhotoRemoval(owner: LocalDataOwner, record: RentalSaveReco
     result = await request(owner, record.workOrderId, { action: 'unlink_evidence', evidenceId: evidence.id,
       expectedModuleRevision: assessmentModule.revision });
   } else if (removal.evidenceId && !evidence) throw conflict('This photo reference changed. Reopen its question.');
-  if (source) {
-    source.photos = source.photos.filter((entry) => entry.uri !== removal.uri);
-    source.draftSnapshot = withoutPhoto(source.draftSnapshot, removal.uri);
-    if (source.sourceDraftSnapshot !== undefined) source.sourceDraftSnapshot = withoutPhoto(source.sourceDraftSnapshot, removal.uri);
-    // The answer remains queued; retry its existing safeguards after the mistaken photo is removed.
-    if (source.status !== 'succeeded') { source.status = 'queued'; source.error = ''; source.errorCode = ''; }
-    await persist(owner, source);
-  }
+  if (source) await forgetRemovedPhoto(owner, source, removal.uri);
   await cacheResult(owner, record.workOrderId, result);
 }
 
@@ -947,6 +949,69 @@ export async function discardRentalSave(id: string) {
     });
   });
   emit(record.workOrderId);
+}
+
+/** Resolve only the photo removal selected by the assessor, after reviewing its current photo. */
+export async function resolveRentalPhotoRemoval(id: string, decision: 'remove' | 'keep', reviewed: RentalAssessmentResult): Promise<'queued' | 'cancelled' | 'already_removed'> {
+  const owner = await ownerNow();
+  const original = (await recordsFor(owner)).find((entry) => entry.id === id);
+  if (!original?.photoRemoval) throw new RentalSaveQueueError('This photo removal is no longer waiting. Return to Finish.', 'RENTAL_SAVE_INVALID');
+  let resolution: 'queued' | 'cancelled' | 'already_removed' = 'queued';
+  await serial(jobGates, jobKey(owner, original.workOrderId), async () => {
+    // Fetch after the worker settles, including an unlink whose response was lost.
+    const current = await request(owner, original.workOrderId);
+    await serial(localGates, jobKey(owner, original.workOrderId), async () => {
+      await checkOwner(owner); assertJobAvailable(owner, original.workOrderId);
+      const records = await recordsFor(owner, original.workOrderId);
+      const record = records.find((entry) => entry.id === id);
+      if (!record?.photoRemoval || record.status === 'succeeded') { resolution = 'already_removed'; return; }
+      if (record.status !== 'conflict') throw pendingError();
+      const removal = record.photoRemoval;
+      const source = records.find((entry) => entry.id === removal.sourceSaveId);
+      const photo = source?.photos.find((entry) => entry.uri === removal.uri);
+      const target = (result: RentalAssessmentResult) => removal.evidenceId
+        ? result.evidence?.find((entry) => entry.id === removal.evidenceId)
+        : result.evidence?.find((entry) => entry.moduleId === record.module.id && entry.jobMediaId === photo?.mediaId && entry.itemId === source?.savedItem?.id);
+      const evidence = target(current);
+      if (evidence && evidence.moduleId !== record.module.id) throw conflict('This photo belongs to another assessment.');
+      if (evidence && evidence.status !== 'active') {
+        if (source) await forgetRemovedPhoto(owner, source, removal.uri);
+        record.status = 'succeeded'; record.error = ''; record.errorCode = '';
+        await persist(owner, record); resolution = 'already_removed'; return;
+      }
+      if (decision === 'keep') {
+        // Cancelling this intent does not remove its source answer, photo or any other saved action.
+        for (const finish of records.filter((entry) => entry.status !== 'succeeded' && entry.finish?.dependencyIds.includes(id))) {
+          finish.finish!.dependencyIds = finish.finish!.dependencyIds.filter((dependency) => dependency !== id);
+          finish.status = 'conflict'; finish.error = 'Photo removal cancelled. Tap Finish again to send the report.';
+          await persist(owner, finish);
+        }
+        await writeRentalSetting(owner, recordKey(record), null);
+        resolution = 'cancelled'; return;
+      }
+      if (current.permissions?.canEdit !== true) throw new ApiError('Your current Team access does not allow removing assessment photos.', 403, 'RENTAL_EDIT_PERMISSION_REQUIRED');
+      currentModule(record, current);
+      const assessmentModule = reviewed.modules?.find((entry) => entry.id === record.module.id);
+      const reviewedEvidence = target(reviewed);
+      if (!assessmentModule || !equal(assessmentModule.template, record.module.template)) throw conflict('Reopen this photo removal to load its latest photo.');
+      if (removal.evidenceId && (!evidence || !reviewedEvidence)) throw conflict('This photo is no longer available. Cancel its removal and return to Finish.');
+      if (evidence && (!equal(evidence, reviewedEvidence) || (removal.baseEvidence
+        && ['id', 'moduleId', 'itemId', 'jobMediaId'].some((key) => object(evidence)[key] !== object(removal.baseEvidence)[key])))) {
+        throw conflict('This photo changed. Open its preview again before choosing what to remove.');
+      }
+      const item = evidence && reviewed.items?.find((entry) => entry.id === evidence.itemId && entry.moduleId === record.module.id);
+      if (evidence && !item) throw conflict('This photo no longer belongs to an available answer. Cancel its removal and return to Finish.');
+      if (!removal.evidenceId && (!source || !photo)) throw conflict('This photo finished syncing. Reopen its saved photo before removing it.');
+      record.module = copy(assessmentModule);
+      record.baseItem = item || undefined;
+      record.baseFinding = item ? copy(reviewed.findings?.find((entry) => entry.itemId === item.id) || null) : undefined;
+      removal.baseEvidence = item ? copy(evidence) : undefined;
+      record.status = 'queued'; record.error = ''; record.errorCode = '';
+      await persist(owner, record);
+    });
+  });
+  emit(original.workOrderId);
+  return resolution;
 }
 
 /** Restore the latest durable answer before cancelling its request, after any worker has settled. */

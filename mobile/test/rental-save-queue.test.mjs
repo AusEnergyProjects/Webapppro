@@ -679,6 +679,178 @@ test('legacy photo conflict without a target snapshot requires a current reselec
   assert.equal(h.state.result.evidence[1].status, 'active');
 });
 
+function markPhotoRemovalConflict(h, id) {
+  const [key, value] = [...h.store].find(([, value]) => JSON.parse(value).id === id);
+  const record = JSON.parse(value);
+  record.status = 'conflict';
+  record.error = 'This assessment changed before the photo was removed. Review the latest photos and try again.';
+  h.store.set(key, JSON.stringify(record));
+}
+
+test('explicit recovery of a legacy photo removal preserves the latest answer and lets Finish email the report', async () => {
+  const h = harness(), original = savedPhotoTarget(h);
+  h.state.handler = async () => { throw new Error('Offline'); };
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: original.modules[0], evidenceId: 'wrong' });
+  await h.queue.processRentalSaveQueue('job-1');
+  markPhotoRemovalConflict(h, removal.id);
+  h.state.result.modules[0].revision += 3;
+  h.state.result.modules[0].answers.accessNotes = 'Latest access note';
+  h.state.result.items[0].revision++;
+  h.state.result.items[0].response = { visibleCondition: 'Latest saved condition' };
+  h.state.result.items[0].publicNotes = 'Latest answer must remain';
+  h.state.result.findings = [{ id: 'finding-1', itemId: 'item-1', revision: 2, description: 'Latest finding' }];
+  const reviewed = clone(h.state.result);
+  h.state.handler = h.defaultRequest;
+  await h.queue.resolveRentalPhotoRemoval(removal.id, 'remove', reviewed);
+  const recovered = (await h.queue.getRentalSaveState('job-1')).records.find(record => record.id === removal.id);
+  assert.equal(recovered.id, removal.id, 'Recovery retains the original durable action');
+  assert.deepEqual(recovered.baseItem, reviewed.items[0]);
+  assert.deepEqual(recovered.baseFinding, reviewed.findings[0]);
+  assert.deepEqual(recovered.photoRemoval.baseEvidence, reviewed.evidence[0]);
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.deepEqual(h.state.result.items, reviewed.items);
+  assert.deepEqual(h.state.result.findings, reviewed.findings);
+  assert.deepEqual(h.state.result.modules[0].answers, reviewed.modules[0].answers);
+  assert.equal(h.state.result.evidence[0].status, 'superseded');
+  assert.equal(h.state.result.evidence[1].status, 'active');
+  assert.deepEqual(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').map(call => call.body.evidenceId), ['wrong']);
+  const finish = prepareFinish(h);
+  await h.queue.enqueueRentalFinish(finish);
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.modules[0].status, 'complete');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'email_report').length, 1);
+});
+
+test('explicit photo-removal recovery rejects a substituted photo identity and preserves the conflict', async () => {
+  for (const changed of ['jobMediaId', 'itemId', 'moduleId']) {
+    const h = harness(), reviewed = savedPhotoTarget(h);
+    h.state.handler = async () => { throw new Error('Offline'); };
+    const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+    await h.queue.processRentalSaveQueue('job-1');
+    markPhotoRemovalConflict(h, removal.id);
+    h.state.result.evidence[0][changed] = 'different-' + changed;
+    h.state.result.modules[0].revision++;
+    h.state.handler = h.defaultRequest;
+    await assert.rejects(h.queue.resolveRentalPhotoRemoval(removal.id, 'remove', clone(h.state.result)),
+      error => error.code === 'RENTAL_SAVE_CONFLICT', changed);
+    const state = await h.queue.getRentalSaveState('job-1');
+    assert.equal(state.records.find(record => record.id === removal.id).status, 'conflict', changed);
+    assert.deepEqual(state.records.find(record => record.id === removal.id).photoRemoval.baseEvidence, reviewed.evidence[0], changed);
+    assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 0, changed);
+    assert.equal(h.state.result.evidence[0].status, 'active', changed);
+    assert.equal(h.state.result.evidence[1].status, 'active', changed);
+  }
+});
+
+test('Keep photo cancels only its conflicted removal, preserves pending photos and answers, and requires a fresh Finish', async () => {
+  const h = harness(), finish = prepareFinish(h), input = fixture().input, other = fixture().input;
+  h.state.result.permissions.canEdit = true;
+  input.module = clone(h.state.result.modules[0]);
+  input.photos = [photo()]; input.draftSnapshot.photos = clone(input.photos);
+  other.module = clone(input.module); other.body.checkKey = 'other'; other.baseItem.checkKey = 'other'; other.draftKey += ':other';
+  other.body.publicNotes = 'Keep this separately queued answer';
+  h.state.handler = async () => { throw new Error('Offline'); };
+  const source = await h.queue.enqueueRentalSave(input);
+  const otherAnswer = await h.queue.enqueueRentalSave(other);
+  await h.queue.processRentalSaveQueue('job-1');
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: input.module,
+    sourceSaveId: source.id, uri: input.photos[0].uri, reviewed: clone(h.state.result) });
+  await h.queue.processRentalSaveQueue('job-1');
+  const oldFinish = await h.queue.enqueueRentalFinish(finish);
+  await h.queue.processRentalSaveQueue('job-1');
+  markPhotoRemovalConflict(h, removal.id);
+  const before = await h.queue.getRentalSaveState('job-1');
+  h.state.handler = h.defaultRequest;
+  await h.queue.resolveRentalPhotoRemoval(removal.id, 'keep', clone(h.state.result));
+  const retained = await h.queue.getRentalSaveState('job-1');
+  assert.equal(retained.records.some(record => record.id === removal.id), false);
+  assert.deepEqual(retained.records.find(record => record.id === source.id).photos, before.records.find(record => record.id === source.id).photos);
+  assert.deepEqual(retained.records.find(record => record.id === source.id).draftSnapshot, input.draftSnapshot);
+  assert.deepEqual(retained.records.find(record => record.id === otherAnswer.id).body, other.body);
+  assert.equal(retained.records.find(record => record.id === oldFinish.id).status, 'conflict');
+  assert.ok(h.files.has(input.photos[0].uri));
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 0);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'email_report').length, 0, 'Keep does not silently authorise Finish again');
+  assert.equal(h.state.result.evidence.filter(entry => entry.status === 'active').length, 1);
+  assert.equal(h.state.result.items.find(item => item.checkKey === 'other').publicNotes, other.body.publicNotes);
+  await h.queue.enqueueRentalFinish({ ...finish, module: clone(h.state.result.modules[0]), reviewed: clone(h.state.result) });
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'email_report').length, 1);
+});
+
+test('a removal committed before a lost response resolves as already removed without touching another photo', async () => {
+  for (const decision of ['remove', 'keep']) {
+    const h = harness(), reviewed = savedPhotoTarget(h);
+    h.state.handler = async (...args) => {
+      const result = await h.defaultRequest(...args);
+      if (args[1]?.body && JSON.parse(args[1].body).action === 'unlink_evidence') throw new Error('Removal response lost');
+      return result;
+    };
+    const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+    await h.queue.processRentalSaveQueue('job-1');
+    markPhotoRemovalConflict(h, removal.id);
+    const restarted = h.restart();
+    await restarted.queue.resolveRentalPhotoRemoval(removal.id, decision, clone(h.state.result));
+    const state = await restarted.queue.getRentalSaveState('job-1');
+    assert.equal(state.records.find(record => record.id === removal.id).status, 'succeeded', decision);
+    assert.equal(state.pending, 0, decision);
+    assert.equal(h.state.result.evidence[0].status, 'superseded', decision);
+    assert.equal(h.state.result.evidence[1].status, 'active', decision);
+    assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 1, decision);
+    assert.deepEqual(h.state.result.items, reviewed.items, decision);
+  }
+});
+
+test('already removed recovery drains a pending source without relinking its removed checkpoint', async () => {
+  const h = harness(), finish = prepareFinish(h), input = fixture().input;
+  h.state.result.permissions.canEdit = true;
+  input.module = clone(h.state.result.modules[0]);
+  input.photos = [photo(), { ...photo(), uri: 'file:///keep.jpg' }]; input.draftSnapshot.photos = clone(input.photos);
+  h.files.set('file:///keep.jpg', { size: 2048, bytes: 'keep' });
+  h.state.handler = async (...args) => {
+    if (args[0] === '/api/trade-field-work') {
+      h.state.uploadCount = (h.state.uploadCount || 0) + 1;
+      if (h.state.uploadCount > 1) throw new Error('Second photo upload interrupted');
+    }
+    return h.defaultRequest(...args);
+  };
+  const source = await h.queue.enqueueRentalSave(input);
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal(h.state.result.evidence.filter(entry => entry.status === 'active').length, 1);
+  const removedMediaId = h.state.result.evidence[0].jobMediaId;
+  const reviewed = clone(h.state.result);
+  const interruptedUpload = h.state.handler;
+  h.state.handler = async (...args) => {
+    const result = await interruptedUpload(...args);
+    if (args[1]?.body && JSON.parse(args[1].body).action === 'unlink_evidence') throw new Error('Removal response lost');
+    return result;
+  };
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0],
+    sourceSaveId: source.id, uri: input.photos[0].uri, reviewed });
+  await h.queue.processRentalSaveQueue('job-1');
+  markPhotoRemovalConflict(h, removal.id);
+  const restarted = h.restart();
+  await restarted.queue.resolveRentalPhotoRemoval(removal.id, 'keep', clone(h.state.result));
+  await restarted.queue.processRentalSaveQueue('job-1');
+  const state = await restarted.queue.getRentalSaveState('job-1');
+  assert.equal(state.pending, 0, JSON.stringify(state.records.map(record => ({ id: record.id, status: record.status, error: record.error }))));
+  const retained = state.records.find(record => record.id === source.id);
+  assert.deepEqual(retained.photos.map(photo => photo.uri), ['file:///keep.jpg']);
+  assert.deepEqual(retained.draftSnapshot.photos.map(photo => photo.uri), ['file:///keep.jpg']);
+  assert.equal(h.state.result.evidence.filter(entry => entry.status === 'active').length, 1);
+  assert.equal(h.state.result.evidence.find(entry => entry.jobMediaId === removedMediaId).status, 'superseded');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'link_evidence' && call.body.jobMediaId === removedMediaId).length, 1);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 1);
+  await restarted.queue.enqueueRentalFinish({ ...finish, module: clone(h.state.result.modules[0]), reviewed: clone(h.state.result) });
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'email_report').length, 1);
+});
+
 test('Finish queued behind a photo removal completes and delivers after only the selected photo is unlinked', async () => {
   const h = harness(), gate = deferred();
   savedPhotoTarget(h);
