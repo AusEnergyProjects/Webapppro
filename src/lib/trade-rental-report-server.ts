@@ -712,6 +712,14 @@ async function recoverStaleRentalIssuance(ownerUid: string, workOrderId: string)
 
 type RentalReportIssueInput = { access: TeamAccess; workOrderId: string; origin: string };
 
+export async function recoverRentalAssessmentReport(input: Pick<RentalReportIssueInput, "access" | "workOrderId">) {
+  await ensureTradeRentalSchemaGuards(getD1());
+  const context = await reportIssueContext(input.access, input.workOrderId);
+  if (String(context.inspection.status) === "issuing") {
+    await recoverStaleRentalIssuance(input.access.ownerUid, input.workOrderId);
+  }
+}
+
 async function currentIssuedReport(context: Awaited<ReturnType<typeof reportIssueContext>>, input: RentalReportIssueInput) {
   if (String(context.inspection.status) !== "issued") return null;
   const reports = await ownerRentalReportPresentation({ ownerUid: input.access.ownerUid,

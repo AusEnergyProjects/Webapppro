@@ -1,3 +1,4 @@
+import { waitUntil } from "cloudflare:workers";
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
@@ -42,6 +43,7 @@ import {
 } from "@/lib/bounded-json-request";
 import {
   issueRentalAssessmentReport,
+  recoverRentalAssessmentReport,
   ownerRentalReportPresentation,
   renewRentalReportLink,
   revokeRentalReportLink,
@@ -1118,7 +1120,13 @@ export async function GET(request: Request) {
     const access = await requireInstallerTeamAccess(request);
     if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
-    const context = await contextFor(access, workOrderId);
+    let context = await contextFor(access, workOrderId);
+    if (String(context.inspection.status) === "issuing" && access.canRunReports
+      && access.memberId === String(context.inspection.assessor_member_id || "")
+      && access.memberId === String(context.job.assignee_member_id || "")) {
+      await recoverRentalAssessmentReport({ access, workOrderId });
+      context = await contextFor(access, workOrderId);
+    }
     return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)) });
   } catch (error) {
     return inspectionError(error);
@@ -1169,10 +1177,15 @@ export async function POST(request: Request) {
       }
     }
     if (action === "issue_report") {
-      const issuedReport = await issueRentalAssessmentReport({ access, workOrderId, origin: new URL(request.url).origin });
-      const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
-      context = await contextFor(access, workOrderId);
-      return adminJson({ ok: true, jobProgress, issuedReport, ...(await assessmentPayload(context, new URL(request.url).origin)) });
+      const issuance = (async () => {
+        const issuedReport = await issueRentalAssessmentReport({ access, workOrderId, origin: new URL(request.url).origin });
+        const jobProgress = await reconcileTradeFormJobProgress(access, workOrderId, { afterSave: true });
+        const issuedContext = await contextFor(access, workOrderId);
+        return adminJson({ ok: true, jobProgress, issuedReport, ...(await assessmentPayload(issuedContext, new URL(request.url).origin)) });
+      })();
+      // A phone timeout must not cancel PDF storage or the final job transition.
+      waitUntil(issuance);
+      return await issuance;
     }
     assertEditable(context);
     let result: InspectionContext | Response;

@@ -144,14 +144,15 @@ function databaseFixture() {
   return { sql, d1 };
 }
 
-function loadRoute(fixture, permissions = {}, reportApi = {}) {
+function loadRoute(fixture, permissions = {}, reportApi = {}, runtime = {}) {
   const access = { ownerUid: "owner", actorUid: "worker-uid", memberId: "worker", displayName: "Alex Installer", isOwner: false,
     canManageFieldEvidence: true, canViewFieldEvidence: true, canRunReports: true, ...permissions };
   const source = fs.readFileSync(new URL("../src/app/api/trade-rental-inspections/route.ts", import.meta.url), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleRecord = { exports: {} };
   const dependencies = {
-    "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: async () => ({changed:false,stage:"in_progress",blockers:[]}) },
+    "cloudflare:workers": { waitUntil: runtime.waitUntil || ((promise) => { void promise.catch(() => {}); }) },
+    "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: runtime.reconcileTradeFormJobProgress || (async () => ({changed:false,stage:"in_progress",blockers:[]})) },
     "../../../../db": { getD1: () => fixture.d1 },
     "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }), cleanAdminText: (value, max) => String(value ?? "").trim().slice(0, max), sameOrigin: () => true },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, assignedJob: async (_, id) => {
@@ -1131,5 +1132,175 @@ test('stale recovery leaves active generation alone and releases only stages old
     const report=f.sql.prepare('SELECT status,issuer_snapshot FROM trade_rental_reports').get();
     assert.equal(report.status,'failed');
     assert.ok(JSON.parse(report.issuer_snapshot).cleanupCompletedAt);
+  } finally { f.sql.close(); }
+});
+
+const getAssessment = (route) => route.GET(new Request('https://test.example/api/trade-rental-inspections?workOrderId=job'));
+
+test('assigned assessor polling recovers a stale report and returns the refreshed editable inspection without losing answers', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    f.sql.prepare('UPDATE trade_rental_reports SET updated_at=?').run(new Date(Date.now() - 16 * 60 * 1000).toISOString());
+    const answersBefore = f.sql.prepare('SELECT answers FROM trade_rental_inspection_modules').get().answers;
+    const itemBefore = { ...f.sql.prepare('SELECT * FROM trade_rental_inspection_items').get() };
+    const response = await getAssessment(loadRoute(f, {}, f.server));
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.inspection.status, 'in_progress');
+    assert.equal(payload.inspection.revision, 2, 'The response reloads the recovery revision rather than its earlier issuing context');
+    assert.equal(payload.permissions.canEdit, true);
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_reports').get().status, 'failed');
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_inspection_events WHERE event_type=?').get('report_issue_recovered').count, 1);
+    assert.equal(f.sql.prepare('SELECT answers FROM trade_rental_inspection_modules').get().answers, answersBefore);
+    assert.deepEqual({ ...f.sql.prepare('SELECT * FROM trade_rental_inspection_items').get() }, itemBefore);
+    const changesAfterRecovery = f.sql.prepare('SELECT total_changes() changes').get().changes;
+    assert.equal((await getAssessment(loadRoute(f, {}, f.server))).status, 200);
+    assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesAfterRecovery, 'Repeated polling does not recover twice');
+  } finally { f.sql.close(); }
+});
+
+test('assigned assessor polling leaves recent report generation locked and unchanged', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+    const response = await getAssessment(loadRoute(f, {}, f.server));
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.inspection.status, 'issuing');
+    assert.equal(payload.permissions.canEdit, false);
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_reports').get().status, 'staged');
+    assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore);
+  } finally { f.sql.close(); }
+});
+
+test('assessment polling does not start recovery for viewers, another assessor, or a reassigned job', async () => {
+  for (const scenario of ['viewer', 'another assessor', 'reassigned job']) {
+    const f = reportIssuanceFixture();
+    try {
+      f.sql.prepare('UPDATE trade_rental_reports SET updated_at=?').run(new Date(Date.now() - 16 * 60 * 1000).toISOString());
+      if (scenario === 'reassigned job') f.sql.exec("UPDATE trade_work_orders SET assignee_member_id='another-worker'");
+      const permissions = scenario === 'viewer' ? { canRunReports: false, canManageFieldEvidence: false }
+        : scenario === 'another assessor' ? { memberId: 'another-worker' } : {};
+      let recoveries = 0;
+      const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+      const route = loadRoute(f, permissions, { ...f.server,
+        recoverRentalAssessmentReport: async (input) => { recoveries++; await f.server.recoverRentalAssessmentReport(input); } });
+      const response = await getAssessment(route);
+      assert.equal(response.status, 200, scenario);
+      assert.equal((await response.json()).inspection.status, 'issuing', scenario);
+      assert.equal(recoveries, 0, scenario);
+      assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore, scenario);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('report recovery itself requires report permission and the current owner and assigned assessor before any write', async () => {
+  for (const scenario of ['no reports', 'another owner', 'another assessor', 'reassigned job']) {
+    const f = reportIssuanceFixture();
+    try {
+      f.sql.prepare('UPDATE trade_rental_reports SET updated_at=?').run(new Date(Date.now() - 16 * 60 * 1000).toISOString());
+      if (scenario === 'no reports') f.access.canRunReports = false;
+      if (scenario === 'another owner') f.access.ownerUid = 'another-owner';
+      if (scenario === 'another assessor') f.access.memberId = 'another-worker';
+      if (scenario === 'reassigned job') f.sql.exec("UPDATE trade_work_orders SET assignee_member_id='another-worker'");
+      const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+      await assert.rejects(f.server.recoverRentalAssessmentReport({ access: f.access, workOrderId: 'job' }), /REPORT_PERMISSION_REQUIRED|JOB_NOT_FOUND|ASSESSOR_REQUIRED/);
+      assert.equal(f.sql.prepare('SELECT status FROM trade_rental_inspections').get().status, 'issuing', scenario);
+      assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore, scenario);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('report recovery does not clean failed reports or mutate an inspection that is not issuing', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    f.sql.exec("UPDATE trade_rental_inspections SET status='in_progress'; UPDATE trade_rental_reports SET status='failed'");
+    const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+    await f.server.recoverRentalAssessmentReport({ access: f.access, workOrderId: 'job' });
+    assert.equal(f.sql.prepare('SELECT issuer_snapshot FROM trade_rental_reports').get().issuer_snapshot, '{}');
+    assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore);
+  } finally { f.sql.close(); }
+});
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => { resolve = resolvePromise; reject = rejectPromise; });
+  return { promise, resolve, reject };
+}
+
+test('one report promise is protected before issuance completes and reconciles the job after the caller disconnects', { timeout: 2000 }, async () => {
+  const f = reportIssuanceFixture();
+  const issuance = deferred();
+  const registered = deferred();
+  const abort = new AbortController();
+  const lifetimePromises = [];
+  let issueCalls = 0;
+  let reconciliationCalls = 0;
+  try {
+    const route = loadRoute(f, {}, {
+      issueRentalAssessmentReport: async () => {
+        issueCalls++;
+        const result = await issuance.promise;
+        f.markIssued();
+        return result;
+      },
+    }, {
+      waitUntil: (promise) => { lifetimePromises.push(promise); registered.resolve(); },
+      reconcileTradeFormJobProgress: async (access, workOrderId, options) => {
+        reconciliationCalls++;
+        assert.equal(access.ownerUid, 'owner');
+        assert.equal(workOrderId, 'job');
+        assert.deepEqual(options, { afterSave: true });
+        f.sql.exec("UPDATE trade_work_orders SET stage='completed'");
+        return { changed: true, stage: 'completed', blockers: [] };
+      },
+    });
+    const responsePromise = route.POST(new Request('https://test.example/api/trade-rental-inspections', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workOrderId: 'job', action: 'issue_report' }), signal: abort.signal,
+    }));
+    await registered.promise;
+    assert.equal(lifetimePromises.length, 1);
+    assert.equal(issueCalls, 1);
+    assert.equal(reconciliationCalls, 0, 'Registration happens while issuance is still in progress');
+    abort.abort();
+    issuance.resolve({ reportId: 'report', reportNumber: 'RMS-TEST-R1' });
+    const protectedResponse = await lifetimePromises[0];
+    assert.equal(protectedResponse, await responsePromise, 'The response awaits the same protected operation, rather than starting a second issue');
+    assert.equal(protectedResponse.status, 200);
+    const payload = await protectedResponse.json();
+    assert.equal(payload.issuedReport.reportId, 'report');
+    assert.equal(payload.inspection.status, 'issued');
+    assert.equal(payload.inspection.issuedReportId, 'report');
+    assert.equal(payload.jobProgress.stage, 'completed');
+    assert.equal(f.sql.prepare('SELECT stage FROM trade_work_orders').get().stage, 'completed');
+    assert.equal(issueCalls, 1);
+    assert.equal(reconciliationCalls, 1);
+  } finally { f.sql.close(); }
+});
+
+test('protected issuance rejection retains the existing transient503 and never reconciles a failed report', { timeout: 2000 }, async () => {
+  const f = reportIssuanceFixture();
+  const issuance = deferred();
+  const registered = deferred();
+  const lifetimePromises = [];
+  let reconciliationCalls = 0;
+  try {
+    const route = loadRoute(f, {}, { issueRentalAssessmentReport: () => issuance.promise }, {
+      waitUntil: (promise) => { lifetimePromises.push(promise); registered.resolve(); },
+      reconcileTradeFormJobProgress: async () => { reconciliationCalls++; return {}; },
+    });
+    const responsePromise = post(route, { action: 'issue_report' });
+    await registered.promise;
+    assert.equal(lifetimePromises.length, 1);
+    const rejectedLifetime = assert.rejects(lifetimePromises[0], /RENTAL_REPORT_ISSUING/);
+    issuance.reject(new Error('RENTAL_REPORT_ISSUING'));
+    await rejectedLifetime;
+    const response = await responsePromise;
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).code, 'RENTAL_REPORT_ISSUING');
+    assert.equal(reconciliationCalls, 0);
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_reports').get().status, 'staged');
   } finally { f.sql.close(); }
 });
