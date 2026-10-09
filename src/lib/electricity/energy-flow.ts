@@ -1,4 +1,7 @@
 import type { HalfHourlyGrid } from "./nem12-types.ts";
+import postcodeSolarEstimates from "../../data/postcode-solar-estimates.json" with { type: "json" };
+
+const LOCAL_SOLAR_GENERATION: Readonly<Record<string, number>> = postcodeSolarEstimates;
 
 export interface SolarFlow {
   importProfile: HalfHourlyGrid;
@@ -153,8 +156,15 @@ export function stateFromPostcode(postcode: string): string | null {
   return null;
 }
 
+export function solarClimateForPostcode(postcode: string): { annualKwhPerKw: number; source: "pvgis-local" | "regional" } {
+  const local = LOCAL_SOLAR_GENERATION[postcode.trim().padStart(4, "0")];
+  return local > 0
+    ? { annualKwhPerKw: local, source: "pvgis-local" }
+    : { annualKwhPerKw: SOLAR_YIELD_KWH_PER_KW[stateFromPostcode(postcode) || ""] || 1350, source: "regional" };
+}
+
 export function solarYieldForPostcode(postcode: string): number {
-  return SOLAR_YIELD_KWH_PER_KW[stateFromPostcode(postcode) || ""] || 1350;
+  return solarClimateForPostcode(postcode).annualKwhPerKw;
 }
 
 export function suggestedSolarSize(annualKwh: number, postcode: string): number {

@@ -37,8 +37,8 @@ test("native battery dispatch stays in exact compatibility parity", () => {
 });
 
 test("solar sizing uses the household postcode yield", () => {
-  assert.equal(solarYieldForPostcode("3000"), 1250);
-  assert.equal(solarYieldForPostcode("4000"), 1500);
+  assert.equal(solarYieldForPostcode("3000"), 1462);
+  assert.equal(solarYieldForPostcode("4000"), 1534);
   assert.equal(suggestedSolarSize(5000, "3000"), 4);
   assert.equal(suggestedSolarSize(5000, "4000"), 4);
 });

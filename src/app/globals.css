@@ -1327,6 +1327,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--color-aea-green)
 .native-enquiry-reassurance { color: #426275; font-size: .875rem; line-height: 1.5; margin: 10px 0 14px; text-align: center; }
 .native-scenario .audit-button { margin-top: 8px; width: 100%; }
 .native-system-sizes { border-top: 1px solid #32877c; color: #d0e8e9; margin-top: 24px; padding-top: 20px; }
+.native-solar-climate { color: #d0e8e9; font-size: .875rem; line-height: 1.5; margin: 16px 0; }
+.native-solar-climate a { color: #99f6d8; text-decoration: underline; }
 .native-system-sizes h3 { color: #fff; font-size: 1rem; margin: 0 0 6px; }
 .native-system-sizes p, .native-system-sizes small { font-size: .875rem; line-height: 1.5; }
 .native-system-sizes .grid { margin: 14px 0; }

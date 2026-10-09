@@ -28,6 +28,7 @@ import {
   genericExportProfile,
   simulateBattery,
   simulateSolar,
+  solarClimateForPostcode,
   solarYieldForPostcode,
   suggestedBatterySize,
   suggestedSolarSize,
@@ -393,7 +394,11 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     const bestNow = plans.filter((plan) => plan.tariffKind !== "demand").sort((a, b) => a.annualCost - b.annualCost)[0];
     if (!bestNow) return [];
     const batterySize = Math.max(0, Number(scenarioBatteryKwh));
-    const solarYield = solarYieldForPostcode(postcode);
+    const solarClimate = solarClimateForPostcode(postcode);
+    const solarYield = solarClimate.annualKwhPerKw;
+    const solarClimateEvidence = solarClimate.source === "pvgis-local"
+      ? `PVGIS 5.3 ERA5 2005-2023 mean annual generation at the postcode centre, using an optimally tilted reference system. Actual roof direction, tilt and shading are not surveyed.`
+      : "Broad regional solar assumption; no local climate record is available for this postcode.";
     const batteryEfficiency = BATTERY_ROUND_TRIP_EFFICIENCY;
     const common = {
       annualControlledKwh: pricingContext.annualControlledKwh,
@@ -412,7 +417,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       const solarBest = cheapestScenarioPlan(pricingContext.candidates, {
         ...common, annualGeneralKwh: solar.annualImport, profile: solar.importProfile, hasSolar: true,
         annualExportKwh: solar.annualExport, exportProfile: solar.exportProfile,
-        evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar at ${Math.round(solarYield)} kWh/kW/year was simulated half hourly before tariff pricing.`,
+        evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar at ${Math.round(solarYield)} kWh/kW/year was simulated half hourly before tariff pricing. ${solarClimateEvidence}`,
       });
       if (solarBest) results.push({
         label: "Solar only", description: `${size} kW solar`, best: solarBest,
@@ -424,7 +429,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         const batteryBest = cheapestScenarioPlan(pricingContext.candidates, {
           ...common, annualGeneralKwh: battery.annualImport, profile: battery.importProfile, hasSolar: true, hasBattery: true,
           annualExportKwh: battery.annualExport, exportProfile: battery.exportProfile,
-          evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar at ${Math.round(solarYield)} kWh/kW/year and a ${batterySize} kWh usable battery at ${Math.round(batteryEfficiency * 100)}% round-trip efficiency were simulated half hourly before tariff pricing.`,
+          evidenceLabel: `Scenario based on ${pricingContext.evidenceLabel} ${size} kW solar at ${Math.round(solarYield)} kWh/kW/year and a ${batterySize} kWh usable battery at ${Math.round(batteryEfficiency * 100)}% round-trip efficiency were simulated half hourly before tariff pricing. ${solarClimateEvidence}`,
         });
         if (batteryBest) results.push({
           label: "Solar + battery", description: `${size} kW solar + ${batterySize} kWh battery`, best: batteryBest,
@@ -971,6 +976,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       <div className="rsummary"><div className="stat"><div className="v">{visible.length}</div><div className="l">plans we could compare</div></div><div className="stat"><div className="v">{best ? fmtMoney(best.annualCost) : "n/a"}</div><div className="l">lowest estimated yearly bill</div></div><div className="stat"><div className="v">{median ? fmtMoney(median.annualCost) : "n/a"}</div><div className="l">middle-priced plan</div></div></div>
       {pricingContext && setupMode !== "battery" && <div className="native-scenarios">
         <div className="native-scenario-heading"><span>Your next energy move</span><h2>{setupMode === "none" ? "Go further with solar" : "Make more of your solar with storage"}</h2><p>Compare the estimated impact below, then ask about the option that suits you. No account needed.</p></div>
+        <p className="native-solar-climate">{solarClimateForPostcode(postcode).source === "pvgis-local" ? <>Local solar estimate for postcode {postcode}. Based on local weather history and a well-positioned roof. Shade and roof direction can reduce generation. Data: <a href="https://data.jrc.ec.europa.eu/dataset/eef67979-e4a9-46f1-80f4-16fe2a266634" target="_blank" rel="noreferrer">European Commission/JRC, PVGIS, 2005 to 2023</a>, sampled for your postcode under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a>.</> : <>We are using a broad regional solar estimate for this postcode. An installer can confirm the generation expected at your property.</>}</p>
         <div className="native-scenario-grid">{upgradeScenarios.map((scenario) => <article className="native-scenario" key={scenario.label}>
           <span className="native-scenario-kicker">{scenario.label === "Solar only" ? "Generate your own energy" : "Keep more energy for later"}</span><h3>{scenario.label === "Solar + battery" ? "Solar + storage" : scenario.label}</h3>
           <p>{scenario.description}</p>
