@@ -1,515 +1,7 @@
 [
   {
-    "id": "fronius-primo",
-    "name": "Fronius Primo",
-    "group": "Single-phase solar",
-    "fit": "A single-phase home choosing ordinary rooftop solar, with a separate battery decision later.",
-    "why": "Two independent solar inputs let the installer manage panels on different roof directions. Solar.web monitoring can show how the system is generating.",
-    "check": "Primo and Primo GEN24 are different products. Ordinary Primo has no direct battery connection and does not provide blackout power by itself. A later battery needs a separately compatible system. Check the fan's location and the exact Australian model's written warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Fronius Australia Primo 5.0-1 AUS technical data",
-        "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-primo/fronius-primo-5-0-1-aus",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "Fronius",
-    "image": {
-      "src": "/products/inverters/fronius-primo.webp",
-      "alt": "Fronius Primo. Product range shown.",
-      "sourceUrl": "https://australia.a.bigcontent.io/v1/static/14195228_1_P_PROD_SPEC_FRNPRIMO50-1"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": null,
-        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
-      },
-      {
-        "criterion": "blackout",
-        "pro": null,
-        "con": "This unit provides no blackout power; rooftop solar stops when the grid goes down."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "fronius-primo-gen24-plus",
-    "name": "Fronius Primo GEN24 Plus",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home planning solar and a matched battery together.",
-    "why": "The Plus version combines solar and battery connections. Its PV Point offers a separate emergency outlet, while a complete backup installation can supply selected household circuits.",
-    "check": "PV Point is a dedicated outlet, not automatic whole-home backup. Full Backup needs a supported inverter variant, compatible battery, switching equipment and the right circuit design. Confirm the quote says GEN24 Plus, since ordinary GEN24 and later battery activation differ. Check the exact model and written warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Fronius Australia Primo GEN24 Plus technical data",
-        "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-primo-gen24-plus/fronius-primo-gen24-3-0-plus",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      },
-      {
-        "title": "Fronius Primo GEN24 PV Point setup and operation, Australia and New Zealand",
-        "url": "https://www.fronius.com/~/downloads/Solar%20Energy/Application%20Guides/SE_APG_Primo_GEN24_PV_Point_Setup_and_Operation_AU_NZ.pdf",
-        "kind": "manufacturer_installation_guidance",
-        "revision": "Version 1.0, 13 May 2023; checked 10 October 2026"
-      }
-    ],
-    "brand": "Fronius",
-    "image": {
-      "src": "/products/inverters/fronius-primo-gen24-plus.webp",
-      "alt": "Fronius Primo GEN24 Plus. Product range shown.",
-      "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE_DS_Fronius_Primo_GEN24_GEN24Plus_3_to_6_kW_EN_withoutWebshop.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Connects solar and a compatible battery through the same unit.",
-        "con": "The quote must include the Plus version and a supported battery; ordinary GEN24 differs."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "A dedicated emergency outlet is available; a complete battery installation can supply selected household circuits.",
-        "con": "The outlet is not whole-home backup; wider coverage needs additional equipment and a supported battery."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "sma-sunny-boy-smart-energy",
-    "name": "SMA Sunny Boy Smart Energy",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home with several roof sections, choosing solar now or matched storage as part of the design.",
-    "why": "The Australian 5 and 6 kW models have three independent solar inputs, useful when the roof layout needs more than two separately managed panel groups.",
-    "check": "Battery and blackout operation need the supported battery and the correct backup arrangement. A Secure Power Supply outlet differs from an automatic household backup kit. Confirm the exact Australian capacity variant, battery compatibility, backed-up circuits and warranty registration conditions.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "SMA Australia Sunny Boy Smart Energy",
-        "url": "https://www.sma-australia.com.au/products/hybrid-inverters/sunny-boy-smart-energy",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "SMA",
-    "image": {
-      "src": "/products/inverters/sma-sunny-boy-smart-energy.webp",
-      "alt": "SMA Sunny Boy Smart Energy. Product range shown.",
-      "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_tf78puhkml0rb7g728i78ppd72/SMA_SBSE%20Brochure-en-au-10.pdf?content-disposition=inline"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Connects solar and a compatible battery through the same unit.",
-        "con": "Battery choice must match the exact Australian model; a battery is not included by default."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "Can supply selected household circuits through a complete battery and backup installation.",
-        "con": "An emergency outlet differs from household backup; additional equipment and agreed circuits are needed."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "The 5 and 6 kW models separately manage three roof directions.",
-        "con": "Other sizes differ; panel placement and shade still need a suitable design."
-      }
-    ]
-  },
-  {
-    "id": "sma-sunny-tripower-smart-energy",
-    "name": "SMA Sunny Tripower Smart Energy",
-    "group": "Three-phase solar and battery",
-    "fit": "A three-phase home considering a combined solar and storage inverter in the SMA system.",
-    "why": "The Smart Energy family combines three-phase solar conversion and a battery connection, with a backup output for a properly configured system.",
-    "check": "SMA's Australian household page names this family; the detailed product specification is global. Confirm the quoted Australian STP-3SE-40 variant, current local support, compatible battery and firmware. Backup power on each phase is limited. Get the applicable Australian warranty in writing.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "SMA Australia storing solar power at home",
-        "url": "https://www.sma-australia.com.au/home/store-solar-power-use-flexibly",
-        "kind": "manufacturer_local_system_guidance",
-        "revision": "Undated Australian system page checked 10 October 2026"
-      },
-      {
-        "title": "SMA Sunny Tripower Smart Energy product specification",
-        "url": "https://www.sma.de/en/products/hybrid-inverters/sunny-tripower-smart-energy",
-        "kind": "manufacturer_specification",
-        "revision": "Undated global product page checked 10 October 2026; Australian variant must be confirmed"
-      }
-    ],
-    "brand": "SMA",
-    "image": {
-      "src": "/products/inverters/sma-sunny-tripower-smart-energy.webp",
-      "alt": "SMA Sunny Tripower Smart Energy. Product range shown.",
-      "sourceUrl": "https://www.sma.de/fileadmin/content/website-meta/products/hybrid-inverters/sunny-tripower-smart-energy/SMA-Sunny-Tripower-Smart-Energy-Hero-2560.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Combines solar and a compatible battery for homes with three-phase electricity.",
-        "con": "The exact Australian model, supported battery and current local availability still need confirmation."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "Can supply selected household circuits with a correctly configured battery installation.",
-        "con": "The appliances it can run together are limited; the complete Australian backup design needs confirmation."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": null,
-        "con": "The number of separately managed roof directions is not confirmed for the Australian model."
-      }
-    ]
-  },
-  {
-    "id": "enphase-iq8",
-    "name": "Enphase IQ8",
-    "group": "Panel-level solar",
-    "fit": "A roof where separately managed panels and panel-level monitoring are useful, such as several roof faces.",
-    "why": "Each panel has its own small inverter rather than sharing one central solar inverter. A compatible IQ Gateway provides system monitoring; the layout can be designed around individual panels.",
-    "check": "IQ8AC, IQ8HC and other IQ8 variants must match the panel's electrical limits. IQ8 alone does not give an Australian home blackout power: the backed-up system needs a compatible battery, system controller and circuit design. Confirm the complete equipment list and each component's Australian warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Enphase IQ8AC and IQ8HC Australian datasheet",
-        "url": "https://enphase.com/en-au/download/iq8ac-and-iq8hc-microinverters-data-sheet",
-        "kind": "manufacturer_specification",
-        "revision": "Australian datasheet checked 10 October 2026; download revision not independently confirmed"
-      },
-      {
-        "title": "Enphase IQ8 information for Australian installers",
-        "url": "https://enphase.com/en-au/blog/professionals/iq8-series-microinverters-latest-information-installers",
-        "kind": "manufacturer_compatibility",
-        "revision": "2 May 2023; checked 10 October 2026"
-      }
-    ],
-    "brand": "Enphase",
-    "image": {
-      "src": "/products/inverters/enphase-iq8.webp",
-      "alt": "Enphase IQ8. Product range shown.",
-      "sourceUrl": "https://enphase.com/en-au/download/iq8ac-and-iq8hc-microinverters-data-sheet"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Compatible battery storage can be added alongside the rooftop solar system.",
-        "con": "Extra equipment is needed; each small panel inverter has no direct battery connection."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "Can support selected backup circuits in a complete, compatible battery system.",
-        "con": "Panels alone provide no blackout power; a battery and additional equipment are required."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Each panel works separately, suiting roofs with several facing directions.",
-        "con": "One inverter per panel adds more rooftop equipment; panel placement still needs suitable design."
-      }
-    ]
-  },
-  {
-    "id": "solaredge-home-genesis",
-    "name": "SolarEdge Home Genesis",
-    "group": "Single-phase solar",
-    "fit": "A single-phase home choosing a SolarEdge panel-optimiser system, with an on-grid battery path.",
-    "why": "The inverter works with compatible SolarEdge panel optimisers. That design supports separately managed panels and panel-level monitoring when the monitoring setup is included.",
-    "check": "Genesis and Home Hub have different backup capabilities. Genesis should not be sold as a blackout package by itself. Confirm the exact Australian inverter, matching optimisers and the equipment needed for any battery addition. The inverter and optimisers have separate warranty terms.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "SolarEdge Australia Home Genesis inverter",
-        "url": "https://www.solaredge.com/aus/products/residential/pv-inverters/solaredge-home-genesis-inverter",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      },
-      {
-        "title": "SolarEdge Australia Genesis upgrade and backup distinction",
-        "url": "https://www.solaredge.com/aus/trade-up",
-        "kind": "manufacturer_compatibility",
-        "revision": "Undated Australian programme page checked 10 October 2026; offer pricing is not used"
-      }
-    ],
-    "brand": "SolarEdge",
-    "image": {
-      "src": "/products/inverters/solaredge-home-genesis.webp",
-      "alt": "SolarEdge Home Genesis. Product range shown.",
-      "sourceUrl": "https://8979728.fs1.hubspotusercontent-na1.net/hubfs/8979728/LP%20Images/Australia%20-%20Aus%20Marketing%20Resources%20Im1.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Supports a matched battery while the electricity grid is working.",
-        "con": "Battery compatibility and required extra equipment need confirmation for the exact model."
-      },
-      {
-        "criterion": "blackout",
-        "pro": null,
-        "con": "Genesis alone provides no blackout power; it must not be confused with Home Hub backup."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Manages panels individually across different roof directions.",
-        "con": "Needs a compatible extra device on each panel, with the full roof design checked."
-      }
-    ]
-  },
-  {
-    "id": "solaredge-home-hub-universal",
-    "name": "SolarEdge Home Hub Universal",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home planning a SolarEdge solar, matched battery and optional backup system.",
-    "why": "The Australian Universal family combines solar and battery control with an integrated import/export meter and included current sensors, helping the system manage household energy flow.",
-    "check": "Confirm the Australian SE5000H-MM or SE10000H-MM variant, compatible optimisers and Home Battery. Blackout use also needs the supported Backup Interface, firmware and circuit design. Available backup power is limited by the complete system. Check separate inverter, battery and optimiser warranties.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "SolarEdge Home Hub Universal Australian datasheet",
-        "url": "https://knowledge-center.solaredge.com/sites/kc/files/se-home-hub-universal-inverter-datasheet-aus.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "Australian Universal datasheet checked 10 October 2026; printed issue date not stated"
-      }
-    ],
-    "brand": "SolarEdge",
-    "image": {
-      "src": "/products/inverters/solaredge-home-hub-universal.webp",
-      "alt": "SolarEdge Home Hub Universal. Product range shown.",
-      "sourceUrl": "https://acsolarwarehouse.com/shop/solaredge-home-hub-5kw-universal-inverter-27356/document/2892"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Combines solar and storage using a compatible SolarEdge Home Battery.",
-        "con": "Battery choices are tied to the supported SolarEdge system, not any brand."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "Can supply selected household circuits through a complete battery and backup installation.",
-        "con": "Needs additional backup equipment; available power depends on the battery and circuits included."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Manages panels individually across different roof directions.",
-        "con": "Needs a compatible extra device on each panel, with the full roof design checked."
-      }
-    ]
-  },
-  {
-    "id": "sungrow-sg-rs",
-    "name": "Sungrow SG-RS",
-    "group": "Single-phase solar",
-    "fit": "A single-phase home that mainly wants rooftop solar and generation monitoring.",
-    "why": "The RS solar family offers independent panel inputs and iSolarCloud monitoring, so the installation can track generation and manage different panel groups.",
-    "check": "SG-RS is the ordinary solar family; SH-RS is the hybrid family. SG-RS alone does not connect a storage battery or provide blackout power. Confirm the exact Australian RS variant, included monitoring hardware, roof-input design and written warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Sungrow Australia SG3.0 and SG5.0RS string inverters",
-        "url": "https://www.sungrowpower.com/au/en/products/string-inverter/b-sg3-0/5-0rs",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "Sungrow",
-    "image": {
-      "src": "/products/inverters/sungrow-sg-rs.webp",
-      "alt": "Sungrow SG-RS. Product range shown.",
-      "sourceUrl": "https://official-oversears-file.sungrowpower.com/page-assets/da78b486-ab72-44c4-b1b8-dae55508d274.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": null,
-        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
-      },
-      {
-        "criterion": "blackout",
-        "pro": null,
-        "con": "SG-RS provides no blackout power; the separate SH-RS model has different capabilities."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages groups of panels facing different roof directions.",
-        "con": "The number of separately managed roof directions needs confirmation for the exact RS model."
-      }
-    ]
-  },
-  {
-    "id": "sungrow-sh-rs",
-    "name": "Sungrow SH-RS",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home planning new solar and a manufacturer-matched storage battery.",
-    "why": "The SH-RS hybrid family combines solar generation and battery charging, with monitoring and controls for how household energy is used.",
-    "check": "Confirm the exact SH-RS or SH-RS-20 model and its current supported battery list. Blackout capability needs the battery and a correctly wired backup installation; the inverter alone is insufficient. Check backed-up circuits, simultaneous appliance limits and the Australian warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Sungrow Australia SH-RS residential hybrid inverters",
-        "url": "https://www.sungrowpower.com/au/en/products/residential-energy-storage-system/shrs-3-36-4-5-6",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "Sungrow",
-    "image": {
-      "src": "/products/inverters/sungrow-sh-rs.webp",
-      "alt": "Sungrow SH-RS. Product range shown.",
-      "sourceUrl": "https://official-oversears-file.sungrowpower.com/page-assets/2634dff5-5bd7-4d4b-ab3b-6ac12addc9de.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Connects solar and a compatible battery through the same unit.",
-        "con": "The supported battery depends on the exact SH-RS version; other generations can differ."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "A correctly installed battery can supply selected household circuits.",
-        "con": "Backup wiring must be included; the number of appliances running together remains limited."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "The reviewed model separately manages two roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "sungrow-sh-t",
-    "name": "Sungrow SH-T",
-    "group": "Three-phase solar and battery",
-    "fit": "A three-phase home designing solar and storage together, including larger household loads.",
-    "why": "The SH-T family combines three-phase solar and battery control, with manufacturer-supported SBR or SBH battery configurations depending on the exact model.",
-    "check": "SH-T capacity variants and battery combinations differ. Confirm the exact Australian model and battery match. A three-phase backup connection does not guarantee every appliance can run together: check power on each phase, starting loads and included backup wiring. Get the written Australian warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Sungrow Australia SH-T residential hybrid inverters",
-        "url": "https://www.sungrowpower.com/au/en/products/residential-energy-storage-system/sht-5-6-8-10-12",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "Sungrow",
-    "image": {
-      "src": "/products/inverters/sungrow-sh-t.webp",
-      "alt": "Sungrow SH-T. Product range shown.",
-      "sourceUrl": "https://official-oversears-file.sungrowpower.com/page-assets/4ca5e42a-9a95-407d-aac6-8e4d84cd1710.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Combines solar and matched SBR or SBH storage for a three-phase home.",
-        "con": "The supported battery combination depends on the exact inverter model."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "Can provide three-phase backup through a complete, matched battery installation.",
-        "con": "Large appliances cannot run without limit; the circuits and starting loads must suit the design."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "The reviewed 5 to 10 kW models separately manage two roof directions.",
-        "con": "Roof-direction support for other sizes is unconfirmed; more directions need a suitable design."
-      }
-    ]
-  },
-  {
-    "id": "goodwe-dns-g3",
-    "name": "GoodWe DNS G3",
-    "group": "Single-phase solar",
-    "fit": "A single-phase home choosing ordinary solar, where a fanless inverter design is useful for the installation location.",
-    "why": "The DNS G3 uses fanless cooling and two separately managed solar inputs. Its roof-input design can suit two differently facing panel groups.",
-    "check": "DNS G3 is a solar inverter, not a direct battery or blackout system. Household consumption monitoring can require optional HomeKit equipment. Confirm the exact Australian DNS G3 model, included monitoring and applicable warranty rather than assuming another GoodWe family has the same features.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "GoodWe Australia DNS G3 series",
-        "url": "https://www.goodwe.com.au/dns-g3-au",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "GoodWe",
-    "image": {
-      "src": "/products/inverters/goodwe-dns-g3.webp",
-      "alt": "GoodWe DNS G3. Product range shown.",
-      "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20220530/DNSG3-31.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": null,
-        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
-      },
-      {
-        "criterion": "blackout",
-        "pro": null,
-        "con": "This solar unit provides no blackout power by itself."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "goodwe-eh-plus",
-    "name": "GoodWe EH Plus+",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home considering solar first and a supported high-voltage battery now or later.",
-    "why": "The EH family offers a battery-ready route alongside active hybrid versions, allowing storage to be part of the system design without assuming every installation starts with a battery.",
-    "check": "Some battery-ready EH versions need a purchased activation code before storage works. Confirm whether activation is included, the exact EH variant and matched battery. Battery-ready does not mean a battery or blackout installation is included. Check backup circuits and the written Australian warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "GoodWe Australia EH Plus series and battery activation",
-        "url": "https://www.goodwe.com.au/eh-plus",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "GoodWe",
-    "image": {
-      "src": "/products/inverters/goodwe-eh-plus.webp",
-      "alt": "GoodWe EH Plus+. Product range shown.",
-      "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20211227/639a92b851bf8.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Supports a compatible battery now or later, depending on the purchased version.",
-        "con": "Some versions need paid activation before a battery works; storage is not included by default."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "A fully enabled, correctly installed battery version can supply selected household circuits.",
-        "con": "Battery-ready versions need activation; backup equipment, wiring and appliance limits must be included."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
     "id": "goodwe-et-g2",
-    "name": "GoodWe ET G2",
-    "group": "Three-phase solar and battery",
-    "fit": "A three-phase home with several roof sections and plans for a matched battery.",
-    "why": "The ET G2 family combines three-phase solar and storage, with up to three independent solar inputs depending on the model. This gives the installer more flexibility across different roof sections.",
-    "check": "Confirm the GW-ET-20 model, since earlier ET generations differ. Battery pairing, backup circuits and available power on each phase need to suit the home; a large inverter number does not guarantee every load during a blackout. Check the exact Australian model's written warranty.",
+    "name": "GoodWe ET G2 9.99 kW",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -517,6 +9,30 @@
         "url": "https://www.goodwe.com.au/et-g2",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      },
+      {
+        "title": "ET G2 generation evidence",
+        "url": "https://en.goodwe.com/au/we-look-forward-to-2025-when-goodwe-will-continue-releasing-more-exciting-new-energy-storage-products-for-residential-and-commercial-scale-applications",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker announced the second generation in Australia in December 2024; specifications here are the exact 9.99 kW variant."
+      },
+      {
+        "title": "GoodWe ET G2 9.99 kW datasheet",
+        "url": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU 2.1, 26 September 2024"
+      },
+      {
+        "title": "Exact AU equipment-only retail bundle",
+        "url": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-9-9kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw9900-et-20",
+        "kind": "published_equipment_price",
+        "revision": "Public price including GST checked 10 October 2026"
+      },
+      {
+        "title": "GoodWe AU/NZ included fault warranty",
+        "url": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176",
+        "kind": "manufacturer_specification",
+        "revision": "Rev5.9, 17 September 2026"
       }
     ],
     "brand": "GoodWe",
@@ -525,157 +41,85 @@
       "alt": "GoodWe ET G2. Product range shown.",
       "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20240925/ET-G2-31.png"
     },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Combines solar and a compatible battery for homes with three-phase electricity.",
-        "con": "The exact model and supported battery must match; earlier ET generations differ."
+    "freshness": {
+      "generation": "ET G2",
+      "released": "2024-12-11",
+      "sourceUrl": "https://en.goodwe.com/au/we-look-forward-to-2025-when-goodwe-will-continue-releasing-more-exciting-new-energy-storage-products-for-residential-and-commercial-scale-applications",
+      "note": "Maker announced the second generation in Australia in December 2024; specifications here are the exact 9.99 kW variant."
+    },
+    "measurements": {
+      "cost": {
+        "value": 306.5045,
+        "unit": "aud-per-kw",
+        "variant": "GW9900-ET-20 with listed WiFi, meter and three CTs",
+        "basisId": "inverter-unit-gst",
+        "basis": "Public equipment-only retail price A$3061.98 including GST divided by exact 9.99 kW nominal output. Includes listed WiFi, meter and CTs; excludes battery, installation and separate backup wiring. Checked 10 October 2026.",
+        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-9-9kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw9900-et-20",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "blackout",
-        "pro": "Can supply selected household circuits through a complete battery installation.",
-        "con": "Backup depends on battery and circuit design; a bigger inverter does not run unlimited appliances."
+      "efficiency": {
+        "value": 97.5,
+        "unit": "weighted-efficiency-percent",
+        "variant": "GW9900-ET-20",
+        "basisId": "inverter-european-weighted",
+        "basis": "Manufacturer European-weighted solar-to-grid conversion efficiency for the exact selected model. Not peak efficiency, CEC weighting, battery round-trip efficiency or annual home yield.",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "roof-layout",
-        "pro": "Some models manage three roof directions separately.",
-        "con": "The number of separately managed roof directions varies with the exact model."
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "variant": "GW9900-ET-20 including listed WiFi and Smart Meter",
+        "basisId": "included-all-parts",
+        "basis": "Minimum included hardware fault-cover term across this selected inverter bundle: main ET G2 inverter 10 years, WiFi/Smart Meter accessories 2 years. Not a paid extension or battery/installation warranty. AU/NZ policyRev5.9, 17 September 2026.",
+        "sourceUrl": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176",
+        "checkedAt": "2026-10-10"
       }
-    ]
-  },
-  {
-    "id": "huawei-sun2000-l1",
-    "name": "Huawei SUN2000-L1",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home considering Huawei solar with a supported LUNA2000 battery connection.",
-    "why": "The L1 family provides two independent solar inputs and a connection for the specified LUNA2000-S0 battery system, supporting a combined solar and storage design.",
-    "check": "Confirm the exact Australian L1 inverter and supported LUNA battery version; Huawei families and battery generations are not interchangeable by name. Blackout operation requires compatible backup equipment and a circuit design. Check included components, firmware compatibility and the applicable Australian warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
+    },
+    "technicalSpecs": [
       {
-        "title": "Huawei Australia SUN2000-L1",
-        "url": "https://solar.huawei.com/au/products/SUN2000-5-6KTL-L1/",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
+        "label": "Exact inverter",
+        "value": "GW9900-ET-20",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf"
       },
       {
-        "title": "Huawei Australia SUN2000-L1 technical specifications",
-        "url": "https://solar.huawei.com/au/products/SUN2000-5-6KTL-L1/specs/",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian specifications checked 10 October 2026"
+        "label": "Rated household output",
+        "value": "9.99 kW, three-phase",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf"
+      },
+      {
+        "label": "Different roof directions",
+        "value": "3 independently managed panel groups; panel matching and shade still need design",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf"
+      },
+      {
+        "label": "European-weighted conversion",
+        "value": "97.5% solar-to-grid conversion under the maker test conditions",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf"
+      },
+      {
+        "label": "Inverter fault cover",
+        "value": "10 years for ET G2 main unit; included WiFi and Smart Meter accessories 2 years",
+        "sourceUrl": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176"
+      },
+      {
+        "label": "Backup",
+        "value": "Compatible battery and designed backup wiring required; appliances and per-phase output limits apply",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_ET%20G2_Datasheet-AU_C.pdf"
       }
     ],
-    "brand": "Huawei",
-    "image": {
-      "src": "/products/inverters/huawei-sun2000-l1.webp",
-      "alt": "Huawei SUN2000-L1. Product range shown.",
-      "sourceUrl": "https://solarex.com.au/image/cache/catalog/inverters/huawei/P-HUA-SUN2000-5KTL-L1-500x500.jpg"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Provides a connection for the specified Huawei LUNA2000-S0 battery.",
-        "con": "Other LUNA battery generations are not automatically compatible with this inverter."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "Can support selected household circuits with a compatible battery and backup installation.",
-        "con": "Additional equipment is required; exact battery compatibility and circuit coverage need confirmation."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "growatt-min-xh2",
-    "name": "Growatt MIN-XH2",
-    "group": "Single-phase battery-ready solar",
-    "fit": "A single-phase home choosing solar with a planned, matched APX high-voltage battery path.",
-    "why": "The MIN 2500-6000TL-XH2 family provides two solar inputs and supports the specified APX battery system, so storage can be considered within the original inverter design.",
-    "check": "Growatt explicitly says backup is not included with this battery-ready family. Confirm MIN-XH2 rather than assuming MIN-XH or another model is identical. Check the APX battery and controller match, all required equipment and the written Australian warranty before relying on a later storage addition.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Growatt Australia MIN 2500-6000TL-XH2",
-        "url": "https://au.growatt.com/products/min-2500-6000tl-xh2",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
+    "pros": [
+      "Handles three separately facing groups of solar panels.",
+      "Can run supported batteries and keep selected circuits powered during outages."
     ],
-    "brand": "Growatt",
-    "image": {
-      "src": "/products/inverters/growatt-min-xh2.webp",
-      "alt": "Growatt MIN-XH2. Product range shown.",
-      "sourceUrl": "https://au.growatt.com/upload/image/XH2s.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Provides a route to storage using the specified APX battery system.",
-        "con": "The battery and required extra equipment must match this exact XH2 version."
-      },
-      {
-        "criterion": "blackout",
-        "pro": null,
-        "con": "The manufacturer says backup is not included; battery-ready does not mean blackout power."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "solis-s6-gr1p",
-    "name": "Solis S6-GR1P",
-    "group": "Single-phase solar",
-    "fit": "A single-phase roof needing up to three separately managed panel groups, without a direct battery requirement.",
-    "why": "The Australian S6-GR1P(5-10)K03-NV-ND family has three independent solar inputs. This can help the installer use several roof directions within one solar inverter.",
-    "check": "The K03-NV-ND-AU suffix identifies the reviewed family. Other S6 products have different features. This is an ordinary grid-connected solar inverter and provides no blackout power or direct battery storage by itself. Confirm included monitoring equipment and the model's Australian warranty.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Solis S6-GR1P K03-NV-ND Australian datasheet",
-        "url": "https://www.solisinverters.au/uploads/files/202505/Solis_datasheet_S6-GR1P(5-10)K03-NV-ND-AU_AUS_V1,6_202505.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "AUS V1.6, May 2025; checked 10 October 2026"
-      }
-    ],
-    "brand": "Solis",
-    "image": {
-      "src": "/products/inverters/solis-s6-gr1p.webp",
-      "alt": "Solis S6-GR1P. Product range shown.",
-      "sourceUrl": "https://www.solisinverters.au/uploads/files/202505/Solis_datasheet_S6-GR1P(5-10)K03-NV-ND-AU_AUS_V1,6_202505.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": null,
-        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
-      },
-      {
-        "criterion": "blackout",
-        "pro": null,
-        "con": "This unit provides no blackout power; rooftop solar stops when the grid goes down."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages three groups of panels facing different roof directions.",
-        "con": "Other Solis versions differ; more than three separately managed directions need another suitable design."
-      }
+    "cons": [
+      "Needs three phase power at your property.",
+      "Included WiFi and power meter have shorter fault cover than the main inverter."
     ]
   },
   {
     "id": "solis-s6-eh1p-plus",
-    "name": "Solis S6-EH1P PLUS",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home planning solar with a compatible low-voltage battery and scheduled charging.",
-    "why": "The Australian PLUS family supports timed battery charging and discharging. That control can be useful when the electricity plan has different prices at different times.",
-    "check": "Confirm the exact S6-EH1P(3-8)K-L-PLUS-AU model and its supported 40-60 V battery pairing. Backup needs the battery and correct wiring; appliance and starting-power limits still apply. Other Solis S6 hybrids differ. Check the complete equipment list and Australian warranty.",
+    "name": "Solis S6 PLUS 5 kW",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -689,6 +133,12 @@
         "url": "https://www.solisinverters.au/product_detail/S6-EH1P(3-8)K-L-PLUS-AU",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      },
+      {
+        "title": "S6 PLUS AU generation evidence",
+        "url": "https://www.solisinverters.au/news_detail/21",
+        "kind": "manufacturer_announcement",
+        "revision": "Australian maker launch dated February 2025. Uses the PLUS generation, not earlier S6 variants."
       }
     ],
     "brand": "Solis",
@@ -697,159 +147,845 @@
       "alt": "Solis S6-EH1P PLUS. Product range shown.",
       "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
     },
-    "comparisons": [
+    "freshness": {
+      "generation": "S6 PLUS AU",
+      "released": "2025-02-17",
+      "sourceUrl": "https://www.solisinverters.au/news_detail/21",
+      "note": "Australian maker launch dated February 2025. Uses the PLUS generation, not earlier S6 variants."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 94.7,
+        "unit": "weighted-efficiency-percent",
+        "variant": "S6-EH1P5K-L-PLUS-AU",
+        "basisId": "inverter-european-weighted",
+        "basis": "Manufacturer European-weighted solar-to-grid conversion efficiency for the exact selected model. Not peak efficiency, CEC weighting, battery round-trip efficiency or annual home yield.",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
       {
-        "criterion": "battery",
-        "pro": "Connects solar and a compatible battery, with scheduled charging and discharging.",
-        "con": "The exact battery must be supported; other PLUS and S6 versions can differ."
+        "label": "Exact inverter",
+        "value": "S6-EH1P5K-L-PLUS-AU",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
       },
       {
-        "criterion": "blackout",
-        "pro": "A compatible battery and correctly wired installation can supply selected circuits.",
-        "con": "Appliance starting-power limits apply; a battery and backup wiring must be included."
+        "label": "Rated household output",
+        "value": "5 kW, single-phase",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
       },
       {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
+        "label": "Different roof directions",
+        "value": "2 independently managed panel groups; panel matching and shade still need design",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
+      },
+      {
+        "label": "European-weighted conversion",
+        "value": "94.7% solar-to-grid conversion under the maker test conditions",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
+      },
+      {
+        "label": "Compatible batteries",
+        "value": "Supported40to60 V batteries only; exact maker compatibility list applies",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
+      },
+      {
+        "label": "Backup switchover",
+        "value": "Under10 milliseconds stated; requires battery and designed backup circuits",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
+      },
+      {
+        "label": "Included fault cover",
+        "value": "Exact current AU whole-package term not confirmed; warranty bar unscored",
+        "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
+      }
+    ],
+    "pros": [
+      "Can store solar energy in a compatible battery and supply backup circuits.",
+      "A short burst of extra backup power helps start demanding appliances."
+    ],
+    "cons": [
+      "Its 5 kW continuous backup limit restricts several large appliances running together."
+    ]
+  },
+  {
+    "id": "goodwe-dns-g4",
+    "name": "GoodWe DNS G4 5 kW",
+    "brand": "GoodWe",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "GoodWe DNS G4 5 kW technical specifications",
+        "url": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU 2.0, 4 August 2025"
+      },
+      {
+        "title": "DNS fourth generation generation evidence",
+        "url": "https://en.goodwe.com/goodwe-unveils-whisper-quiet-next-gen-inverters-for-homes-lighter-safer-and-more-flexible-solar",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker unveiled DNS G4 globally in August 2025. Current Australian sheet confirms GW5K-DNS-G40; exact AU first arrival is unverified."
+      },
+      {
+        "title": "GoodWe AU/NZ included fault warranty",
+        "url": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176",
+        "kind": "manufacturer_specification",
+        "revision": "Rev5.9, 17 September 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/inverters/goodwe-dns-g4.webp",
+      "alt": "GoodWe DNS G4 5 kW. Product range shown.",
+      "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+    },
+    "freshness": {
+      "generation": "DNS fourth generation",
+      "released": "2025-08-08",
+      "sourceUrl": "https://en.goodwe.com/goodwe-unveils-whisper-quiet-next-gen-inverters-for-homes-lighter-safer-and-more-flexible-solar",
+      "note": "Maker unveiled DNS G4 globally in August 2025. Current Australian sheet confirms GW5K-DNS-G40; exact AU first arrival is unverified."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 97.4,
+        "unit": "weighted-efficiency-percent",
+        "variant": "GW5K-DNS-G40",
+        "basisId": "inverter-european-weighted",
+        "basis": "Manufacturer European-weighted solar-to-grid conversion efficiency for the exact selected model. Not peak efficiency, CEC weighting, battery round-trip efficiency or annual home yield.",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact inverter",
+        "value": "GW5K-DNS-G40",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+      },
+      {
+        "label": "Rated household output",
+        "value": "5 kW, single-phase",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+      },
+      {
+        "label": "Different roof directions",
+        "value": "2 independently managed panel groups; panel matching and shade still need design",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+      },
+      {
+        "label": "European-weighted conversion",
+        "value": "97.4% solar-to-grid conversion under the maker test conditions",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+      },
+      {
+        "label": "Main inverter fault cover",
+        "value": "5 years; conditional10 year promotion is excluded from the bar",
+        "sourceUrl": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176"
+      },
+      {
+        "label": "Accessory fault cover",
+        "value": "WiFi, LAN and Smart Meter 2 years; exact included accessory package unverified, so all-parts warranty unscored",
+        "sourceUrl": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176"
+      },
+      {
+        "label": "Weight",
+        "value": "9.2 kg",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+      },
+      {
+        "label": "Battery and blackout",
+        "value": "No direct battery connection or blackout supply; a separate battery system is needed",
+        "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
+      }
+    ],
+    "pros": [
+      "Designed for quiet operation near living areas.",
+      "Handles panels on two different roof directions."
+    ],
+    "cons": [
+      "Cannot connect a battery directly or supply power during blackouts."
+    ]
+  },
+  {
+    "id": "foxess-h3-smart",
+    "name": "Fox ESS H3 Smart 9.9 kW",
+    "brand": "Fox ESS",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Fox ESS H3 Smart 9.9 kW technical specifications",
+        "url": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU V1.2, 2 July 2025"
+      },
+      {
+        "title": "H3 Smart generation evidence",
+        "url": "https://fox-ess.tech/new-product-release-h3-smart/",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker announced H3 Smart in June 2025. Current AU sheet verifies the selected9.9 kW model."
+      }
+    ],
+    "image": {
+      "src": "/products/inverters/foxess-h3-smart.webp",
+      "alt": "Fox ESS H3 Smart 9.9 kW. Product range shown.",
+      "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+    },
+    "freshness": {
+      "generation": "H3 Smart",
+      "released": "2025-06-30",
+      "sourceUrl": "https://fox-ess.tech/new-product-release-h3-smart/",
+      "note": "Maker announced H3 Smart in June 2025. Current AU sheet verifies the selected9.9 kW model."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 97.2,
+        "unit": "weighted-efficiency-percent",
+        "variant": "H3-9.9-Smart",
+        "basisId": "inverter-european-weighted",
+        "basis": "Manufacturer European-weighted solar-to-grid conversion efficiency for the exact selected model. Not peak efficiency, CEC weighting, battery round-trip efficiency or annual home yield.",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact inverter",
+        "value": "H3-9.9-Smart",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "Rated household output",
+        "value": "9.9 kW, three-phase",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "Different roof directions",
+        "value": "3 independently managed panel groups; panel matching and shade still need design",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "European-weighted conversion",
+        "value": "97.2% solar-to-grid conversion under the maker test conditions",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "Backup switchover",
+        "value": "Under20 milliseconds stated; requires battery and designed backup circuits",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "Main-unit warranty headline",
+        "value": "10 years on AU sheet; full included accessory fault terms unverified, so parts bar unscored",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "Weight",
+        "value": "34 kg",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      },
+      {
+        "label": "Hot-weather operation",
+        "value": "Output reduces above 45°C ambient temperature",
+        "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
+      }
+    ],
+    "pros": [
+      "Handles three different roof directions and a compatible battery.",
+      "Lets you monitor solar and battery activity from your phone."
+    ],
+    "cons": [
+      "Needs three phase power at your property.",
+      "Output reduces when surrounding air gets hotter than 45°C."
+    ]
+  },
+  {
+    "id": "fronius-symo-gen24-plus-sc",
+    "name": "Fronius Symo GEN24 Plus SC 12 kW",
+    "brand": "Fronius",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Fronius Symo GEN24 Plus SC 12 kW technical specifications",
+        "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc",
+        "kind": "manufacturer_specification",
+        "revision": "Current Australian exact-model technical page"
+      },
+      {
+        "title": "Symo GEN24 Plus SC generation evidence",
+        "url": "https://www.fronius.com/en-gb/uk/solar-energy/installers-partners/infocentre/blog/new-gen24-sc-inverter",
+        "kind": "manufacturer_announcement",
+        "revision": "The SC hardware refresh has a current exact Australian model and2025 AU sheet. UK announcement isAugust 2026; first global/Australian release is not confirmed."
+      }
+    ],
+    "image": {
+      "src": "/products/inverters/fronius-symo-gen24-plus-sc.webp",
+      "alt": "Fronius Symo GEN24 Plus SC 12 kW. Exact 12kWmodel shown.",
+      "sourceUrl": "https://www.solarheroes.com.au/fronius-symo-gen24-12-0-plus-sc/"
+    },
+    "freshness": {
+      "generation": "Symo GEN24 Plus SC",
+      "released": null,
+      "sourceUrl": "https://www.fronius.com/en-gb/uk/solar-energy/installers-partners/infocentre/blog/new-gen24-sc-inverter",
+      "note": "The SC hardware refresh has a current exact Australian model and2025 AU sheet. UK announcement isAugust 2026; first global/Australian release is not confirmed."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 97.9,
+        "unit": "weighted-efficiency-percent",
+        "variant": "Symo GEN24 12.0 Plus SC",
+        "basisId": "inverter-european-weighted",
+        "basis": "Manufacturer European-weighted solar-to-grid conversion efficiency for the exact selected model. Not peak efficiency, CEC weighting, battery round-trip efficiency or annual home yield. At nominal 610 V DC input; the maker gives other results at other voltages.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact inverter",
+        "value": "Symo GEN24 12.0 Plus SC",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      },
+      {
+        "label": "Rated household output",
+        "value": "12 kW, three-phase",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      },
+      {
+        "label": "Different roof directions",
+        "value": "2 independently managed panel groups; panel matching and shade still need design",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      },
+      {
+        "label": "European-weighted conversion",
+        "value": "97.9% solar-to-grid conversion under the maker test conditions",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      },
+      {
+        "label": "Basic blackout outlet",
+        "value": "PV Point up to 3 kW from available power; maximum15 second switchover",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      },
+      {
+        "label": "Wider backup",
+        "value": "Supported battery and separate switching device required; up to10 second switchover",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      },
+      {
+        "label": "Included fault cover",
+        "value": "Exact current included local parts term unconfirmed; conditional registration offers are excluded",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/technical-data/all-products/inverters/fronius-symo-gen24-plus/fronius-symo-gen24-12-0-plus-sc"
+      }
+    ],
+    "pros": [
+      "A dedicated outlet can use daylight solar during blackouts, even without a battery.",
+      "Can add supported batteries for wider home backup."
+    ],
+    "cons": [
+      "The basic blackout outlet is limited to 3 kW and does not power the whole house.",
+      "Wider backup needs a battery and extra switching equipment."
+    ]
+  },
+  {
+    "id": "fronius-verto-plus",
+    "name": "Fronius Verto Plus 15 kW",
+    "brand": "Fronius",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Fronius Verto Plus 15 kW technical specifications",
+        "url": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Manufacturer-issued EN_V06, December 2025"
+      },
+      {
+        "title": "Verto Plus generation evidence",
+        "url": "https://www.fronius.com/de-at/austria/solarenergie/ueber-uns/presse/fronius-webuild-10032025",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker premiered Verto Plus in March 2025. Current AU product page confirms the range; first AU arrival is unverified.15 kW fits large homes, sheds or business loads."
+      }
+    ],
+    "image": {
+      "src": "/products/inverters/fronius-verto-plus.webp",
+      "alt": "Fronius Verto Plus 15 kW. Product range shown.",
+      "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+    },
+    "freshness": {
+      "generation": "Verto Plus",
+      "released": "2025-03-07",
+      "sourceUrl": "https://www.fronius.com/de-at/austria/solarenergie/ueber-uns/presse/fronius-webuild-10032025",
+      "note": "Maker premiered Verto Plus in March 2025. Current AU product page confirms the range; first AU arrival is unverified.15 kW fits large homes, sheds or business loads."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 97.35,
+        "unit": "weighted-efficiency-percent",
+        "variant": "Verto 15.0 Plus",
+        "basisId": "inverter-european-weighted",
+        "basis": "Manufacturer European-weighted solar-to-grid conversion efficiency for the exact selected model. Not peak efficiency, CEC weighting, battery round-trip efficiency or annual home yield.",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact inverter",
+        "value": "Verto 15.0 Plus",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "Rated household output",
+        "value": "15 kW, three-phase",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "Different roof directions",
+        "value": "3 independently managed panel groups; panel matching and shade still need design",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "European-weighted conversion",
+        "value": "97.35% solar-to-grid conversion under the maker test conditions",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "Property fit",
+        "value": "15 kW three-phase output; large homes, sheds, businesses or apartment applications",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "Weight",
+        "value": "43 kg",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "Backup equipment",
+        "value": "Supported battery plus separate grid-switching components required; about11 second switchover",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      },
+      {
+        "label": "Included fault cover",
+        "value": "Exact current included local parts term unconfirmed; warranty bar unscored",
+        "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
+      }
+    ],
+    "pros": [
+      "Sized for large homes, sheds and business power needs.",
+      "Handles three different roof directions.",
+      "Can back up large appliances with a compatible battery system."
+    ],
+    "cons": [
+      "Large, heavy unit is better suited to substantial properties than small homes.",
+      "Backup needs a battery and separate switching equipment, increasing the system scope."
+    ]
+  },
+  {
+    "id": "sungrow-sh15t-au-15",
+    "name": "Sungrow SH15T 15 kW",
+    "brand": "Sungrow",
+    "checkedAt": "2026-10-10",
+    "image": {
+      "src": "/products/inverters/sungrow-sh15t-au-15.webp",
+      "alt": "Product range shown: Sungrow SH T inverter cabinet used by the SH15T, SH20T and SH25T range.",
+      "sourceUrl": "https://info-support.sungrowpower.com/application/pdf/2024/03/29/DS_20240328_SH15_20_25T_Datasheet_V3_EN(AU).pdf"
+    },
+    "pros": [
+      "Handles three roof directions in one unit.",
+      "Can supply three phase backup power with a compatible battery."
+    ],
+    "cons": [
+      "Needs a three phase electricity supply.",
+      "Direct battery connections are limited to compatible Sungrow batteries.",
+      "Included monitoring and meter accessories have shorter fault cover than the inverter."
+    ],
+    "measurements": {
+      "cost": {
+        "value": 352.6666666666667,
+        "unit": "aud-per-kw",
+        "basisId": "inverter-unit-gst",
+        "variant": "Australian SH15T 15 kW inverter",
+        "basis": "Exact SH15T retailer unit price A$5,290 including GST, divided by 15 kW rated AC output. No battery or installation included; delivery is separate. Retailer descriptive copy contains older SH RT text, so only its exact SKU and price are used.",
+        "sourceUrl": "https://www.powerproductsdirect.com.au/shop/sh15t-sungrow-hybrid-15kw-three-phase-solar-inverter-17770",
+        "checkedAt": "2026-10-10"
+      },
+      "efficiency": {
+        "value": 97.6,
+        "unit": "weighted-efficiency-percent",
+        "basisId": "inverter-european-weighted",
+        "variant": "Australian SH15T 15 kW",
+        "basis": "European weighted inverter efficiency from the exact SH15T column in the current maker user manual V18, December 2025, page 129. It agrees with the older AU V3 datasheet. Not peak efficiency or battery round trip efficiency.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "SH15T with standard included WiNet-S2 and smart meter",
+        "basis": "Minimum standard hardware fault term across the supplied equipment: inverter 10 years, communication module and smart meter accessories 1 year. The maker manual includes WiNet-S2 and the smart meter in the standard delivery.",
+        "sourceUrl": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Selected unit",
+        "value": "SH15T, 15 kW rated AC output, three phase 230/400 V supply.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Solar capacity",
+        "value": "Up to 30 kW solar input; three independently tracked roof groups.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Battery pairing",
+        "value": "Compatible Sungrow batteries are required for direct connection; battery is sold separately.",
+        "sourceUrl": "https://info-support.sungrowpower.com/application/pdf/2024/03/29/DS_20240328_SH15_20_25T_Datasheet_V3_EN(AU).pdf"
+      },
+      {
+        "label": "Backup power",
+        "value": "15 kW nominal three phase backup and up to 25.5 kVA for 10 seconds, subject to battery, solar and load conditions.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Outage changeover",
+        "value": "The current maker manual specifies less than 10 milliseconds with a suitable battery and backup connection.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Size and weight",
+        "value": "620 mm wide, 480 mm high, 245 mm deep; 38 kg.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Noise and protection",
+        "value": "Natural convection cooling; 35 dB(A) stated noise, IP65 protection.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Included equipment",
+        "value": "Standard delivery includes WiNet-S2, smart meter, current sensors and connection accessories; AU delivery also includes a manual changeover switch.",
+        "sourceUrl": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf"
+      },
+      {
+        "label": "Parts warranty",
+        "value": "Main inverter 10 years; included communications and meter accessories 1 year. The bar uses the shorter included-parts term.",
+        "sourceUrl": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "SH T, Australian SH15T generation",
+      "released": "2024-05-05",
+      "sourceUrl": "https://www.sungrowpower.com/us/en/newsdetail/sungrow-launches-new-residential-and-commercial-hybrid-inverters-and-battery-solutions-in-australia",
+      "note": "Sungrow launched the SH15T, SH20T and SH25T in Australia on 5 May 2024. The selected unit is SH15T, not the earlier SH RT range."
+    },
+    "sources": [
+      {
+        "title": "SH15T Australian datasheet",
+        "url": "https://info-support.sungrowpower.com/application/pdf/2024/03/29/DS_20240328_SH15_20_25T_Datasheet_V3_EN(AU).pdf",
+        "kind": "manufacturer",
+        "revision": "AU V3, 28 March 2024"
+      },
+      {
+        "title": "Sungrow Australian launch",
+        "url": "https://www.sungrowpower.com/us/en/newsdetail/sungrow-launches-new-residential-and-commercial-hybrid-inverters-and-battery-solutions-in-australia",
+        "kind": "manufacturer",
+        "revision": "5 May 2024"
+      },
+      {
+        "title": "Sungrow SH T user manual",
+        "url": "https://info-support.sungrowpower.com/product-materials/4b5bcbec-60ba-4253-ac75-f49aa9208878.pdf",
+        "kind": "manufacturer",
+        "revision": "Version 18, December 2025; delivery list pages 30 and 31"
+      },
+      {
+        "title": "Sungrow AU inverter warranty",
+        "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
+        "kind": "manufacturer",
+        "revision": "V4.32, October 2025"
+      },
+      {
+        "title": "Exact SH15T Australian equipment price",
+        "url": "https://www.powerproductsdirect.com.au/shop/sh15t-sungrow-hybrid-15kw-three-phase-solar-inverter-17770",
+        "kind": "australian_retailer_price",
+        "revision": "GST inclusive unit price checked 10 October 2026"
       }
     ]
   },
   {
-    "id": "foxess-ac1-g2",
-    "name": "FoxESS AC1 G2",
-    "group": "Storage for existing solar",
-    "fit": "A home considering a matched battery while retaining a working existing solar inverter.",
-    "why": "AC1 G2 is a battery inverter that connects on the household electricity side. It can add supported storage without using a new solar-panel input; FoxESS H1 G2 is the separate hybrid option.",
-    "check": "Confirm the AC1-E-G2 model, matched high-voltage battery and backup circuit design. Keeping existing solar does not automatically mean it can run during a blackout. The published Australian warranty includes inspection conditions from year six; confirm the cover term and service costs in writing.",
+    "id": "enphase-iq8x-au-038",
+    "name": "Enphase IQ8X 0.38 kW per panel",
+    "brand": "Enphase",
     "checkedAt": "2026-10-10",
-    "sources": [
+    "image": {
+      "src": "/products/inverters/enphase-iq8x-au-038.webp",
+      "alt": "Enphase IQ8X microinverter; genuine product image from the maker authored Australian and New Zealand datasheet.",
+      "sourceUrl": "https://www.solarproof.com.au/datasheets/inverter_datasheet_IQ8X-MC4-DSH-00240-2.0-EN-ANZ-2024-02-27.pdf"
+    },
+    "pros": [
+      "Each panel works independently, helping with mixed roof directions and uneven shade.",
+      "Individual panel monitoring can show which panel needs attention."
+    ],
+    "cons": [
+      "Each panel needs its own unit, plus shared connection equipment.",
+      "Blackout power needs an Enphase battery and extra backup equipment."
+    ],
+    "measurements": {
+      "cost": {
+        "value": 646.0526315789474,
+        "unit": "aud-per-kw",
+        "basisId": "inverter-unit-gst",
+        "variant": "One IQ8X-80-M-INT, 380 W rated AC output",
+        "basis": "Exact microinverter unit price A$245.50, divided by 0.38 kW rated AC power. Retailer terms state AUD prices include applicable GST. Gateway, relays, cabling, installation and delivery are separate; this is not a whole-array package price.",
+        "sourceUrl": "https://www.solarbatteriesonline.com.au/product/enphase-iq8x-microinverter/",
+        "checkedAt": "2026-10-10"
+      },
+      "efficiency": {
+        "value": 96.7,
+        "unit": "weighted-efficiency-percent",
+        "basisId": "inverter-european-weighted",
+        "variant": "IQ8X-80-M-INT",
+        "basis": "European weighted efficiency for the exact IQ8X from the Australian datasheet. Not its peak efficiency or a battery measurement.",
+        "sourceUrl": "https://enphase.com/media/16054",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "Standalone AU IQ8X-80-M-INT microinverter",
+        "basis": "AU hardware workmanship and materials cover for the exact IQ8X SKU is 25 years from activation. Registration and continuous internet connection through an IQ Gateway are required. Separately bought Gateway and relays have their own shorter terms; labour is excluded.",
+        "sourceUrl": "https://acsolarwarehouse.com/web/content/515612",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
       {
-        "title": "FoxESS H1 G2 and AC1 G2 Australian datasheet",
-        "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260828/ENH1G2DatasheetAUV1.520260820.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "AU V1.5, 20 August 2026; checked 10 October 2026"
+        "label": "Selected unit",
+        "value": "IQ8X-80-M-INT, one microinverter for one panel; 230 V, single phase AC connection.",
+        "sourceUrl": "https://enphase.com/media/16054"
       },
       {
-        "title": "FoxESS Australian inverter warranty",
-        "url": "https://www.fox-ess.com/Public/Uploads/uploadfile/files/Download/INVERTER-WARRANTY-AU-20251024.pdf",
-        "kind": "manufacturer_warranty",
-        "revision": "Printed version 3.4, 1 October 2024; checked 10 October 2026; warranty-duration wording needs confirmation"
+        "label": "Output power",
+        "value": "380 W rated continuous AC output; 384 W maximum AC output.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "Panel pairing",
+        "value": "Designed for higher-voltage panel types, including typical 80 or 88 half-cell and 96-cell panels; voltage and current limits must match.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "European weighted efficiency",
+        "value": "96.7% for the exact IQ8X unit.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "Size and weight",
+        "value": "212 mm high, 175 mm wide, 30.2 mm deep, excluding bracket; 1.1 kg.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "Protection and temperature",
+        "value": "IP67; ambient operating range -40°C to 65°C.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "Shared equipment",
+        "value": "Requires the compatible IQ Gateway and system connection equipment, bought separately. One unit alone is not a complete solar system.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "Blackout coverage",
+        "value": "An AU backup installation also needs a compatible Enphase battery and IQ System Controller. The microinverter alone does not provide household backup.",
+        "sourceUrl": "https://enphase.com/media/16054"
+      },
+      {
+        "label": "Parts warranty",
+        "value": "IQ8X unit 25 years with registration and an internet-connected Gateway; external Gateway and IQ Relay 5 years. Removal and installation labour excluded.",
+        "sourceUrl": "https://acsolarwarehouse.com/web/content/515612"
+      },
+      {
+        "label": "Price scope",
+        "value": "Retailer unit price includes applicable GST under its terms of sale. Shared equipment, delivery and installation are additional.",
+        "sourceUrl": "https://www.solarbatteriesonline.com.au/terms-of-sale/"
       }
     ],
-    "brand": "FoxESS",
-    "image": {
-      "src": "/products/inverters/foxess-ac1-g2.webp",
-      "alt": "FoxESS AC1 G2. Product range shown.",
-      "sourceUrl": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260828/ENH1G2DatasheetAUV1.520260820.pdf"
+    "freshness": {
+      "generation": "IQ8X, Australian high-voltage panel microinverter",
+      "released": "2024-10-03",
+      "sourceUrl": "https://newsroom.enphase.com/news-releases/news-release-details/enphase-energy-launches-iq8x-microinverters-and-extends-warranty",
+      "note": "Enphase announced the IQ8X Australian launch on 3 October 2024. This exact IQ8X unit is distinct from the earlier Australian IQ8AC and IQ8HC models."
     },
-    "comparisons": [
+    "sources": [
       {
-        "criterion": "battery",
-        "pro": "Adds supported battery storage while keeping a working existing solar inverter.",
-        "con": "Needs a matched battery; this unit does not replace the inverter connected to your panels."
+        "title": "IQ8X current Australian datasheet",
+        "url": "https://enphase.com/media/16054",
+        "kind": "manufacturer",
+        "revision": "DSH-00240 V8, 1 August 2025"
       },
       {
-        "criterion": "blackout",
-        "pro": "A correctly installed battery can supply selected household circuits.",
-        "con": "Existing solar may stop during a blackout; included circuits and appliance limits still matter."
+        "title": "IQ8X maker authored ANZ datasheet and product photo",
+        "url": "https://www.solarproof.com.au/datasheets/inverter_datasheet_IQ8X-MC4-DSH-00240-2.0-EN-ANZ-2024-02-27.pdf",
+        "kind": "manufacturer_datasheet_reseller_hosted",
+        "revision": "PDF body DSH-00240 V4, 11 September 2024; URL filename retains an older revision"
       },
       {
-        "criterion": "roof-layout",
-        "pro": "Keeps the existing solar roof layout when adding battery storage.",
-        "con": "Your existing solar inverter still determines which roof directions the panels can use."
+        "title": "IQ8X Australian launch",
+        "url": "https://newsroom.enphase.com/news-releases/news-release-details/enphase-energy-launches-iq8x-microinverters-and-extends-warranty",
+        "kind": "manufacturer",
+        "revision": "3 October 2024"
+      },
+      {
+        "title": "Enphase AU IQ8 hardware warranty",
+        "url": "https://enphase.com/en-au/download/enphase-iq8-microinverter-limited-warranty-aus-effective-1-october-2024",
+        "kind": "manufacturer",
+        "revision": "Effective 1 October 2024; exact IQ8X SKU explicitly covered"
+      },
+      {
+        "title": "Enphase current AU and NZ hardware warranty",
+        "url": "https://acsolarwarehouse.com/web/content/515612",
+        "kind": "manufacturer_warranty_distributor_hosted",
+        "revision": "LGL-00031 V4, effective 30 September 2025; exact IQ8X SKU explicitly covered"
+      },
+      {
+        "title": "Exact IQ8X Australian equipment price",
+        "url": "https://www.solarbatteriesonline.com.au/product/enphase-iq8x-microinverter/",
+        "kind": "australian_retailer_price",
+        "revision": "Unit price checked 10 October 2026; retailer older technical copy not used"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.solarbatteriesonline.com.au/terms-of-sale/",
+        "kind": "australian_retailer_terms",
+        "revision": "Current terms checked 10 October 2026"
       }
     ]
   },
   {
-    "id": "solax-x1-hybrid-g4",
-    "name": "SolaX X1 Hybrid G4",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home designing solar and matched storage, with control over when the battery charges.",
-    "why": "The G4 supports scheduled battery operation and compatible household load controls. Its two solar inputs can manage separately facing panel groups.",
-    "check": "Confirm the Australian X1 Hybrid G4 variant, compatible battery and any Matebox or other switching equipment required for the proposed backup design. The datasheet's backup output requires a battery; simultaneous and starting loads remain limited. Check generation-specific Australian warranty terms.",
+    "id": "sma-sbse50-50-au",
+    "name": "SMA Sunny Boy Smart Energy 5 kW",
+    "brand": "SMA",
     "checkedAt": "2026-10-10",
-    "sources": [
+    "image": {
+      "src": "/products/inverters/sma-sbse50-50-au.webp",
+      "alt": "Product range shown: current SMA Sunny Boy Smart Energy cabinet used by the Australian SBSE5.0-50.",
+      "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_tf78puhkml0rb7g728i78ppd72/SMA_SBSE%20Brochure-en-au-10.pdf?content-disposition=inline"
+    },
+    "pros": [
+      "Can start with solar panels and add a compatible battery later.",
+      "Handles three roof directions with one quiet, fanless unit."
+    ],
+    "cons": [
+      "Standard outage power is one manually switched outlet, not automatic whole-home backup.",
+      "The standard fault warranty is shorter than its advertised registered warranty."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "Australian SBSE5.0-50 inverter",
+        "basis": "Five year included manufacturer hardware warranty for the inverter. An extra five years needs registration within 30 days and is not included in the numeric term. Paid extensions are also excluded.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
       {
-        "title": "SolaX X1 Hybrid G4 Australian datasheet",
-        "url": "https://au.solaxpower.com/uploads/file/solax-x1-hybrid-g4-datasheet-en-au.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "V3.0, 26 August 2025; checked 10 October 2026"
+        "label": "Selected unit",
+        "value": "Australian SBSE5.0-50, 5 kW rated AC output. Single phase 230 V.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
       },
       {
-        "title": "SolaX Australia X1 Hybrid G4",
-        "url": "https://au.solaxpower.com/products/x1-hybrid-g4.html",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
+        "label": "Solar capacity",
+        "value": "Up to 10 kW maximum solar array power; three separately tracked roof groups.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
+      },
+      {
+        "label": "Battery connection",
+        "value": "Supports approved high-voltage batteries. Battery is separate and the exact battery compatibility list applies.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
+      },
+      {
+        "label": "Standard outage power",
+        "value": "Secure Power Supply can feed a dedicated outlet up to 3.68 kW after manual activation. Solar or stored battery energy must be available.",
+        "sourceUrl": "https://www.sma-australia.com.au/products/hybrid-inverters/sunny-boy-smart-energy"
+      },
+      {
+        "label": "Whole-home backup",
+        "value": "Optional backup arrangements need extra equipment. This selected inverter alone does not provide automatic whole-home backup.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
+      },
+      {
+        "label": "Size and weight",
+        "value": "500 mm wide, 586 mm high, 236 mm deep; 17.5 kg.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
+      },
+      {
+        "label": "Noise and protection",
+        "value": "Fanless natural convection cooling; maximum stated noise 35 dB(A), IP65 protection.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
+      },
+      {
+        "label": "Parts warranty",
+        "value": "Five years standard. Free extension to 10 years requires registration within 30 days; extensions are not used by the bar.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
+      },
+      {
+        "label": "Efficiency scope",
+        "value": "The AU sheet lists peak efficiency but no comparable European weighted figure. Efficiency is therefore not scored.",
+        "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline"
       }
     ],
-    "brand": "SolaX",
-    "image": {
-      "src": "/products/inverters/solax-x1-hybrid-g4.webp",
-      "alt": "SolaX X1 Hybrid G4. Product range shown.",
-      "sourceUrl": "https://au.solaxpower.com/uploads/file/solax-x1-hybrid-g4-datasheet-en-au.pdf"
+    "freshness": {
+      "generation": "Current AU SBSE5.0-50 Sunny Boy Smart Energy",
+      "released": null,
+      "sourceUrl": "https://www.sma-australia.com.au/products/hybrid-inverters/sunny-boy-smart-energy",
+      "note": "This generation was announced globally in June 2023 with Australian entry planned for 2024. An October 2024 SMA article still described it as forthcoming. The current AU page supports SBSE5.0-50, but its actual first Australian sale date is not confirmed."
     },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Connects solar and a compatible battery, with scheduled charging and discharging.",
-        "con": "Battery and any extra equipment must match the Australian G4 version."
-      },
-      {
-        "criterion": "blackout",
-        "pro": "A compatible battery and correctly installed system can supply selected circuits.",
-        "con": "Additional switching equipment may be needed; appliance and starting-power limits still apply."
-      },
-      {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
-      }
-    ]
-  },
-  {
-    "id": "saj-h2",
-    "name": "SAJ H2",
-    "group": "Single-phase solar and battery",
-    "fit": "A single-phase home considering the H2-S2 solar and matched storage configuration.",
-    "why": "The Australian H2-S2 has two independent solar inputs and working modes for managing a supported high-voltage battery alongside household solar.",
-    "check": "The reviewed datasheet covers H2-(3-6K)-S2. H2-S3 and three-phase H2-T variants have different specifications. Confirm the exact model, supported battery and backup circuits with their power limits. The datasheet refers to a separate warranty policy, so get the applicable Australian cover in writing.",
-    "checkedAt": "2026-10-10",
     "sources": [
       {
-        "title": "SAJ H2-S2 Australian datasheet",
-        "url": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Datasheet/AU%20H2/H2-(3-6K)_S2_(210x285mm)_en_AU.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "Australian download centre lists 13 March 2026; checked 10 October 2026"
+        "title": "Current Sunny Boy Smart Energy Australian product page",
+        "url": "https://www.sma-australia.com.au/products/hybrid-inverters/sunny-boy-smart-energy",
+        "kind": "manufacturer",
+        "revision": "Current Australian page checked 10 October 2026"
       },
       {
-        "title": "SAJ Australia H2 family",
-        "url": "https://au.saj-electric.com/en-au/h2-series",
-        "kind": "manufacturer_specification",
-        "revision": "Undated Australian product page checked 10 October 2026"
-      }
-    ],
-    "brand": "SAJ",
-    "image": {
-      "src": "/products/inverters/saj-h2.webp",
-      "alt": "SAJ H2. Product range shown.",
-      "sourceUrl": "https://static.wixstatic.com/media/f28763_f42088a6192c43b2ae818331033cce3a~mv2.jpg/v1/fit/w_1625,h_2250,q_90/file.jpg/v1/fit/w_500,h_500,q_90/file.jpg"
-    },
-    "comparisons": [
-      {
-        "criterion": "battery",
-        "pro": "Connects solar and a compatible battery through the same unit.",
-        "con": "The supported battery must match the H2-S2 version; other H2 versions differ."
+        "title": "Sunny Boy Smart Energy Australian datasheet",
+        "url": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_3hcvj8qmml7bj0lhhtdpfipb5k/SBSE36-60-DS-AU-14.pdf?content-disposition=inline",
+        "kind": "manufacturer",
+        "revision": "AU revision 14, July 2025"
       },
       {
-        "criterion": "blackout",
-        "pro": "A compatible battery and correctly installed system can supply selected circuits.",
-        "con": "Backup circuits and appliance limits need confirmation; a battery connection alone does not provide backup."
+        "title": "Sunny Boy Smart Energy Australian product brochure",
+        "url": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_tf78puhkml0rb7g728i78ppd72/SMA_SBSE%20Brochure-en-au-10.pdf?content-disposition=inline",
+        "kind": "manufacturer",
+        "revision": "AU brochure revision 10; genuine current cabinet photo"
       },
       {
-        "criterion": "roof-layout",
-        "pro": "Separately manages two groups of panels facing different roof directions.",
-        "con": "More than two separately managed roof directions need another suitable design."
+        "title": "SMA modern generation announcement",
+        "url": "https://www.sma-australia.com.au/newsroom/news-details/sma-unveils-flexible-pv-storage-combo",
+        "kind": "manufacturer",
+        "revision": "12 June 2023; Australian entry planned for 2024"
+      },
+      {
+        "title": "Later SMA Australian availability statement",
+        "url": "https://www.sma-australia.com.au/newsroom/news-details/sunny-central-storage-4600-up-s-battery-inverter",
+        "kind": "manufacturer",
+        "revision": "23 October 2024; residential product described as forthcoming"
       }
     ]
   }

@@ -1,97 +1,7 @@
 [
   {
-    "id": "rec-alpha-pure-rx",
-    "name": "REC Alpha Pure-RX",
-    "group": "Making the most of roof space",
-    "fit": "You want more output from a limited roof area and a design suited to your inverter.",
-    "why": "Its cell design has a relatively small rated power drop as the panels heat up.",
-    "check": "The installer needs to check electrical compatibility. Ask whether the installer registration required for the proposed REC warranty is included.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "REC Alpha Pure-RX Australian datasheet",
-        "url": "https://www.recgroup.com/sites/default/files/2024-08/Web_DS_Alpha_Pure-RX_EN%20AU.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "Rev 4, 5 August 2024"
-      }
-    ],
-    "brand": "REC",
-    "image": {
-      "src": "/products/solar/rec-alpha-pure-rx.webp",
-      "alt": "REC Alpha Pure-RX. Product range shown.",
-      "sourceUrl": "https://www.recgroup.com/sites/default/files/2024-08/Web_DS_Alpha_Pure-RX_EN%20AU.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 226 watts per square metre of panel.",
-        "con": "Each panel is 1.73 by 1.21 metres; narrow roof sections may limit placement."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.4% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "20-year panel fault cover advertised; eligible installations can receive 25 years.",
-        "con": "Extended cover needs an eligible REC installer and registration; labour cover has conditions."
-      }
-    ]
-  },
-  {
-    "id": "winaico-ncx48-aw",
-    "name": "Winaico NCX48",
-    "group": "Everyday roof comparisons",
-    "fit": "You want a compact panel with glass on both sides.",
-    "why": "Its current Australian sheet combines a compact footprint with 465 to 470 W of rated output.",
-    "check": "Each panel weighs 25 kg. Roof support and fixings matter; light reaching the rear does not create a guaranteed extra saving.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Winaico WST-NCX48-AW Australian datasheet",
-        "url": "https://www.winaico.com.au/wp-content/uploads/2026/08/WINAICO_WST-470NCX48-AW_AUS_0726.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "AUS.0726"
-      },
-      {
-        "title": "Winaico Australian product page",
-        "url": "https://www.winaico.com.au/wst-465ncx48-aw",
-        "kind": "manufacturer_specification",
-        "revision": "Undated page checked 10 October 2026"
-      }
-    ],
-    "brand": "Winaico",
-    "image": {
-      "src": "/products/solar/winaico-ncx48-aw.webp",
-      "alt": "Winaico NCX48. Product range shown.",
-      "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/08/WINAICO_WST-470NCX48-AW_AUS_0726.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 235 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; its 25 kg weight needs suitable roof support."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.8% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "30-year panel fault cover advertised.",
-        "con": "Labour, removal, freight and the applicable Australian claim conditions still need confirmation."
-      }
-    ]
-  },
-  {
     "id": "tindo-walara-g4p",
-    "name": "Tindo Walara G4P",
-    "group": "Australian manufacturing",
-    "fit": "You value Australian-made panels and your roof can fit a longer panel.",
-    "why": "The manufacturer identifies this 475 W model as made in South Australia.",
-    "check": "At 1.91 metres long, it needs a suitable layout. Check the written product and installation cover alongside where it is made.",
+    "name": "Tindo Walara G4P 475 W",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -105,6 +15,12 @@
         "url": "https://tindosolar.com.au/our-product/tindo-panels/",
         "kind": "manufacturer_specification",
         "revision": "Undated page checked 10 October 2026"
+      },
+      {
+        "title": "G4P 475 W generation introduction",
+        "url": "https://tindosolar.com.au/news/tindo-releases-new-generation-high-performance-australian-made-solar-panels/",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker introduced the upgraded Australian-made 475 W G4P in August 2025."
       }
     ],
     "brand": "Tindo",
@@ -113,703 +29,76 @@
       "alt": "Tindo Walara G4P. Product range shown.",
       "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
     },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 219 watts per square metre of panel.",
-        "con": "Each panel is 1.91 metres long, needing more clear roof length than many compact options."
+    "freshness": {
+      "generation": "G4P 475 W generation",
+      "released": "2025-08-18",
+      "sourceUrl": "https://tindosolar.com.au/news/tindo-releases-new-generation-high-performance-australian-made-solar-panels/",
+      "note": "Maker introduced the upgraded Australian-made 475 W G4P in August 2025."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 21.9,
+        "unit": "panel-efficiency-percent",
+        "variant": "Tindo Walara G4P 475 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 3.0% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year panel fault cover advertised, with an Australian manufacturer support contact.",
-        "con": "Panel cover and installer workmanship cover are separate; included labour costs need confirmation."
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "variant": "G4P 475 W generation, 475 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf",
+        "checkedAt": "2026-10-10"
       }
-    ]
-  },
-  {
-    "id": "aiko-neostar-2p54",
-    "name": "AIKO Neostar 2P54",
-    "group": "Making the most of roof space",
-    "fit": "You want a clean-looking panel and more rated output for its area.",
-    "why": "Electrical contacts sit behind the cells, leaving the front clear. Its Australian page documents high output per panel area.",
-    "check": "The exact model, roof shade and inverter design determine the result. A manufacturer's partial-shade claim is not a generation forecast for your home.",
-    "checkedAt": "2026-10-10",
-    "sources": [
+    },
+    "technicalSpecs": [
       {
-        "title": "AIKO Australian Neostar 2P54 mono-glass product page",
-        "url": "https://aikosolar.com/au/products/neostar-2p54-mono-glass/",
-        "kind": "manufacturer_specification",
-        "revision": "Undated current product page"
+        "label": "Measured panel power",
+        "value": "475 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
       },
       {
-        "title": "AIKO Neostar 2P54 datasheet link",
-        "url": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-2P54-Mono-Glass-450-485W.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "July 2025 URL; fetch timed out, specifications above taken from AU page"
+        "label": "Panel size",
+        "value": "1910 × 1133 × 35 mm",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "23.5 kg",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 3% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "21.9% at standard laboratory conditions",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
       }
     ],
-    "brand": "AIKO",
-    "image": {
-      "src": "/products/solar/aiko-neostar-2p54.webp",
-      "alt": "AIKO Neostar 2P54. Product range shown.",
-      "sourceUrl": "https://aikosolar.com/wp-content/uploads/2024/03/Black-2P_Mono-blass_wbbf_MAH54Mw-detail.jpg"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 243 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; shade and installation gaps reduce usable roof space."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year panel fault cover advertised.",
-        "con": "Applicable Australian claim support, labour and removal costs still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "trina-vertex-s-plus-neg9r28",
-    "name": "Trina Vertex S+",
-    "group": "Everyday roof comparisons",
-    "fit": "You want a compact panel for a residential roof layout.",
-    "why": "The Australian range documents glass on both sides and up to 460 W in a standard residential footprint.",
-    "check": "Match the full NEG9R.28 model and power class to the current sheet. Older versions and the full-black model have different specifications.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Trina Australian Vertex S+ NEG9R.28 page",
-        "url": "https://www.trinasolar.com/au/NEG9R.28/",
-        "kind": "manufacturer_specification",
-        "revision": "Undated current product page"
-      },
-      {
-        "title": "Trina NEG9R.28 exact-family rated power, dimensions and heat specification",
-        "url": "https://pages.trinasolar.com/rs/567-KJK-096/images/Datasheet_210R_NEG9R.28_EN_2024C_web.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "TSM_EN_2024_C, checked 10 October 2026; Australian fault-cover applicability unconfirmed"
-      }
+    "pros": [
+      "Manufactured in South Australia, with a local service and warranty team.",
+      "All black finish suits a dark, modern roof."
     ],
-    "brand": "Trina Solar",
-    "image": {
-      "src": "/products/solar/trina-vertex-s-plus-neg9r28.webp",
-      "alt": "Trina Vertex S+. Product range shown.",
-      "sourceUrl": "https://pages.trinasolar.com/rs/567-KJK-096/images/Datasheet_210R_NEG9R.28_EN_2024C_web.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 230 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; roof edges and shade still limit placement."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": null,
-        "con": "The applicable Australian panel-fault cover term and local claim support are not confirmed."
-      }
-    ]
-  },
-  {
-    "id": "jinko-tiger-neo-54hl4r-bdv",
-    "name": "Jinko Tiger Neo 54HL4R-BDV",
-    "group": "Everyday roof comparisons",
-    "fit": "You are comparing a compact panel that can also use light from behind.",
-    "why": "The Australian sheet describes glass on both sides in a 22 kg panel.",
-    "check": "Rear-side gains depend on the roof and mounting. This reviewed sheet is an older locally published version; confirm the exact current quote, since newer Tiger Neo models differ.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Jinko Australian 54HL4R-BDV datasheet",
-        "url": "https://jinkosolar.com.au/wp-content/uploads/2023/01/JKM430-450N-54HL4R-BDV-F1C1.1-EN-for-AU-CEC.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "F1C1.1; copyright 2022"
-      },
-      {
-        "title": "Jinko Australian datasheet index",
-        "url": "https://jinkosolar.com.au/download_categories/datasheets/",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "Jinko Solar",
-    "image": {
-      "src": "/products/solar/jinko-tiger-neo-54hl4r-bdv.webp",
-      "alt": "Jinko Tiger Neo 54HL4R-BDV. Product range shown.",
-      "sourceUrl": "https://jinkosolar.com.au/wp-content/uploads/2023/01/JKM430-450N-54HL4R-BDV-F1C1.1-EN-for-AU-CEC.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 225 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; rear-light gains are not guaranteed on a roof."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year panel fault cover advertised for Australia.",
-        "con": "Current model eligibility, labour costs and the local claim process still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "longi-x10-54hvb",
-    "name": "LONGi Hi-MO X10 premium black",
-    "group": "Making the most of roof space",
-    "fit": "You are considering a dark panel with high rated output for its roof area.",
-    "why": "The exact manufacturer's sheet documents 475 to 495 W with contacts behind the cells.",
-    "check": "The reviewed exact-model sheet is global. Australian supply and the local warranty for LR7-54HVB still need confirmation; other Hi-MO X10 models are different.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "LONGi LR7-54HVB manufacturer datasheet",
-        "url": "https://static.longi.com/LR_7_54_HVB_475_495_M_30_30_and_15_Frame_BGV_02_20250820_EN_1_39b1ccce57.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "BGV02, 20 August 2025"
-      },
-      {
-        "title": "LONGi Australian module range",
-        "url": "https://www.longi.com/au/products/modules/",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "LONGi",
-    "image": {
-      "src": "/products/solar/longi-x10-54hvb.webp",
-      "alt": "LONGi Hi-MO X10 premium black. Product range shown.",
-      "sourceUrl": "https://static.longi.com/LR_7_54_HVB_475_495_M_30_30_and_15_Frame_BGV_02_20250820_EN_1_39b1ccce57.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 243 watts per square metre of panel.",
-        "con": "Each panel is 1.80 by 1.13 metres; space between panels still reduces roof coverage."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": null,
-        "con": "Australian panel-fault cover and local claim support are not confirmed for this exact model."
-      }
-    ]
-  },
-  {
-    "id": "risen-rsm96-bndg",
-    "name": "Risen RSM96 BNDG",
-    "group": "Everyday roof comparisons",
-    "fit": "You want a compact residential panel and an installer who checks its electrical fit.",
-    "why": "Its Australian/New Zealand sheet documents 475 W in a compact footprint.",
-    "check": "It draws more current than some older panels. The installer needs to check inverter inputs and connections; rear-side light gains depend on the installation.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Risen 2026 AU/NZ RSM96-11-475BNDG datasheet",
-        "url": "https://risenenergy.com.au/downloads/datasheets/RSM96-11-475BNDG-datasheet-2026H1-EN.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "H1-1-2026 AU and NZ"
-      },
-      {
-        "title": "Risen Australian product page",
-        "url": "https://risenenergy.com.au/solar/rsm96-11-475bndg/",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "Risen",
-    "image": {
-      "src": "/products/solar/risen-rsm96-bndg.webp",
-      "alt": "Risen RSM96 BNDG. Product range shown.",
-      "sourceUrl": "https://risenenergy.com.au/_astro/front.D4fDdnp3_ZuCKXU.webp"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 238 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; roof layout and shade still limit total generation."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year panel fault cover advertised for Australian and New Zealand roofs.",
-        "con": "Applicable claim conditions and any labour, removal or freight cover still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "astronergy-astro-n7s",
-    "name": "Astronergy ASTRO N7s",
-    "group": "Everyday roof comparisons",
-    "fit": "You want a compact panel and a clear answer about its weight and construction.",
-    "why": "The Australian sheet documents 455 to 475 W and two glass-thickness options.",
-    "check": "The glass option changes panel weight. The quote should identify the supplied version; newer 3.0 and all-black ranges are different.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Astronergy Australian ASTRO N7s datasheet",
-        "url": "https://astronergy.com.au/wp-content/uploads/2025/11/455-475_%C2%B15WASTRO-N7s_CHSM48RNDGF-BH_1762x1134x30_AU_20250916-V2.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "AU 16 September 2025; filename V2/PDF title V1"
-      },
-      {
-        "title": "Astronergy Australian download index",
-        "url": "https://astronergy.com.au/download-product/",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "Astronergy",
-    "image": {
-      "src": "/products/solar/astronergy-astro-n7s.webp",
-      "alt": "Astronergy ASTRO N7s. Product range shown.",
-      "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/455-475_%C2%B15WASTRO-N7s_CHSM48RNDGF-BH_1762x1134x30_AU_20250916-V2.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 238 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; glass choice changes its weight and roof requirements."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "30-year panel fault cover advertised for rooftop installations.",
-        "con": "Labour, removal, freight and local claim support still need confirmation under the applicable policy."
-      }
-    ]
-  },
-  {
-    "id": "dmegc-g12rt-g48hbb",
-    "name": "DMEGC Infinity RT",
-    "group": "Everyday roof comparisons",
-    "fit": "You want dark panels with glass on both sides.",
-    "why": "Its current Australian download sheet documents 455 to 475 W in a compact footprint.",
-    "check": "This exact model generates from the front only. Double glass does not mean double-sided generation; a lighter variant has different specifications.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "DMEGC Australian-index G48HBB datasheet",
-        "url": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "9 December 2025; AU index upload May 2026"
-      },
-      {
-        "title": "DMEGC Australian download index",
-        "url": "https://www.dmegcsolar.com/download/index-cec-australia.html",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "DMEGC",
-    "image": {
-      "src": "/products/solar/dmegc-g12rt-g48hbb.webp",
-      "alt": "DMEGC Infinity RT. Product range shown.",
-      "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 238 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres and generates from the front only."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": null,
-        "con": "Australian panel-fault cover is not confirmed; a 30-year output promise is a different protection."
-      }
-    ]
-  },
-  {
-    "id": "suntech-black-pro-nfb",
-    "name": "Suntech Ultra T Black Pro",
-    "group": "Everyday roof comparisons",
-    "fit": "You want an all-black panel with a clear front-side output comparison.",
-    "why": "The Australian sheet documents up to 465 W with glass on both sides.",
-    "check": "This model generates from the front only. Its weight and electrical current need a suitable roof, fixings and inverter.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Suntech Australian Black Pro monofacial datasheet",
-        "url": "https://www.suntech-power.com/download/au/STP445-465S-H48-Nfb%2B(Black%20Pro%20Monofacial)_AU.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "AU_A0, copyright 2026"
-      },
-      {
-        "title": "Suntech download centre",
-        "url": "https://www.suntech-power.com/downloads/",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "Suntech",
-    "image": {
-      "src": "/products/solar/suntech-black-pro-nfb.webp",
-      "alt": "Suntech Ultra T Black Pro. Product range shown.",
-      "sourceUrl": "https://www.suntech-power.com/download/au/STP445-465S-H48-Nfb%2B(Black%20Pro%20Monofacial)_AU.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 233 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; its 24.8 kg weight needs suitable roof support."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year panel fault cover advertised.",
-        "con": "Applicable Australian claim support, labour and removal costs still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "hyundai-heteromax-hit",
-    "name": "Hyundai HeteroMax HiT",
-    "group": "Making the most of roof space",
-    "fit": "A shorter panel helps your roof layout and you want to understand hot-weather performance.",
-    "why": "Its published cell design has a relatively small rated power drop as it gets hotter.",
-    "check": "The reviewed Australian-hosted sheet is older. Confirm the exact currently offered model and local warranty; the brand name alone does not identify this panel.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Hyundai Australian HeteroMax HiT datasheet",
-        "url": "https://www.hyundaisolar.com.au/wp-content/uploads/2025/01/Data-Sheet-Hyundai-440W-HiT-HxxxOF-BF-Solar-Panel-1.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "14 June 2023; uploaded January 2025"
-      }
-    ],
-    "brand": "Hyundai",
-    "image": {
-      "src": "/products/solar/hyundai-heteromax-hit.webp",
-      "alt": "Hyundai HeteroMax HiT. Product range shown.",
-      "sourceUrl": "https://www.hyundaisolar.com.au/wp-content/uploads/2025/01/Data-Sheet-Hyundai-440W-HiT-HxxxOF-BF-Solar-Panel-1.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 230 watts per square metre of panel.",
-        "con": "Each panel is 1.72 by 1.13 metres; shade and installation gaps reduce usable roof space."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "30-year panel fault cover advertised for this model.",
-        "con": "Current Australian model eligibility, local help and included labour costs still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "das-dh96te-black-pro",
-    "name": "DAS Solar DH96TE Black Pro",
-    "group": "Everyday roof comparisons",
-    "fit": "You want compact black panels and care about output in hot conditions.",
-    "why": "The manufacturer documents a relatively small rated power drop as the cells heat up.",
-    "check": "Confirm the full model, connections and mounting design. A laboratory heat specification does not guarantee yearly output on a shaded roof.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "DAS Australian DH96TE Black Pro download entry",
-        "url": "https://www.das-solar.com/au/site/download?catalog=63",
-        "kind": "manufacturer_specification",
-        "revision": "29 July 2025"
-      },
-      {
-        "title": "DAS manufacturer DH96TE Black Pro datasheet",
-        "url": "https://yidao.cdn.shwebspace.com/uploads/688866c7/DAS-DH96TE-EN-460-475%26ef%26bc%2688Black%20Pro%26ef%26bc%2689.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "Linked from AU manufacturer index; 29 July 2025"
-      }
-    ],
-    "brand": "DAS Solar",
-    "image": {
-      "src": "/products/solar/das-dh96te-black-pro.webp",
-      "alt": "DAS Solar DH96TE Black Pro. Product range shown.",
-      "sourceUrl": "https://yidao.cdn.shwebspace.com/uploads/688866c7/DAS-DH96TE-EN-460-475%26ef%26bc%2688Black%20Pro%26ef%26bc%2689.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 238 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; shade and installation gaps reduce usable roof space."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year cover for panel materials and manufacturing defects advertised.",
-        "con": "Australian claim support and any labour, removal or freight cover still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "canadian-top-hiku6-48td",
-    "name": "Canadian Solar TOPHiKu6",
-    "group": "Making the most of roof space",
-    "fit": "You want high rated output in a residential panel footprint.",
-    "why": "The current Australian sheet documents up to 485 W.",
-    "check": "The download-page label and updated sheet show different power ranges. Match the exact CS6.2-48TD model to the current sheet and account for its 24.6 kg weight.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Canadian Solar TOPHiKu6 Australian datasheet",
-        "url": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "October 2025 V1.5C1_AU"
-      },
-      {
-        "title": "Canadian Solar Australian download centre",
-        "url": "https://www.csisolar.com/au/downloads/",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "Canadian Solar",
-    "image": {
-      "src": "/products/solar/canadian-top-hiku6-48td.webp",
-      "alt": "Canadian Solar TOPHiKu6. Product range shown.",
-      "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 243 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; its 24.6 kg weight needs suitable roof support."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year cover for panel materials and manufacturing defects advertised.",
-        "con": "The Australian policy determines labour, removal and freight cover; these are not confirmed here."
-      }
-    ]
-  },
-  {
-    "id": "phono-helios-plus",
-    "name": "Phono Helios+",
-    "group": "Making the most of roof space",
-    "fit": "You want to compare how panel output changes in hotter conditions.",
-    "why": "The Australian Helios+ sheet documents a relatively small rated power drop as the cells heat up.",
-    "check": "Helios and Helios+ are different. Match the full model to the quote; a transparent rear does not guarantee extra energy from your roof.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Phono Australian Helios+ Clear datasheet",
-        "url": "https://phonosolar.com.au/wp-content/uploads/2024/11/Phono-Solar-Helios-Clear-v1.4.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "v1.4; November 2024 URL"
-      }
-    ],
-    "brand": "Phono Solar",
-    "image": {
-      "src": "/products/solar/phono-helios-plus.webp",
-      "alt": "Phono Helios+. Product range shown.",
-      "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/elementor/thumbs/Helios-Clear-Web-Image-qogoe0bo80c3ld74z7dcd7gdlolyxsfap43mn0z0ls.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 220 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; a transparent rear does not guarantee extra roof energy."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.4% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "30-year panel fault cover advertised for residential installations, with Australian warranty support.",
-        "con": "Commercial installations receive 25 years; labour, removal and freight cover still need confirmation."
-      }
-    ]
-  },
-  {
-    "id": "ja-deep-blue4-jam54d41-lb",
-    "name": "JA Solar DeepBlue 4.0 Pro",
-    "group": "Everyday roof comparisons",
-    "fit": "You want a compact panel that can use front and rear light.",
-    "why": "The reviewed Australian manufacturer sheet documents a 22 kg panel with glass on both sides.",
-    "check": "The reviewed document is manufacturer-authored and publicly hosted by a distributor. Confirm current availability and the exact JAM54D41-LB version; other suffixes differ.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "JA manufacturer-authored Australian JAM54D41-LB sheet, publicly hosted by OSW",
-        "url": "https://downloads.osw.energy/au/downloads/2109/docs/JA%20DS-%20JAS-JAM54D41-440-LB-30%20.pdf",
-        "kind": "manufacturer_document_distributor_host",
-        "revision": "Reviewed 430-455 W AU sheet; revision not visible on reviewed specification page"
-      },
-      {
-        "title": "JA manufacturer-hosted Australian sheet link",
-        "url": "https://www.jasolar.com/uploadfile/fujian/2025/0121/80eb7fe2dfd40b0.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "Indexed AUS-EN-20250109A; direct fetch 403"
-      }
-    ],
-    "brand": "JA Solar",
-    "image": {
-      "src": "/products/solar/ja-deep-blue4-jam54d41-lb.webp",
-      "alt": "JA Solar DeepBlue 4.0 Pro. Product range shown.",
-      "sourceUrl": "https://www.jasolar.eu/fileadmin/_processed_/2/9/csm_JAM_54_D41_LB_winkel_vorne_3_7413ca0794.webp"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 228 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; rear-light gains depend on roof and mounting."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 3.0% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": null,
-        "con": "Applicable Australian panel-fault cover, labour costs and current local claim arrangements are not confirmed."
-      }
-    ]
-  },
-  {
-    "id": "rec-alpha-pro-m",
-    "name": "REC Alpha Pro M",
-    "group": "Specialist large or lighter roof layouts",
-    "fit": "You have a large, structurally suitable home roof or shed with plenty of clear space.",
-    "why": "Its Australian sheet documents 600 to 640 W per large panel and a relatively small rated power drop in heat.",
-    "check": "Each panel is about 2.18 by 1.31 metres and 32.5 kg. Its size, electrical demands and fixings can rule it out for an ordinary home roof.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "REC Alpha Pro M Australian manufacturer datasheet",
-        "url": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "IEC AU CEC 10.2025 V4.9"
-      }
-    ],
-    "brand": "REC",
-    "image": {
-      "src": "/products/solar/rec-alpha-pro-m.webp",
-      "alt": "REC Alpha Pro M. Product range shown.",
-      "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 225 watts per square metre of panel.",
-        "con": "Each panel is 2.18 by 1.31 metres and 32.5 kg, limiting fit on ordinary home roofs."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.4% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "20-year panel fault cover advertised; eligible installations can receive 25 years.",
-        "con": "Extended cover needs an eligible REC installer and registration; installation size affects labour cover."
-      }
-    ]
-  },
-  {
-    "id": "tongwei-tnc2-48hd",
-    "name": "Tongwei TNC 2.0",
-    "group": "Everyday roof comparisons",
-    "fit": "You want a compact array and your installer checks the newer panel's electrical demands.",
-    "why": "The current Australian specification table documents 470 to 480 W.",
-    "check": "The document's older title shows a different range. Use the current 48HD specification table and check inverter compatibility.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Tongwei Australian TWMNH-48HD datasheet",
-        "url": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf",
-        "kind": "manufacturer_specification",
-        "revision": "AUS-Ver.20260501"
-      },
-      {
-        "title": "Tongwei Australian download centre",
-        "url": "https://au.tongwei.cn/download.html",
-        "kind": "manufacturer_specification",
-        "revision": "Checked 10 October 2026"
-      }
-    ],
-    "brand": "Tongwei",
-    "image": {
-      "src": "/products/solar/tongwei-tnc2-48hd.webp",
-      "alt": "Tongwei TNC 2.0. Product range shown.",
-      "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
-    },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 240 watts per square metre of panel.",
-        "con": "Each panel is 1.76 by 1.13 metres; actual roof layout determines how many fit."
-      },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.8% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "25-year cover for panel materials and manufacturing defects advertised.",
-        "con": "Australian claim support and any labour, removal or freight cover still need confirmation."
-      }
+    "cons": [
+      "The broader warranty covering transport and reinstallation is a paid extra."
     ]
   },
   {
     "id": "winaico-wbc-bdx54",
-    "name": "Winaico WBC",
-    "group": "Making the most of roof space",
-    "fit": "You want an all-black front with the electrical contacts behind the cells.",
-    "why": "The Australian sheet documents 485 W without front metal strips across the cells.",
-    "check": "Its size differs from Winaico's NCX48 range. Any rear-side gain depends on mounting, and insurance or warranty marketing needs an applicable written policy.",
+    "name": "Winaico WBC 485 W",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -823,6 +112,12 @@
         "url": "https://www.winaico.com.au/8330-2",
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
+      },
+      {
+        "title": "WBC BDX54 back-contact generation introduction",
+        "url": "https://winaico.com/tw/press-tw/%E5%A4%96%E5%9E%8Bx%E6%95%88%E8%83%BD%E6%96%B0%E6%A8%99%E7%AB%BF%E3%80%80%E6%9C%89%E6%88%90%E7%B2%BE%E5%AF%86%E6%97%97%E4%B8%8Bwinaico%E8%83%8C%E6%8E%A5%E8%A7%B8%E5%BC%8F%E5%A4%AA%E9%99%BD/",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker dates the new WBC range to September 2025 and identifies Oceania availability. Current Australian B2 specification is January 2026."
       }
     ],
     "brand": "Winaico",
@@ -831,31 +126,268 @@
       "alt": "Winaico WBC. Product range shown.",
       "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
     },
-    "comparisons": [
-      {
-        "criterion": "roof-space",
-        "pro": "Up to about 238 watts per square metre of panel.",
-        "con": "Each panel is 1.80 by 1.13 metres; its 25 kg weight needs suitable roof support."
+    "freshness": {
+      "generation": "WBC BDX54 back-contact generation",
+      "released": "2025-09-01",
+      "sourceUrl": "https://winaico.com/tw/press-tw/%E5%A4%96%E5%9E%8Bx%E6%95%88%E8%83%BD%E6%96%B0%E6%A8%99%E7%AB%BF%E3%80%80%E6%9C%89%E6%88%90%E7%B2%BE%E5%AF%86%E6%97%97%E4%B8%8Bwinaico%E8%83%8C%E6%8E%A5%E8%A7%B8%E5%BC%8F%E5%A4%AA%E9%99%BD/",
+      "note": "Maker dates the new WBC range to September 2025 and identifies Oceania availability. Current Australian B2 specification is January 2026."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 23.8,
+        "unit": "panel-efficiency-percent",
+        "variant": "Winaico WBC 485 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
-      },
-      {
-        "criterion": "warranty",
-        "pro": "30-year panel fault cover advertised.",
-        "con": "Insurance offers are separate; applicable Australian labour, removal and claim cover still needs confirmation."
+      "warranty": {
+        "value": 30,
+        "unit": "included-product-years",
+        "variant": "WBC BDX54 back-contact generation, 485 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf",
+        "checkedAt": "2026-10-10"
       }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "485 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1800 × 1134 × 35 mm",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "25 kg",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.6% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "23.8% at standard laboratory conditions",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "30 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+      }
+    ],
+    "pros": [
+      "Designed to limit losses from small patches of shade.",
+      "Australian support office gives you a local contact."
+    ],
+    "cons": [
+      "Its 25 kg weight is less suited to roofs with tight weight limits."
     ]
   },
   {
+    "id": "rec-alpha-pro-m",
+    "name": "REC Alpha Pro M 640 W",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "REC Alpha Pro M Australian manufacturer datasheet",
+        "url": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "IEC AU CEC 10.2025 V4.9"
+      },
+      {
+        "title": "Alpha Pro M introduction",
+        "url": "https://www.recgroup.com/en/node/22887",
+        "kind": "manufacturer_announcement",
+        "revision": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
+      }
+    ],
+    "brand": "REC",
+    "image": {
+      "src": "/products/solar/rec-alpha-pro-m.webp",
+      "alt": "REC Alpha Pro M. Product range shown.",
+      "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+    },
+    "freshness": {
+      "generation": "Alpha Pro M",
+      "released": "2024-12-19",
+      "sourceUrl": "https://www.recgroup.com/en/node/22887",
+      "note": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 22.5,
+        "unit": "panel-efficiency-percent",
+        "variant": "REC Alpha Pro M 640 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 20,
+        "unit": "included-product-years",
+        "variant": "Alpha Pro M, 640 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "640 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "2175 × 1305 × 30 mm",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "32.5 kg",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.4% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "22.5% at standard laboratory conditions",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "20 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      },
+      {
+        "label": "Conditional extension",
+        "value": "25-year ProTrust cover needs eligible installer, system size and registration; standard fault-cover bar is 20 years",
+        "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+      }
+    ],
+    "warning": "Large-format panel: 2.18 by 1.31 metres and 32.5 kg. Confirm your roof can fit enough panels.",
+    "pros": [
+      "Large panels suit broad, open shed or commercial roofs."
+    ],
+    "cons": [
+      "Large, heavy panels are awkward on small roofs with lots of obstructions.",
+      "Standard fault cover is 20 years; the longer warranty has eligibility conditions."
+    ]
+  },
+  {
+    "id": "tongwei-tnc2-48hd",
+    "name": "Tongwei TNC 2.0 480 W",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Tongwei Australian TWMNH-48HD datasheet",
+        "url": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AUS-Ver.20260501"
+      },
+      {
+        "title": "Tongwei Australian download centre",
+        "url": "https://au.tongwei.cn/download.html",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      },
+      {
+        "title": "TNC 2.0 48HD introduction",
+        "url": "https://www.tongwei.com/news/detail/167700.html",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker introduced TNC 2.0 globally in March 2025. Australian 48HD sheet confirms the selected model; exact first Australian arrival was not verified."
+      }
+    ],
+    "brand": "Tongwei",
+    "image": {
+      "src": "/products/solar/tongwei-tnc2-48hd.webp",
+      "alt": "Tongwei TNC 2.0. Product range shown.",
+      "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+    },
+    "freshness": {
+      "generation": "TNC 2.0 48HD",
+      "released": "2025-03-05",
+      "sourceUrl": "https://www.tongwei.com/news/detail/167700.html",
+      "note": "Maker introduced TNC 2.0 globally in March 2025. Australian 48HD sheet confirms the selected model; exact first Australian arrival was not verified."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 24.02,
+        "unit": "panel-efficiency-percent",
+        "variant": "Tongwei TNC 2.0 480 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "variant": "TNC 2.0 48HD, 480 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "480 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "22.8 kg",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.8% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "24.02% at standard laboratory conditions",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+      }
+    ],
+    "pros": [
+      "Lets some light through, useful over a carport.",
+      "Can also collect sunlight reaching the back of the panel."
+    ],
+    "cons": []
+  },
+  {
     "id": "longi-guardian-light",
-    "name": "LONGi Hi-MO X10 Guardian Light",
-    "group": "Specialist large or lighter roof layouts",
-    "fit": "Panel weight is a real roof-design constraint and a longer panel can fit.",
-    "why": "The Australian product page documents a 16.3 kg lightweight panel.",
-    "check": "At 1.99 metres long, it still needs checks for roof capacity, wind, fixings and approved mounting. Lightweight does not automatically remove the need for reinforcement.",
+    "name": "LONGi Hi-MO X10 Guardian Light 560 W",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -863,6 +395,12 @@
         "url": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/",
         "kind": "manufacturer_specification",
         "revision": "Undated current product page"
+      },
+      {
+        "title": "Hi-MO X10 Guardian Light introduction",
+        "url": "https://eu.longi.com/press/longi-launches-light-weight-back-contact-module-for-c-i-rooftops-with-load-limits",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker introduced the lightweight generation in Europe in August 2025. Current Australian product page confirms local identity; exact AU arrival is unverified."
       }
     ],
     "brand": "LONGi",
@@ -871,22 +409,972 @@
       "alt": "LONGi Hi-MO X10 Guardian Light. Product range shown.",
       "sourceUrl": "https://static.longi.com/_c174d703e1.png"
     },
-    "comparisons": [
+    "freshness": {
+      "generation": "Hi-MO X10 Guardian Light",
+      "released": "2025-08-15",
+      "sourceUrl": "https://eu.longi.com/press/longi-launches-light-weight-back-contact-module-for-c-i-rooftops-with-load-limits",
+      "note": "Maker introduced the lightweight generation in Europe in August 2025. Current Australian product page confirms local identity; exact AU arrival is unverified."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 24.8,
+        "unit": "panel-efficiency-percent",
+        "variant": "LONGi Hi-MO X10 Guardian Light 560 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
       {
-        "criterion": "roof-space",
-        "pro": "Up to about 248 watts per square metre of panel.",
-        "con": "Each panel is 1.99 metres long; low weight does not remove roof and fixing requirements."
+        "label": "Measured panel power",
+        "value": "560 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/"
       },
       {
-        "criterion": "hot-weather",
-        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
-        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+        "label": "Panel size",
+        "value": "1990 × 1134 × 30 mm",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/"
       },
       {
-        "criterion": "warranty",
-        "pro": "15-year panel fault cover advertised.",
-        "con": "Applicable Australian claim support and any labour, removal or freight cover still need confirmation."
+        "label": "Panel weight",
+        "value": "16.3 kg",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.6% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "24.8% at standard laboratory conditions",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "Included Australian panel-fault term not established; advertised output cover is separate",
+        "sourceUrl": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/"
       }
+    ],
+    "pros": [
+      "Lightweight 16.3 kg panel body reduces the load on the roof."
+    ],
+    "cons": [
+      "Nearly two metres long, so it fits fewer awkward roof gaps."
     ]
+  },
+  {
+    "id": "dmegc-g12rt-g48hbb",
+    "name": "DMEGC Infinity RT 475 W",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "DMEGC Australian-index G48HBB datasheet",
+        "url": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "9 December 2025; AU index upload May 2026"
+      },
+      {
+        "title": "DMEGC Australian download index",
+        "url": "https://www.dmegcsolar.com/download/index-cec-australia.html",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      },
+      {
+        "title": "Infinity RT G12RT G48HBB introduction",
+        "url": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
+      }
+    ],
+    "brand": "DMEGC",
+    "image": {
+      "src": "/products/solar/dmegc-g12rt-g48hbb.webp",
+      "alt": "DMEGC Infinity RT. Product range shown.",
+      "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+    },
+    "freshness": {
+      "generation": "Infinity RT G12RT G48HBB",
+      "released": null,
+      "sourceUrl": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html",
+      "note": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 23.8,
+        "unit": "panel-efficiency-percent",
+        "variant": "DMEGC Infinity RT 475 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "475 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "24 kg",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.9% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "23.8% at standard laboratory conditions",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "Exact included local term not confirmed; no warranty bar assigned",
+        "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+      }
+    ],
+    "pros": [
+      "Full black finish helps it blend into a dark roof."
+    ],
+    "cons": [
+      "Over an open carport, it cannot collect extra sunlight from underneath."
+    ]
+  },
+  {
+    "id": "aiko-neostar-3p54",
+    "name": "AIKO Neostar 3P54 500 W",
+    "brand": "AIKO",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "AIKO Neostar 3P54 datasheet",
+        "url": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU-only V2.1_202502_DsDr_EN"
+      },
+      {
+        "title": "Neostar third generation 3P54 Mono Glass introduction",
+        "url": "https://aikosolar.com/au/all-energy-australia-2025/",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
+      }
+    ],
+    "image": {
+      "src": "/products/solar/aiko-neostar-3p54.webp",
+      "alt": "AIKO Neostar 3P54. Product range shown.",
+      "sourceUrl": "https://growenergy.com.au/products/aiko-neostar-3p54"
+    },
+    "freshness": {
+      "generation": "Neostar third generation 3P54 Mono Glass",
+      "released": "2025-10",
+      "sourceUrl": "https://aikosolar.com/au/all-energy-australia-2025/",
+      "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 25,
+        "unit": "panel-efficiency-percent",
+        "variant": "AIKO Neostar 3P54 500 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "variant": "Neostar third generation 3P54 Mono Glass, 500 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "500 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "20.6 kg",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.6% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "25% at standard laboratory conditions",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-3P54-Mono-Glass-475-500W.pdf"
+      }
+    ],
+    "pros": [
+      "Designed to reduce losses from small patches of shade.",
+      "No visible metal strips cross the front of the cells."
+    ],
+    "cons": []
+  },
+  {
+    "id": "jinko-tiger-neo-iii-48ql6",
+    "name": "Jinko Tiger Neo III 48QL6 475 W",
+    "brand": "JinkoSolar",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Jinko Tiger Neo III 48QL6 datasheet",
+        "url": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Manufacturer-issued R4.5 ©2025"
+      },
+      {
+        "title": "Tiger Neo III 48QL6 F2-OC introduction",
+        "url": "https://www.jinkosolar.com/en/site/newsdetail/2767",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
+      },
+      {
+        "title": "SolarQuotes panel equipment-price comparison",
+        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
+        "kind": "published_equipment_price",
+        "revision": "Table updated 8 April 2026; approximate retail including GST"
+      }
+    ],
+    "image": {
+      "src": "/products/solar/jinko-tiger-neo-iii-48ql6.webp",
+      "alt": "Jinko Tiger Neo III 48QL6. Product range shown.",
+      "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+    },
+    "freshness": {
+      "generation": "Tiger Neo III 48QL6 F2-OC",
+      "released": "2025-10-29",
+      "sourceUrl": "https://www.jinkosolar.com/en/site/newsdetail/2767",
+      "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
+    },
+    "measurements": {
+      "cost": {
+        "value": 0.3684,
+        "unit": "aud-per-w",
+        "variant": "JKM475N-48QL6-DV-F2-OC",
+        "basisId": "panel-unit-gst",
+        "basis": "SolarQuotes approximate retail unit price A$175 including GST for exact JKM475N-48QL6-DV-F2-OC, divided by 475 W. One panel only; excludes inverter, mounting and installation. Table updated 8 April 2026.",
+        "sourceUrl": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
+        "checkedAt": "2026-10-10"
+      },
+      "efficiency": {
+        "value": 23.77,
+        "unit": "panel-efficiency-percent",
+        "variant": "Jinko Tiger Neo III 48QL6 475 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "variant": "Tiger Neo III 48QL6 F2-OC, 475 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "475 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "21.5 kg",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.6% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "23.77% at standard laboratory conditions",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2026/04/tigerneo3.pdf"
+      }
+    ],
+    "pros": [
+      "Glass front and back enclose and protect the solar cells."
+    ],
+    "cons": [
+      "For raised installations, it cannot collect sunlight reflected onto the back."
+    ]
+  },
+  {
+    "id": "trina-vertex-s-plus-g3",
+    "name": "Trina Vertex S+ G3 515 W",
+    "brand": "Trina Solar",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Trina Vertex S+ G3 datasheet",
+        "url": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "TSM_AUS_EN_2026_PA5, 495 to 515 W"
+      },
+      {
+        "title": "Vertex S+ third generation NEG10R.28Z introduction",
+        "url": "https://www.trinasolar.com/au/newsroom202607221807/",
+        "kind": "manufacturer_announcement",
+        "revision": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
+      }
+    ],
+    "image": {
+      "src": "/products/solar/trina-vertex-s-plus-g3.webp",
+      "alt": "Trina Vertex S+ G3. Product range shown.",
+      "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+    },
+    "freshness": {
+      "generation": "Vertex S+ third generation NEG10R.28Z",
+      "released": "2026-07-22",
+      "sourceUrl": "https://www.trinasolar.com/au/newsroom202607221807/",
+      "note": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 24.65,
+        "unit": "panel-efficiency-percent",
+        "variant": "Trina Vertex S+ G3 515 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "variant": "Vertex S+ third generation NEG10R.28Z, 515 W measured variant",
+        "basisId": "included-all-parts",
+        "basis": "Advertised included panel material/workmanship fault-cover term on the exact Australian sheet or maker AU product page. Panel only; no paid or conditional extension, output-retention promise, inverter, labour or installation coverage.",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "515 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1842 × 1134 × 30 mm",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "21.95 kg",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.6% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "24.65% at standard laboratory conditions",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years advertised; panel only, claim and labour conditions apply",
+        "sourceUrl": "https://www-cdn.trinasolar.com/wwwstorage/sites/5/DT-M-0135-AUS-EN-A-Datasheet_Vertex-SGen3_NEG10R.28Z_2026_495-515-PA5-web.pdf"
+      }
+    ],
+    "pros": [
+      "Designed to resist scratches and tiny cell cracks.",
+      "Clean front appearance with fewer visible connecting strips."
+    ],
+    "cons": []
+  },
+  {
+    "id": "sunpower-performance-7",
+    "name": "SunPower Performance 7 440 W",
+    "brand": "SunPower",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "SunPower Performance 7 datasheet",
+        "url": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "552404 Rev C/A4_EN, August 2024"
+      },
+      {
+        "title": "Performance 7 SPR-P7-BLK-1500 introduction",
+        "url": "https://mediaroom.maxeon.com/2024-04-11-Maxeon-Introduces-New-SunPower-Performance-7-Solar-Panels-with-Cradle-to-Cradle-Certification",
+        "kind": "manufacturer_announcement",
+        "revision": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
+      },
+      {
+        "title": "SolarQuotes panel equipment-price comparison",
+        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
+        "kind": "published_equipment_price",
+        "revision": "Table updated 8 April 2026; approximate retail including GST"
+      }
+    ],
+    "image": {
+      "src": "/products/solar/sunpower-performance-7.webp",
+      "alt": "SunPower Performance 7. Product range shown.",
+      "sourceUrl": "https://www.aztechsolar.com.au/product/sunpower-performance-7/"
+    },
+    "freshness": {
+      "generation": "Performance 7 SPR-P7-BLK-1500",
+      "released": "2024-04-11",
+      "sourceUrl": "https://mediaroom.maxeon.com/2024-04-11-Maxeon-Introduces-New-SunPower-Performance-7-Solar-Panels-with-Cradle-to-Cradle-Certification",
+      "note": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
+    },
+    "measurements": {
+      "cost": {
+        "value": 0.3295,
+        "unit": "aud-per-w",
+        "variant": "SPR-P7-440-BLK-1500",
+        "basisId": "panel-unit-gst",
+        "basis": "SolarQuotes approximate retail unit price A$145 including GST for exact SPR-P7-440-BLK-1500, divided by 440 W. One panel only; excludes inverter, mounting and installation. Table updated 8 April 2026.",
+        "sourceUrl": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
+        "checkedAt": "2026-10-10"
+      },
+      "efficiency": {
+        "value": 21.7,
+        "unit": "panel-efficiency-percent",
+        "variant": "SunPower Performance 7 440 W",
+        "basisId": "panel-stc",
+        "basis": "Published front-side panel efficiency at standard laboratory conditions: 1000 W/m² sunlight, 25°C cell temperature, AM1.5. Not annual household yield or a rear-side bonus.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Measured panel power",
+        "value": "440 W; exact variant used for the efficiency bar",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1790 × 1134 × 30 mm",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "24.8 kg",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.9% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "21.7% at standard laboratory conditions",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "Sheet states 25-year base or 30 years after registration in eligible countries; current AU included term not verified",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/11/sunpower-p7.pdf"
+      }
+    ],
+    "pros": [
+      "Cell layout is designed to reduce losses from patches of shade.",
+      "Tested against 40 mm hailstones."
+    ],
+    "cons": [
+      "Its 24.8 kg glass construction adds more roof weight than lightweight panel options."
+    ]
+  },
+  {
+    "id": "risen-rsm96-11-475bndg",
+    "name": "Risen RSM96-11 475 W",
+    "brand": "Risen",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Risen Australian 475 W datasheet",
+        "url": "https://www.risenenergy.com.au/downloads/datasheets/RSM96-11-475BNDG-datasheet-2026H1-EN.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "2026 H1 EN; exact 475 W model"
+      },
+      {
+        "title": "Risen Australian and New Zealand rooftop product warranty",
+        "url": "https://www.risenenergy.com.au/downloads/warranties/Risen-25-year-rooftop-warranty-AU-NZ-n-type-2026.pdf",
+        "kind": "manufacturer_warranty",
+        "revision": "A2 [2026], effective 10 July 2026"
+      },
+      {
+        "title": "Risen Australian 475 W launch",
+        "url": "https://risenenergy.com.au/news/475w-topcon-launch-australia/",
+        "kind": "manufacturer_announcement",
+        "revision": "24 September 2025"
+      }
+    ],
+    "image": {
+      "src": "/products/solar/risen-rsm96-11-475bndg.webp",
+      "alt": "Front view of Risen RSM96-11-475BNDG 475 W panel.",
+      "sourceUrl": "https://www.risenenergy.com.au/solar/rsm96-11-475bndg/"
+    },
+    "pros": [
+      "475 W output in a compact 1.76 m panel.",
+      "25 years of panel materials and workmanship cover."
+    ],
+    "cons": [],
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 23.8,
+        "unit": "panel-efficiency-percent",
+        "basisId": "panel-stc",
+        "variant": "RSM96-11-475BNDG, 475 W",
+        "basis": "Exact model front-side panel efficiency at STC: 1000 W/m² irradiance, 25°C cell temperature, AM1.5. No rear-side gain or annual household production substituted.",
+        "sourceUrl": "https://www.risenenergy.com.au/downloads/datasheets/RSM96-11-475BNDG-datasheet-2026H1-EN.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "RSM96-11-475BNDG, Australian rooftop installation after 10 July 2026",
+        "basis": "Included 25-year panel material and workmanship fault cover under AU/NZ rooftop warranty A2 [2026]. Separate 30-year output warranty is not scored. Installation and inverter are separate.",
+        "sourceUrl": "https://www.risenenergy.com.au/downloads/warranties/Risen-25-year-rooftop-warranty-AU-NZ-n-type-2026.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model",
+        "value": "RSM96-11-475BNDG, 475 W",
+        "sourceUrl": "https://www.risenenergy.com.au/downloads/datasheets/RSM96-11-475BNDG-datasheet-2026H1-EN.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://www.risenenergy.com.au/solar/rsm96-11-475bndg/"
+      },
+      {
+        "label": "Panel weight",
+        "value": "21.5 kg",
+        "sourceUrl": "https://www.risenenergy.com.au/solar/rsm96-11-475bndg/"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "23.8% at STC, the figure used in the bar",
+        "sourceUrl": "https://www.risenenergy.com.au/solar/rsm96-11-475bndg/"
+      },
+      {
+        "label": "Glass",
+        "value": "1.6 mm front and 1.6 mm rear glass",
+        "sourceUrl": "https://www.risenenergy.com.au/solar/rsm96-11-475bndg/"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.9% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://www.risenenergy.com.au/downloads/datasheets/RSM96-11-475BNDG-datasheet-2026H1-EN.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years, AU/NZ rooftop warranty A2 [2026]; claim conditions apply",
+        "sourceUrl": "https://www.risenenergy.com.au/downloads/warranties/Risen-25-year-rooftop-warranty-AU-NZ-n-type-2026.pdf"
+      },
+      {
+        "label": "Australian introduction",
+        "value": "Maker launched the 475 W model on 24 September 2025",
+        "sourceUrl": "https://risenenergy.com.au/news/475w-topcon-launch-australia/"
+      }
+    ],
+    "freshness": {
+      "generation": "Compact 475 W Australian rooftop model",
+      "released": "2025-09-24",
+      "sourceUrl": "https://risenenergy.com.au/news/475w-topcon-launch-australia/",
+      "note": "Dated manufacturer announcement identifies the Australian launch of this 475 W model."
+    }
+  },
+  {
+    "id": "astronergy-n7s-2-470",
+    "name": "Astronergy ASTRO N7s 2.0 470 W",
+    "brand": "Astronergy",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Astronergy Australian N7s 2.0 470 W datasheet",
+        "url": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU 20250916 V2, 2.0 range on current AU download page"
+      },
+      {
+        "title": "Astronergy Australian product-warranty model appendix",
+        "url": "https://astronergy.com.au/wp-content/uploads/2025/11/Appendix-A_Types-of-Modules-covered-by-20241209version-Australia-Limited-Warranty.pdf",
+        "kind": "manufacturer_warranty",
+        "revision": "Appendix for Australia Limited Warranty, 20241209 version"
+      },
+      {
+        "title": "Astronergy Australian Limited Warranty",
+        "url": "https://astronergy.com.au/wp-content/uploads/2025/11/Astronergy-Limited_Warranty-for-Crystalline-PV-Modules_Australia_20250827.pdf",
+        "kind": "manufacturer_warranty",
+        "revision": "Australia 20250827"
+      },
+      {
+        "title": "Astronergy 2025 new TOPCon 5.0 platform announcement",
+        "url": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
+        "kind": "manufacturer_announcement",
+        "revision": "2025 Intersolar report; first exact model sale date not published"
+      }
+    ],
+    "image": {
+      "src": "/products/solar/astronergy-n7s-2-470.webp",
+      "alt": "Astronergy ASTRO N7s 2.0 all-black double-glass range shown from front and rear; 470 W model listed.",
+      "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+    },
+    "pros": [
+      "470 W output in a compact 1.76 m, all-black panel.",
+      "30 years of panel fault cover for Australian rooftop installations."
+    ],
+    "cons": [
+      "Standard glass version weighs 24.5 kg; the lighter 21.5 kg option uses thinner glass."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 23.5,
+        "unit": "panel-efficiency-percent",
+        "basisId": "panel-stc",
+        "variant": "CHSM48RN(DG)(BLH)/F-BH-470, 470 W, standard 2 mm glass",
+        "basis": "Exact model front-side panel efficiency at STC: 1000 W/m² irradiance, 25°C cell temperature, AM1.5. No rear-side gain or annual household production substituted.",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 30,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "CHSM48RN(DG)(BLH)/F-BH-470, Australian rooftop installation",
+        "basis": "Included 30-year panel product fault cover for the exact double-glass model in the Australian warranty appendix, specified for rooftop installations. Output warranty and installation are separate.",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/Appendix-A_Types-of-Modules-covered-by-20241209version-Australia-Limited-Warranty.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model",
+        "value": "CHSM48RN(DG)(BLH)/F-BH-470, 470 W; standard glass specification",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "24.5 kg with 2 mm glass; optional 1.6 mm glass version is 21.5 kg",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "23.5% at STC, the exact 470 W column",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+      },
+      {
+        "label": "Glass",
+        "value": "2 mm front and 2 mm rear glass for the listed standard version",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.9% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/450470_%C2%B15WASTRO-N7s_CHSM48RNDGBLHF-BH_1762x1134x30_AU_20250916-V2.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "30 years for rooftop installations under the Australian warranty appendix",
+        "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/Appendix-A_Types-of-Modules-covered-by-20241209version-Australia-Limited-Warranty.pdf"
+      },
+      {
+        "label": "Current generation",
+        "value": "N7s 2.0, using the maker’s 2025 TOPCon 5.0 platform; not the earlier N7s range",
+        "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/"
+      }
+    ],
+    "freshness": {
+      "generation": "ASTRO N7s 2.0, TOPCon 5.0 platform",
+      "released": null,
+      "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
+      "note": "Maker describes its new TOPCon 5.0 platform in 2025; the current AU page identifies N7s 2.0 and its September 2025 sheet. Exact first Australian sale date is unverified."
+    }
+  },
+  {
+    "id": "phono-helios-clear-l14-440",
+    "name": "Phono HeliosCLEAR 2025 440 W",
+    "brand": "Phono",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Phono HeliosCLEAR 2025 exact L14 datasheet",
+        "url": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Helios CLEAR 2025-440W-v1.0, zero-busbar update"
+      },
+      {
+        "title": "Phono current Australian-hosted product warranty",
+        "url": "https://phonosolar.com.au/shared-files/7295/?Limited-Warranty_EN%E2%88%A9%E2%95%9DeIEC%E2%88%A9%E2%95%9De-20260108-Australia_new.pdf=",
+        "kind": "manufacturer_warranty",
+        "revision": "EN-IEC-2026-V1; applies to deliveries from 1 April 2025"
+      },
+      {
+        "title": "Phono Australian HeliosCLEAR range",
+        "url": "https://phonosolar.com.au/helios-clear/",
+        "kind": "manufacturer_specification",
+        "revision": "Current undated model page checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/solar/phono-helios-clear-l14-440.webp",
+      "alt": "Rear view of the Phono HeliosCLEAR 2025 L14 range from its 440 W brochure.",
+      "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+    },
+    "pros": [
+      "Glass on both sides, with no plastic rear sheet.",
+      "About 2.4% power loss per 10°C rise in panel temperature."
+    ],
+    "cons": [
+      "440 W output needs more panels than 475 W models for the same system size."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 22.02,
+        "unit": "panel-efficiency-percent",
+        "basisId": "panel-stc",
+        "variant": "PS440L14GFH-16/QSH, 440 W, HeliosCLEAR 2025",
+        "basis": "Exact model front-side panel efficiency at STC: 1000 W/m² irradiance, 25°C cell temperature, AM1.5. No rear-side gain or annual household production substituted.",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 15,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "PS440L14GFH-16/QSH, modules delivered from 1 April 2025",
+        "basis": "Included 15-year module material and workmanship cover, including module DC connectors and cables, in newer AU-hosted EN-IEC-2026-V1 warranty. This supersedes older brochure product-cover wording for this comparison. Separate 30-year output warranty is not scored.",
+        "sourceUrl": "https://phonosolar.com.au/shared-files/7295/?Limited-Warranty_EN%E2%88%A9%E2%95%9DeIEC%E2%88%A9%E2%95%9De-20260108-Australia_new.pdf=",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model",
+        "value": "PS440L14GFH-16/QSH, 440 W, HeliosCLEAR 2025 version",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "22 kg",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "22.02% at STC, the exact 440 W model",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      },
+      {
+        "label": "Glass",
+        "value": "1.6 mm front and 1.6 mm rear glass",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.4% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "15 years in EN-IEC-2026-V1, newer than the 2025 brochure; separate output cover is 30 years",
+        "sourceUrl": "https://phonosolar.com.au/shared-files/7295/?Limited-Warranty_EN%E2%88%A9%E2%95%9DeIEC%E2%88%A9%E2%95%9De-20260108-Australia_new.pdf="
+      },
+      {
+        "label": "Hardware update",
+        "value": "2025 brochure identifies the L14 zero-busbar cell update; exact first launch date is unverified",
+        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "HeliosCLEAR 2025 L14 zero-busbar version",
+      "released": null,
+      "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf",
+      "note": "The maker’s 2025 brochure explicitly describes the cell-wiring update. Its publication is not treated as proof of an exact launch day; older L12 models are not substituted."
+    }
+  },
+  {
+    "id": "canadian-tophiku6-48td-475",
+    "name": "Canadian Solar TOPHiKu6 475 W",
+    "brand": "Canadian Solar",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Canadian Solar exact Australian black-frame 48TD datasheet",
+        "url": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "V1.5C1 AU, October 2025"
+      },
+      {
+        "title": "Canadian Solar Australian and New Zealand product warranty",
+        "url": "https://static.csisolar.com/wp-content/uploads/sites/2/2026/05/22174737/PV_TopHiKu_Module_Warranty_au-v2.0.pdf",
+        "kind": "manufacturer_warranty",
+        "revision": "AU V2.0, contracts after 30 May 2026"
+      },
+      {
+        "title": "Canadian Solar 2024 portfolio with new compact 48TD format",
+        "url": "https://www.csisolar.com/emea/wp-content/uploads/sites/6/2024/10/CS_EMEA_Portfolio_EN_2024-October_pw.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Portfolio V4, September 2024; 48TD shown for Q4 2024"
+      },
+      {
+        "title": "Canadian Solar Australian 475 W brochure",
+        "url": "https://static.csisolar.com/wp-content/uploads/sites/2/2025/09/11172644/CS6.2-48TD-brochure-v202509F.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "September 2025 AU brochure"
+      }
+    ],
+    "image": {
+      "src": "/products/solar/canadian-tophiku6-48td-475.webp",
+      "alt": "Canadian Solar TOPHiKu6 CS6.2-48TD black-frame range front view; exact 475 W variant listed.",
+      "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+    },
+    "pros": [
+      "475 W output in a compact 1.76 m panel.",
+      "25 years of panel fault cover under the Australian warranty."
+    ],
+    "cons": [
+      "At 24.6 kg, each panel is heavier than several similar-sized models here."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 23.8,
+        "unit": "panel-efficiency-percent",
+        "basisId": "panel-stc",
+        "variant": "CS6.2-48TD-475, black frame, IEC1500V, 475 W",
+        "basis": "Exact model front-side panel efficiency at STC: 1000 W/m² irradiance, 25°C cell temperature, AM1.5. No rear-side gain or annual household production substituted.",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 25,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "CS6.2-48TD-475, black frame, Australia or New Zealand",
+        "basis": "Included 25-year product fault cover explicitly lists CS6.2-48TD black-frame and all-black variants in AU/NZ warranty V2.0. Applies to relevant contracts after 30 May 2026. Separate output warranty is not scored.",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2026/05/22174737/PV_TopHiKu_Module_Warranty_au-v2.0.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model",
+        "value": "CS6.2-48TD-475, 475 W, black frame, IEC1500V",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+      },
+      {
+        "label": "Panel size",
+        "value": "1762 × 1134 × 30 mm",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+      },
+      {
+        "label": "Panel weight",
+        "value": "24.6 kg",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+      },
+      {
+        "label": "Front-side panel efficiency",
+        "value": "23.8% at STC, the exact 475 W column",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+      },
+      {
+        "label": "Glass",
+        "value": "2 mm front and 2 mm rear glass",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+      },
+      {
+        "label": "Hot-panel power change",
+        "value": "About 2.9% less power per 10°C rise in panel temperature, at the same sunlight",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+      },
+      {
+        "label": "Hail test",
+        "value": "Maker reports a 35 mm hail-impact test under IEC 61215; not a damage guarantee",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2025/09/11172644/CS6.2-48TD-brochure-v202509F.pdf"
+      },
+      {
+        "label": "Panel fault cover",
+        "value": "25 years under the current AU/NZ product warranty for this black-frame model",
+        "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2026/05/22174737/PV_TopHiKu_Module_Warranty_au-v2.0.pdf"
+      },
+      {
+        "label": "Generation evidence",
+        "value": "Compact 48TD hardware appears as Q4 2024 in the maker’s 2024 portfolio; AU 475 W specification is October 2025",
+        "sourceUrl": "https://www.csisolar.com/emea/wp-content/uploads/sites/6/2024/10/CS_EMEA_Portfolio_EN_2024-October_pw.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "Compact CS6.2-48TD 475 W black-frame version",
+      "released": null,
+      "sourceUrl": "https://www.csisolar.com/emea/wp-content/uploads/sites/6/2024/10/CS_EMEA_Portfolio_EN_2024-October_pw.pdf",
+      "note": "Manufacturer portfolio identifies the compact 48TD format for Q4 2024; the exact AU 475 W brochure and sheet are 2025. An exact first Australian sale date is not published. The old server folder date is not a launch date."
+    }
   }
 ]

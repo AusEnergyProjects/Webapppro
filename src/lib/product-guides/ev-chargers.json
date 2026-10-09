@@ -1,0 +1,611 @@
+[
+  {
+    "id": "myenergi-zappi-glo-7",
+    "name": "myenergi zappi GLO 7 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "zappi GLO Australian product listing",
+        "url": "https://www.myenergi.com/au/product/zappi-glo/",
+        "kind": "Manufacturer AU product page",
+        "revision": "Current listing checked 10 October 2026; 7 kW, 6.5 m cable, $999 including GST."
+      },
+      {
+        "title": "zappi GLO generation datasheet",
+        "url": "https://support.myenergi.com/hc/article_attachments/36358958238737",
+        "kind": "Manufacturer specification",
+        "revision": "DS-00015 rev D, published April 2025 in the UK; generation evidence, not an AU launch date."
+      },
+      {
+        "title": "GLO power-monitoring sensor requirements",
+        "url": "https://support.myenergi.com/hc/en-gb/articles/40432781071761-Do-I-need-to-fit-a-grid-CT-Clamp",
+        "kind": "Manufacturer support",
+        "revision": "Current support article includes GLO and explains the required grid CT sensor."
+      },
+      {
+        "title": "Current Australian product warranty",
+        "url": "https://www.myenergi.com/au/wp-content/uploads/2023/11/myenergi-LTD-Product-Warranty-v2.0-AUS63.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "v2.0; active current AU warranty page link, not its superseded policy. Zappi is listed for 36 months, but GLO is not explicitly named."
+      }
+    ],
+    "brand": "myenergi",
+    "image": {
+      "src": "/products/ev-chargers/myenergi-zappi-glo-7.webp",
+      "alt": "myenergi zappi GLO 7 kW charger with its attached charging cable.",
+      "sourceUrl": "https://www.myenergi.com/au/wp-content/uploads/sites/8/2026/07/5Z3QBQJ6K9_01_zappiGLO_ImageSuite_HERO-1-min-scaled-1.jpg"
+    },
+    "pros": [
+      "The included 6.5-metre cable gives extra reach without buying a separate charging lead.",
+      "Can adjust charging to use spare solar power with the required monitoring equipment."
+    ],
+    "cons": [
+      "No on-device screen; you manage settings through the myenergi app.",
+      "Solar charging needs correctly installed power-monitoring sensors."
+    ],
+    "measurements": {
+      "cost": {
+        "value": 999,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "zappi GLO 7 kW with 6.5 m attached cable",
+        "basis": "Current maker AU unit price including GST and attached cable; excludes installation, power-monitoring extras and rebates.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/",
+        "checkedAt": "2026-10-10"
+      },
+      "chargingPower": {
+        "value": 7,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "zappi GLO 7 kW, single-phase",
+        "basis": "Published maximum AC charging output. Actual charging depends on the car, home supply and configured limits.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "technicalSpecs": [
+      {
+        "label": "Charging power",
+        "value": "7 kW maximum on single-phase power.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      },
+      {
+        "label": "Included cable",
+        "value": "6.5 m attached cable with a Type 2 car plug.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      },
+      {
+        "label": "Controls",
+        "value": "Screen-free; charging settings and monitoring use the myenergi app.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Requires a grid power-monitoring sensor; solar and load controls depend on its correct installation.",
+        "sourceUrl": "https://support.myenergi.com/hc/en-gb/articles/40432781071761-Do-I-need-to-fit-a-grid-CT-Clamp"
+      },
+      {
+        "label": "Size",
+        "value": "350 mm high and 170 mm wide; depth is not stated on the AU listing.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      },
+      {
+        "label": "Outdoor use",
+        "value": "IP65 rated for permanent outdoor use.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      },
+      {
+        "label": "Access control",
+        "value": "Optional tap-to-charge access supports up to 126 identified users.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      },
+      {
+        "label": "Warranty boundary",
+        "value": "Current AU policy lists Zappi at 36 months; the exact GLO term is not confirmed.",
+        "sourceUrl": "https://www.myenergi.com/au/wp-content/uploads/2023/11/myenergi-LTD-Product-Warranty-v2.0-AUS63.pdf"
+      },
+      {
+        "label": "Equipment price",
+        "value": "$999 including GST for the charger with attached cable; installation and monitoring extras are excluded.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+      }
+    ],
+    "freshness": {
+      "generation": "zappi GLO 7 kW generation",
+      "released": null,
+      "sourceUrl": "https://support.myenergi.com/hc/article_attachments/36358958238737",
+      "note": "The maker published the GLO generation datasheet in April 2025. The current AU listing verifies this model, but the exact first AU launch day is not established."
+    }
+  },
+  {
+    "id": "fronius-wattpilot-flex-home-11c6",
+    "name": "Fronius Wattpilot Flex Home 11 C6",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Wattpilot Flex Australian product page",
+        "url": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/products-and-solutions/e-mobility/wattpilot-flex-electric-car-charger",
+        "kind": "Manufacturer AU product page",
+        "revision": "Current Flex Home generation, checked 10 October 2026."
+      },
+      {
+        "title": "Wattpilot Flex Home Australian datasheet",
+        "url": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf",
+        "kind": "Manufacturer AU specification",
+        "revision": "EN_AUS VS03, January 2026; exact 11 C6 and 22 C6 table."
+      },
+      {
+        "title": "Australian Wattpilot support and warranty FAQ",
+        "url": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot",
+        "kind": "Manufacturer AU support",
+        "revision": "Current FAQ; warranty increased to three years from 1 August 2024; Flex equipment and solar requirements."
+      },
+      {
+        "title": "Wattpilot Flex manufacturer announcement",
+        "url": "https://www.fronius.com/en/about-us/updates/news-and-press/fronius-wattpilot-flex",
+        "kind": "Manufacturer announcement",
+        "revision": "28 November 2024 announcement before official market launch; exact first Australian launch day not established."
+      }
+    ],
+    "brand": "Fronius",
+    "image": {
+      "src": "/products/ev-chargers/fronius-wattpilot-flex-home.webp",
+      "alt": "Fronius Wattpilot Flex Home 11 C6; maker range photo showing the shared Flex Home housing.",
+      "sourceUrl": "https://www.fronius.com/-/media/international/solar-energy-2-0/residential-endcustomers/product-pages/wattpilot-flex/se-wattpilot-flex-home-red-logo-v2-1000x1000.webp"
+    },
+    "pros": [
+      "Uses spare solar power, adjusting charging as sunshine changes.",
+      "Touch buttons and a charging display let you check and change settings on the unit.",
+      "The fixed 6-metre cable is included, without needing a separate charging lead."
+    ],
+    "cons": [
+      "On single-phase power, this 11 kW model is limited to 3.68 kW.",
+      "Solar charging needs a Fronius meter; third-party solar may also need extra control equipment.",
+      "Cannot send the car's stored energy back into your home."
+    ],
+    "measurements": {
+      "cost": null,
+      "chargingPower": {
+        "value": 11,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "Wattpilot Flex Home 11 C6, three-phase",
+        "basis": "Published maximum 11 kW AC output on three-phase power; single-phase maximum is 3.68 kW. The car and configured supply limits set actual output.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "Wattpilot Flex Home 11 C6",
+        "basis": "Current AU maker FAQ gives three years for the charger product from August 2024. Separate meters, controls and installation are outside this selected charger unit.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Maximum charging power",
+        "value": "11 kW on three-phase power; 3.68 kW on single-phase power.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Included cable",
+        "value": "6 m attached cable with a Type 2 car plug.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Solar charging range",
+        "value": "Adjusts spare-solar charging from 1.38 to 11 kW under the published supply conditions.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Solar equipment",
+        "value": "Requires a Fronius Smart Meter; third-party solar needs Smart Meter IP or a Datamanager Box 2.0 with a Smart Meter.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      },
+      {
+        "label": "Controls and connections",
+        "value": "On-unit touch buttons and charging display; Solar.wattpilot app, WiFi and wired Ethernet.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      },
+      {
+        "label": "Outdoor use",
+        "value": "IP66; installs upright indoors or outdoors.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Size and weight",
+        "value": "325 x 195 x 105 mm; 4.1 kg including the cable.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Operating temperature",
+        "value": "-25 to +45 degrees Celsius.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Parts warranty",
+        "value": "Three-year charger product warranty under the current Australian maker FAQ.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      },
+      {
+        "label": "Car-to-home power",
+        "value": "Does not currently support sending car battery energy into the home or grid.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      }
+    ],
+    "freshness": {
+      "generation": "Wattpilot Flex Home 11 C6",
+      "released": null,
+      "sourceUrl": "https://www.fronius.com/en/about-us/updates/news-and-press/fronius-wattpilot-flex",
+      "note": "The Flex generation was announced in November 2024 ahead of market launch and appears in 2025 maker training. The January 2026 AU sheet identifies this exact version; the first AU launch day is not established."
+    }
+  },
+  {
+    "id": "fronius-wattpilot-flex-home-22c6",
+    "name": "Fronius Wattpilot Flex Home 22 C6",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Wattpilot Flex Australian product page",
+        "url": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/products-and-solutions/e-mobility/wattpilot-flex-electric-car-charger",
+        "kind": "Manufacturer AU product page",
+        "revision": "Current Flex Home generation, checked 10 October 2026."
+      },
+      {
+        "title": "Wattpilot Flex Home Australian datasheet",
+        "url": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf",
+        "kind": "Manufacturer AU specification",
+        "revision": "EN_AUS VS03, January 2026; exact 11 C6 and 22 C6 table."
+      },
+      {
+        "title": "Australian Wattpilot support and warranty FAQ",
+        "url": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot",
+        "kind": "Manufacturer AU support",
+        "revision": "Current FAQ; warranty increased to three years from 1 August 2024; Flex equipment and solar requirements."
+      },
+      {
+        "title": "Wattpilot Flex manufacturer announcement",
+        "url": "https://www.fronius.com/en/about-us/updates/news-and-press/fronius-wattpilot-flex",
+        "kind": "Manufacturer announcement",
+        "revision": "28 November 2024 announcement before official market launch; exact first Australian launch day not established."
+      }
+    ],
+    "brand": "Fronius",
+    "image": {
+      "src": "/products/ev-chargers/fronius-wattpilot-flex-home.webp",
+      "alt": "Fronius Wattpilot Flex Home 22 C6; maker range photo showing the shared Flex Home housing.",
+      "sourceUrl": "https://www.fronius.com/-/media/international/solar-energy-2-0/residential-endcustomers/product-pages/wattpilot-flex/se-wattpilot-flex-home-red-logo-v2-1000x1000.webp"
+    },
+    "pros": [
+      "Offers up to 22 kW charging for cars that accept it, with three-phase home power.",
+      "Touch buttons and a charging display let you check and change settings on the unit.",
+      "The fixed 6-metre cable is included, without needing a separate charging lead."
+    ],
+    "cons": [
+      "On single-phase power, this 22 kW model is limited to 7.36 kW.",
+      "Solar charging needs a Fronius meter; third-party solar may also need extra control equipment.",
+      "Cannot send the car's stored energy back into your home."
+    ],
+    "measurements": {
+      "cost": null,
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "Wattpilot Flex Home 22 C6, three-phase",
+        "basis": "Published maximum 22 kW AC output on three-phase power; single-phase maximum is 7.36 kW. The car and configured supply limits set actual output.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "Wattpilot Flex Home 22 C6",
+        "basis": "Current AU maker FAQ gives three years for the charger product from August 2024. Separate meters, controls and installation are outside this selected charger unit.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Maximum charging power",
+        "value": "22 kW on three-phase power; 7.36 kW on single-phase power.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Included cable",
+        "value": "6 m attached cable with a Type 2 car plug.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Solar charging range",
+        "value": "Adjusts spare-solar charging from 1.38 to 22 kW under the published supply conditions.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Solar equipment",
+        "value": "Requires a Fronius Smart Meter; third-party solar needs Smart Meter IP or a Datamanager Box 2.0 with a Smart Meter.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      },
+      {
+        "label": "Controls and connections",
+        "value": "On-unit touch buttons and charging display; Solar.wattpilot app, WiFi and wired Ethernet.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      },
+      {
+        "label": "Outdoor use",
+        "value": "IP66; installs upright indoors or outdoors.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Size and weight",
+        "value": "325 x 195 x 105 mm; 5.4 kg including the cable.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Operating temperature",
+        "value": "-25 to +45 degrees Celsius.",
+        "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE%20Datasheet%20Fronius%20Wattpilot%20Flex%20Home%20EN_AUS.pdf"
+      },
+      {
+        "label": "Parts warranty",
+        "value": "Three-year charger product warranty under the current Australian maker FAQ.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      },
+      {
+        "label": "Car-to-home power",
+        "value": "Does not currently support sending car battery energy into the home or grid.",
+        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+      }
+    ],
+    "freshness": {
+      "generation": "Wattpilot Flex Home 22 C6",
+      "released": null,
+      "sourceUrl": "https://www.fronius.com/en/about-us/updates/news-and-press/fronius-wattpilot-flex",
+      "note": "The Flex generation was announced in November 2024 ahead of market launch and appears in 2025 maker training. The January 2026 AU sheet identifies this exact version; the first AU launch day is not established."
+    }
+  },
+  {
+    "id": "ohme-epod-au-74",
+    "name": "Ohme ePod AU 7.4 kW socket",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian ePod Wi-Fi specifications",
+        "url": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "November 2024 AU datasheet"
+      },
+      {
+        "title": "Exact Australian ePod manual and warranty",
+        "url": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Ohme-ePod-Wifi-Product-Manual-v0.2.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "AUS V2.0; exact EP0-07AU-WI-BLSTD-01"
+      },
+      {
+        "title": "Included sensor and standard warranty",
+        "url": "https://ohme-ev.com/au/installer-resources/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian product arrival announcement",
+        "url": "https://ohme-ev.com/au/news-and-press/ohme-ev-chargers-australia/",
+        "kind": "Manufacturer Australian information",
+        "revision": "20 May 2024"
+      }
+    ],
+    "brand": "Ohme",
+    "image": {
+      "src": "/products/ev-chargers/ohme-epod-au-74.webp",
+      "alt": "Ohme Australian Wi-Fi ePod EP0-07AU-WI-BLSTD-01, cropped from its November 2024 maker datasheet",
+      "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+    },
+    "pros": [
+      "A removable cable can suit different car connectors without replacing the wall charger.",
+      "The included power sensor adjusts charging around other household electricity use.",
+      "Physical buttons let you control charging at the unit."
+    ],
+    "cons": [
+      "You need to supply a separate car charging cable.",
+      "Charging information uses status lights and the app rather than a screen."
+    ],
+    "measurements": {
+      "cost": null,
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "EP0-07AU-WI-BLSTD-01",
+        "basis": "Maximum specified AC charging output at 32 A on single-phase supply; car and installation can limit actual output.",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "EP0-07AU-WI-BLSTD-01",
+        "basis": "36 months from installation for manufacturing-defect parts and labour on the listed Australian device; separate charging cable is not included.",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Ohme-ePod-Wifi-Product-Manual-v0.2.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian order code",
+        "value": "EP0-07AU-WI-BLSTD-01",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "Rated charging output and supply",
+        "value": "7.4 kW / 32 A; single-phase 240 V AC, 50 Hz",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "Type 2 socket; separate car charging cable needed",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "On-unit control",
+        "value": "Three buttons and five-colour status light; no screen",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "Phone connection",
+        "value": "Wi-Fi only for this exact AU model",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "Solar and household power control",
+        "value": "Working current-sensor clamp required; provided by Ohme",
+        "sourceUrl": "https://ohme-ev.com/au/installer-resources/"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "230 x 140 x 100 mm",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "Weather protection and operating temperature",
+        "value": "IP54; -25 to 50 degrees C",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-ePod-7.4kW.pdf"
+      },
+      {
+        "label": "Product parts and labour",
+        "value": "36 months from installation; separate car cable not included",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Ohme-ePod-Wifi-Product-Manual-v0.2.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "Australian Wi-Fi ePod EP0-07AU-WI-BLSTD-01",
+      "released": "2024-05-20",
+      "sourceUrl": "https://ohme-ev.com/au/news-and-press/ohme-ev-chargers-australia/",
+      "note": "This dates the Australian product arrival, not the earlier UK ePod launch. Exact AU Wi-Fi model confirmed by the November 2024 sheet."
+    }
+  },
+  {
+    "id": "ohme-home-pro-au-74-5m",
+    "name": "Ohme Home Pro AU 7.4 kW, 5 m cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian Home Pro Wi-Fi/Bluetooth specifications",
+        "url": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2024 AU datasheet"
+      },
+      {
+        "title": "Included cable, sensor and standard warranty",
+        "url": "https://ohme-ev.com/au/installer-resources/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian Home Pro introduction",
+        "url": "https://ohme-ev.com/au/news-and-press/ohme-home-pro-australia/",
+        "kind": "Manufacturer Australian information",
+        "revision": "15 October 2024"
+      }
+    ],
+    "brand": "Ohme",
+    "image": {
+      "src": "/products/ev-chargers/ohme-home-pro-au-74-5m.webp",
+      "alt": "Ohme Australian Home Pro Wi-Fi/Bluetooth housing, cropped from its exact October 2024 AU maker datasheet; cable partly shown",
+      "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+    },
+    "pros": [
+      "The screen and buttons let you set charging schedules at the charger.",
+      "A fixed 5-metre cable is included, so you do not need a separate charging lead.",
+      "The included power sensor adjusts charging around your home's other electricity use."
+    ],
+    "cons": [
+      "Solar charging is unavailable in Bluetooth-only mode."
+    ],
+    "measurements": {
+      "cost": null,
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "HP5-07AU-WI-BLSTD-01, 5 m cable",
+        "basis": "Maximum specified AC charging output at 32 A on single-phase supply; car and installation can limit actual output.",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "HP5-07AU-WI-BLSTD-01",
+        "basis": "Current manufacturer Australian installer listing states three-year standard product cover; installation is separate.",
+        "sourceUrl": "https://ohme-ev.com/au/installer-resources/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian order code",
+        "value": "HP5-07AU-WI-BLSTD-01; 5 m cable version",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Rated charging output and supply",
+        "value": "7.4 kW / 32 A; single-phase 230/240 V AC, 50 Hz",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "Fixed Type 2 cable, 5 m; 8 m is a different order code",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "On-unit control",
+        "value": "Colour screen and three buttons",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Phone connection",
+        "value": "Wi-Fi or Bluetooth for the exact AU version",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Solar charging boundary",
+        "value": "Requires Wi-Fi and internet; unavailable in Bluetooth-only mode",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Household power sensor",
+        "value": "Current-sensor clamp included for load balancing",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "170 x 200 x 100 mm",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Weather protection and operating temperature",
+        "value": "IP55; -25 to 45 degrees C",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Standard product warranty",
+        "value": "Three years; installation is separate",
+        "sourceUrl": "https://ohme-ev.com/au/installer-resources/"
+      }
+    ],
+    "freshness": {
+      "generation": "Australian Home Pro Wi-Fi/Bluetooth HP5 model",
+      "released": "2024-10-15",
+      "sourceUrl": "https://ohme-ev.com/au/news-and-press/ohme-home-pro-australia/",
+      "note": "This dates the Australian Home Pro introduction. The exact October 2024 AU Wi-Fi/Bluetooth sheet is authoritative over the generic resources page Wi-Fi-only wording."
+    }
+  }
+]

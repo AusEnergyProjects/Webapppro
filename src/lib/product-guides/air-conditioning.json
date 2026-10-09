@@ -1,211 +1,7 @@
 [
   {
-    "id": "daikin-alira-x",
-    "name": "Daikin Alira X",
-    "group": "Room comfort and smart controls",
-    "fit": "A frequently used bedroom or living room where airflow direction and phone control matter.",
-    "why": "Built-in Wi-Fi and adjustable airflow help you manage comfort around where people sit.",
-    "check": "Select the heating-and-cooling version if you need a heater. Ask for the exact model's climate label, rather than a star rating for the whole range.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/alira-x",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Daikin",
-    "image": {
-      "src": "/products/air-conditioning/daikin-alira-x.webp",
-      "alt": "Daikin Alira X wall-mounted indoor air-conditioning unit; manufacturer range photograph",
-      "sourceUrl": "https://static.wixstatic.com/media/b0568f_60da5f4bd9714f92baea286717d9d183~mv2.jpg"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Adjustable airflow helps steer the breeze away from where you sit.",
-        "con": "Choose the heating version; positioning and settings determine whether airflow reaches the room comfortably."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built in.",
-        "con": "Remote access needs setup, a compatible phone and a working internet connection."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
-    ]
-  },
-  {
-    "id": "daikin-cora",
-    "name": "Daikin Cora",
-    "group": "Everyday room heating and cooling",
-    "fit": "Someone wanting room heating and cooling with simple temperature control.",
-    "why": "Half-degree temperature adjustment and airflow that can travel along the ceiling provide useful everyday control.",
-    "check": "Phone control is an optional extra. Confirm it is included if the quote promises app access.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/cora",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Daikin",
-    "image": {
-      "src": "/products/air-conditioning/daikin-cora.webp",
-      "alt": "Daikin Cora wall-mounted indoor air-conditioning unit; manufacturer range photograph",
-      "sourceUrl": "https://static.wixstatic.com/media/b0568f_5da69d61bc5d4f47901a17ac68f85568~mv2.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Air can travel along the ceiling, reducing a direct cold breeze.",
-        "con": "Position determines where air reaches; choose the heating-and-cooling version if you need winter warmth."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is available as an optional extra.",
-        "con": "Quote must include the adapter and setup; remote access needs internet."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
-    ]
-  },
-  {
-    "id": "daikin-lite",
-    "name": "Daikin Lite",
-    "group": "Everyday room heating and cooling",
-    "fit": "A household that wants a straightforward remote and timer without paying for every added feature.",
-    "why": "A backlit remote, on/off timer and half-degree temperature settings keep day-to-day use simple.",
-    "check": "Choose by the quoted model's heating and cooling label. The maker's best star and noise figures apply to particular sizes.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/lite-systems",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Daikin",
-    "image": {
-      "src": "/products/air-conditioning/daikin-lite.webp",
-      "alt": "Daikin Lite wall-mounted indoor air-conditioning unit; manufacturer range photograph",
-      "sourceUrl": "https://static.wixstatic.com/media/b0568f_a3a455b07a52413c9b3ab8379ca1b021~mv2.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Ceiling-directed airflow helps keep the cold breeze above where you sit.",
-        "con": "Choose the heating-and-cooling version for winter; positioning still determines whether air reaches the room."
-      },
-      {
-        "criterion": "controls",
-        "pro": null,
-        "con": "Phone control was not verified; ask whether an adapter and app support are available."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
-    ]
-  },
-  {
-    "id": "daikin-xl",
-    "name": "Daikin XL / XL Premium",
-    "group": "Larger open rooms",
-    "fit": "A large open living area that needs more output than a small bedroom unit.",
-    "why": "The range includes larger wall-mounted systems designed to move air across open spaces.",
-    "check": "An open room still needs a sizing assessment. A large unit in the lounge will not reliably heat closed bedrooms; XL and XL Premium have different specifications.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/xl-series",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Daikin",
-    "image": {
-      "src": "/products/air-conditioning/daikin-xl.webp",
-      "alt": "Daikin XL wall-mounted indoor air-conditioning unit; representative XL range photograph",
-      "sourceUrl": "https://static.wixstatic.com/media/b0568f_d98c14586d9346f8968ad0ececefe5f2~mv2.jpg"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Adjustable airflow helps reach across a larger open living area.",
-        "con": "Air will not reliably reach closed rooms; choose the heating-and-cooling version for winter."
-      },
-      {
-        "criterion": "controls",
-        "pro": null,
-        "con": "Phone controls were not verified; check the exact XL or XL Premium model and any extra equipment."
-      },
-      {
-        "criterion": "installation",
-        "pro": "One wall unit can serve a large open room.",
-        "con": "Installer must size it for that area; closed bedrooms may need their own units."
-      }
-    ]
-  },
-  {
-    "id": "daikin-floor-standing",
-    "name": "Daikin Floor Standing",
-    "group": "Low wall installation",
-    "fit": "A room with limited high wall space, particularly where winter heating is the priority.",
-    "why": "Low-level airflow and heating modes put warmth near the floor, with filters easier to reach.",
-    "check": "Furniture must leave the outlets clear. Have the installer check the position and the exact model's winter output.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Daikin",
-    "image": {
-      "src": "/products/air-conditioning/daikin-floor-standing.webp",
-      "alt": "Daikin floor-standing indoor air-conditioning unit; manufacturer range photograph",
-      "sourceUrl": "https://static.wixstatic.com/media/ea7b3d_837f3802ae944e39b6d029ff5bef0b9d~mv2.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Air starts after warming, then lower outlets send warmth near floor level.",
-        "con": "Furniture can block the outlets; ask whether the position heats your seating area comfortably."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built into the current range.",
-        "con": "Confirm the quoted model and setup; remote access needs a working internet connection."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Fits rooms with little high wall space.",
-        "con": "Furniture must leave outlets clear, with access for cleaning and an outdoor unit."
-      }
-    ]
-  },
-  {
     "id": "mitsubishi-electric-ap",
-    "name": "Mitsubishi Electric MSZ-AP",
-    "group": "Everyday room heating and cooling",
-    "fit": "A bedroom, study or living room used on a regular schedule.",
-    "why": "Night mode reduces light and beeps, while a weekly timer follows your routine. Current VGKD2 models include Wi-Fi.",
-    "check": "Older AP versions can require a separate Wi-Fi adapter. Low noise figures apply to a specific size and operating mode.",
+    "name": "Mitsubishi Electric AP 3.5 kW Wi-Fi",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -213,79 +9,108 @@
         "url": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      },
+      {
+        "title": "Built-in Wi-Fi generation announcement",
+        "url": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+        "kind": "Manufacturer AU information",
+        "revision": "1 April 2025"
+      },
+      {
+        "title": "Residential warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Listed complete equipment-kit price",
+        "url": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa",
+        "kind": "Australian retailer equipment price",
+        "revision": "Live public equipment price checked 10 October 2026"
       }
     ],
     "brand": "Mitsubishi Electric",
     "image": {
       "src": "/products/air-conditioning/mitsubishi-electric-ap.webp",
-      "alt": "Mitsubishi Electric MSZ-AP 70/80 wall-mounted indoor unit; representative AP range photograph",
-      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/AP_70-80HP_front-1920x1440-1-1200x900.png"
+      "alt": "Mitsubishi Electric AP35 VGKD2 3.5 kW indoor unit, cropped from the exact current retailer kit photograph",
+      "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
     },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Air flaps let you steer the breeze up, down and sideways.",
-        "con": "Check the chosen size's reach; airflow cannot reliably serve rooms behind closed doors."
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 3.5,
+        "unit": "zoned-heating-stars",
+        "variant": "MSZ-AP35VGKD2 / MUZ-AP35VGD2",
+        "basis": "Manufacturer zoned label: Average/Mixed climate heating stars for the exact 3.5 kW pair; not the best rating across the range.",
+        "basisId": "mixed-climate-heating-stars",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "controls",
-        "pro": "Current versions include phone control.",
-        "con": "Older versions may need an adapter; check the full model and home internet connection."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Mitsubishi Electric MSZ-AP",
+        "basis": "Included residential indoor and outdoor units: five-year parts cover for manufacturing defects; five-year labour separately.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
       }
-    ]
-  },
-  {
-    "id": "mitsubishi-electric-gs",
-    "name": "Mitsubishi Electric MSZ-GS",
-    "group": "Everyday room heating and cooling",
-    "fit": "Someone who values easy cleaning and a straightforward heating-and-cooling system.",
-    "why": "The accessible vane and guards make it easier to reach the inside for cleaning.",
-    "check": "Wi-Fi and advanced filters are optional. Get those accessories listed in the quote if you want them.",
-    "checkedAt": "2026-10-10",
-    "sources": [
+    },
+    "freshness": {
+      "generation": "MSZ-AP VGKD2 built-in Wi-Fi update",
+      "released": "2025-04-01",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+      "note": "Australian built-in Wi-Fi update announced 1 April 2025. This dates the control update, not the original range."
+    },
+    "technicalSpecs": [
       {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.mitsubishielectric.com.au/product/msz-gs25-80vfd-split-system-air-conditioner/",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
+        "label": "Matched example",
+        "value": "MSZ-AP35VGKD2 / MUZ-AP35VGD2",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/"
+      },
+      {
+        "label": "Cooling output",
+        "value": "3.5 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/"
+      },
+      {
+        "label": "Heating output",
+        "value": "3.7 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "299 x 798 x 219 mm",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi; account and internet required",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years residential",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      },
+      {
+        "label": "Equipment price boundary",
+        "value": "Retailer A2 supply suffix is not matched to the maker performance table; cost score withheld.",
+        "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
       }
     ],
-    "brand": "Mitsubishi Electric",
-    "image": {
-      "src": "/products/air-conditioning/mitsubishi-electric-gs.webp",
-      "alt": "Mitsubishi Electric MSZ-GS 25/35 indoor unit; representative GS range photograph",
-      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/07/MSZ-GS25_35VFD-1920x1440-1-1200x900.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": null,
-        "con": "Airflow direction and draught controls were not verified; ask how air can be aimed away from seating."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is available with optional Wi-Fi equipment.",
-        "con": "Adapter and setup must be included in the quote; remote access needs internet."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Accessible vanes and guards make cleaning easier.",
-        "con": "Still needs clear airflow, suitable wall space and a separate outdoor unit."
-      }
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "Air flaps steer the breeze up, down and sideways.",
+      "Its 79.8 cm-wide body uses less wall width than the 88.5 cm EF."
+    ],
+    "cons": [
+      "Its 21.9 cm depth makes it thicker than the 19.5 cm EF."
     ]
   },
   {
     "id": "mitsubishi-electric-ef",
-    "name": "Mitsubishi Electric MSZ-EF",
-    "group": "Room comfort and smart controls",
-    "fit": "A room where the indoor unit's appearance matters as well as comfort.",
-    "why": "A slim design, several finishes and a weekly timer offer more choice for the room's look and routine.",
-    "check": "Appearance does not establish lower running costs. Compare the exact indoor/outdoor pair and confirm its built-in Wi-Fi version.",
+    "name": "Mitsubishi Electric EF 3.5 kW Wi-Fi",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -293,6 +118,18 @@
         "url": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      },
+      {
+        "title": "Built-in Wi-Fi generation announcement",
+        "url": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+        "kind": "Manufacturer AU information",
+        "revision": "1 April 2025"
+      },
+      {
+        "title": "Residential warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
       }
     ],
     "brand": "Mitsubishi Electric",
@@ -301,71 +138,77 @@
       "alt": "Mitsubishi Electric MSZ-EF white wall-mounted indoor unit; representative EF range photograph",
       "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/MSZ-EF_W_front-1200x800.jpg"
     },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": null,
-        "con": "Draught-avoidance controls were not established; ask how to aim air away from seating."
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "variant": "MSZ-EF35VGKD-A1 / MUZ-EF35VGD-A1",
+        "basis": "Manufacturer zoned label: Average/Mixed climate heating stars for the exact 3.5 kW pair; not the best rating across the range.",
+        "basisId": "mixed-climate-heating-stars",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "controls",
-        "pro": "Current versions include phone control.",
-        "con": "Confirm the quoted version includes it; remote access needs internet and a compatible phone."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Several finishes help match the room's appearance.",
-        "con": "Slim styling still needs wall space, clear airflow and an outdoor unit."
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Mitsubishi Electric MSZ-EF",
+        "basis": "Included residential indoor and outdoor units: five-year parts cover for manufacturing defects; five-year labour separately.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
       }
-    ]
-  },
-  {
-    "id": "mitsubishi-electric-ln",
-    "name": "Mitsubishi Electric MSZ-LN",
-    "group": "Room comfort and smart controls",
-    "fit": "Someone bothered by draughts who wants more control over where the air goes.",
-    "why": "Separately moving airflow flaps and a room sensor can direct air towards or away from occupied areas.",
-    "check": "Extra sensors do not replace correct sizing or filter cleaning. Compare the climate label before paying more for comfort features.",
-    "checkedAt": "2026-10-10",
-    "sources": [
+    },
+    "freshness": {
+      "generation": "MSZ-EF VGKD-A1 built-in Wi-Fi update",
+      "released": "2025-04-01",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+      "note": "Australian built-in Wi-Fi update announced 1 April 2025. This dates the control update, not the original range."
+    },
+    "technicalSpecs": [
       {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.mitsubishielectric.com.au/product/msz-ln25-35-50-60v-b-r-a1/",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
+        "label": "Matched example",
+        "value": "MSZ-EF35VGKD-A1 / MUZ-EF35VGD-A1",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/"
+      },
+      {
+        "label": "Cooling output",
+        "value": "3.5 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.0 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "299 x 885 x 195 mm",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi; account and internet required",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years residential",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
       }
     ],
-    "brand": "Mitsubishi Electric",
-    "image": {
-      "src": "/products/air-conditioning/mitsubishi-electric-ln.webp",
-      "alt": "Mitsubishi Electric MSZ-LN wall-mounted indoor unit; representative LN range photograph",
-      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/MSZ-LN_W_front-1920x1440-1-1200x900.png"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Separate flaps and a room sensor can steer air towards or away from occupied areas.",
-        "con": "Check settings for your seating positions; sensors do not replace correct unit placement."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built in.",
-        "con": "Remote access needs internet, a compatible phone and account setup."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
+    "pros": [
+      "Choose white, silver or black to suit the room.",
+      "Only 19.5 cm deep, so the body sits closer to the wall.",
+      "Built-in phone control and weekly schedules help you manage daily routines."
+    ],
+    "cons": [
+      "At 88.5 cm wide, it needs more wall width than the 79.8 cm AP."
     ]
   },
   {
     "id": "mitsubishi-electric-kw",
-    "name": "Mitsubishi Electric MFZ-KW",
-    "group": "Low wall installation",
-    "fit": "A room where a low wall unit makes more sense than a high wall unit.",
-    "why": "Multiple airflow outlets, heating controls and a weekly timer make it a useful floor-console option.",
-    "check": "Allow clear airflow and maintenance access. Confirm which KW version and Wi-Fi equipment the quote includes.",
+    "name": "Mitsubishi Electric KW 3.5 kW Wi-Fi",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -373,6 +216,18 @@
         "url": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      },
+      {
+        "title": "Built-in Wi-Fi generation announcement",
+        "url": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+        "kind": "Manufacturer AU information",
+        "revision": "1 April 2025"
+      },
+      {
+        "title": "Residential warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
       }
     ],
     "brand": "Mitsubishi Electric",
@@ -381,31 +236,77 @@
       "alt": "Mitsubishi Electric MFZ-KW floor-console indoor air-conditioning unit; manufacturer range photograph",
       "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/MFZ-KW-VG-front-1920x1440-1-1200x900.png"
     },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Multiple outlets let you adjust where warm or cool air goes.",
-        "con": "Furniture can block those outlets and redirect the airflow."
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "variant": "MFZ-KW35VGK-A1 / MUFZ-KW35VG2-A1",
+        "basis": "Manufacturer zoned label: Average/Mixed climate heating stars for the exact 3.5 kW pair; not the best rating across the range.",
+        "basisId": "mixed-climate-heating-stars",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/",
+        "checkedAt": "2026-10-10"
       },
-      {
-        "criterion": "controls",
-        "pro": null,
-        "con": "The maker lists both built-in and optional phone control; confirm the adapter for your exact KW version."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Fits low on a wall when high wall space is limited.",
-        "con": "Needs clear floor-level airflow, room for servicing and an outdoor unit."
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Mitsubishi Electric MFZ-KW",
+        "basis": "Included residential indoor and outdoor units: five-year parts cover for manufacturing defects; five-year labour separately.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
       }
+    },
+    "freshness": {
+      "generation": "MFZ-KW VGK-A1 built-in Wi-Fi update",
+      "released": "2025-04-01",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+      "note": "Australian built-in Wi-Fi update announced 1 April 2025. This dates the control update, not the original range."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Matched example",
+        "value": "MFZ-KW35VGK-A1 / MUFZ-KW35VG2-A1",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/"
+      },
+      {
+        "label": "Cooling output",
+        "value": "3.5 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.3 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "600 x 750 x 215 mm",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi; account and internet required",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years residential",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      }
+    ],
+    "pros": [
+      "Low-wall design suits rooms without spare high wall space.",
+      "Can be recessed to reduce its visible depth from 21.5 cm to 14.5 cm.",
+      "Downward warm airflow helps warm the room at floor level."
+    ],
+    "cons": [
+      "Floor-level outlets need a clear path; sofas and other furniture can block them."
     ]
   },
   {
     "id": "mhi-avanti",
-    "name": "Mitsubishi Heavy Industries Avanti",
-    "group": "Everyday room heating and cooling",
-    "fit": "A small or medium room where you want practical timers and airflow controls.",
-    "why": "LED brightness adjustment, quiet operation settings and adjustable airflow support everyday room use.",
-    "check": "The range includes cooling-only and heating-and-cooling versions. Built-in Wi-Fi belongs to WF1 versions; check the full model code.",
+    "name": "MHI Avanti WF1",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -419,6 +320,12 @@
         "url": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
         "kind": "Manufacturer information",
         "revision": "Current public AU page, checked 10 October 2026"
+      },
+      {
+        "title": "WF1 Australian introduction",
+        "url": "https://commercial.mhiaa.com.au/mitsubishi-heavy-industries-expands-their-award-winning-split-systems/",
+        "kind": "Manufacturer AU information",
+        "revision": "8 November 2024"
       }
     ],
     "brand": "Mitsubishi Heavy Industries",
@@ -427,31 +334,62 @@
       "alt": "Mitsubishi Heavy Industries Avanti DXK06ZSA-WF1 indoor unit; representative Avanti range photograph",
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Automatic swinging flaps can move air around the room.",
-        "con": "Choose the heating-and-cooling version; positioning and settings determine whether airflow reaches seating comfortably."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built into WF1 versions.",
-        "con": "Other versions need checking for adapter support; phone access needs internet and an account."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Mitsubishi Heavy Industries Avanti",
+        "basis": "Manufacturer residential five-year parts and labour cover for the air-conditioning system; installation and maintenance conditions apply.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
+        "checkedAt": "2026-10-10"
       }
-    ]
+    },
+    "freshness": {
+      "generation": "Avanti WF1",
+      "released": "2024-11-08",
+      "sourceUrl": "https://commercial.mhiaa.com.au/mitsubishi-heavy-industries-expands-their-award-winning-split-systems/",
+      "note": "Australian manufacturer announced the WF1 built-in Wi-Fi update on 8 November 2024; not the original family launch."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Current generation",
+        "value": "Avanti WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+      },
+      {
+        "label": "Placement",
+        "value": "Wall-mounted indoor unit plus matched outdoor unit",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi on this WF generation",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+      },
+      {
+        "label": "Airflow",
+        "value": "Motorised swing adjusts airflow",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years residential",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+      }
+    ],
+    "pros": [
+      "Phone control is built into the WF1 version.",
+      "The included fine-particle filter captures smoke and dust particles.",
+      "Weekly schedules let you plan heating and cooling around your routine."
+    ],
+    "cons": []
   },
   {
     "id": "mhi-avanti-plus",
-    "name": "Mitsubishi Heavy Industries Avanti Plus",
-    "group": "Room comfort and smart controls",
-    "fit": "A regularly used room where automatic control and reduced operation while empty are useful.",
-    "why": "A motion sensor can adjust operation when the room is unoccupied; current WF models add built-in phone control.",
-    "check": "Check sensor settings for people sitting still or sleeping. Earlier versions can need an optional Wi-Fi adapter.",
+    "name": "MHI Avanti PLUS WF",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -467,31 +405,62 @@
       "alt": "Mitsubishi Heavy Industries Avanti Plus WF indoor unit; representative Avanti Plus range photograph",
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/12/WebCategoryImages_AVANTIPLUS_588x330_12.24.png"
     },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Automatic swinging flaps can spread air across the room.",
-        "con": "Aim it around seating; automatic swinging does not guarantee freedom from draughts."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built into current WF versions.",
-        "con": "Older versions can need an extra adapter; phone access needs internet and an account."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Mitsubishi Heavy Industries Avanti Plus",
+        "basis": "Manufacturer residential five-year parts and labour cover for the air-conditioning system; installation and maintenance conditions apply.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+        "checkedAt": "2026-10-10"
       }
-    ]
+    },
+    "freshness": {
+      "generation": "Avanti PLUS WF",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Current generation",
+        "value": "Avanti PLUS WF",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/"
+      },
+      {
+        "label": "Placement",
+        "value": "Wall-mounted indoor unit plus matched outdoor unit",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi on this WF generation",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/"
+      },
+      {
+        "label": "Airflow",
+        "value": "Motorised swing adjusts airflow",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years residential",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/"
+      }
+    ],
+    "pros": [
+      "An activity sensor adjusts temperature or switches off when no movement is detected.",
+      "Automatic mode switches between heating and cooling as room conditions change.",
+      "Phone control is built into the WF version."
+    ],
+    "cons": []
   },
   {
     "id": "mhi-bronte",
-    "name": "Mitsubishi Heavy Industries Bronte",
-    "group": "Larger open rooms",
-    "fit": "A medium or large open room needing longer-reaching airflow.",
-    "why": "The larger wall-mounted range and adjustable airflow give installers options for open living areas.",
-    "check": "Long airflow does not guarantee comfort around corners or behind closed doors. Confirm the heating-and-cooling version and Wi-Fi suffix.",
+    "name": "MHI Bronte WF1",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -505,6 +474,12 @@
         "url": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
         "kind": "Manufacturer information",
         "revision": "Current public AU page, checked 10 October 2026"
+      },
+      {
+        "title": "WF1 Australian introduction",
+        "url": "https://commercial.mhiaa.com.au/mitsubishi-heavy-industries-expands-their-award-winning-split-systems/",
+        "kind": "Manufacturer AU information",
+        "revision": "8 November 2024"
       }
     ],
     "brand": "Mitsubishi Heavy Industries",
@@ -513,31 +488,63 @@
       "alt": "Mitsubishi Heavy Industries Bronte SRK63ZRA-WF1 indoor unit; representative Bronte range photograph",
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/01/WebHeroImages_768x341_BRONTE_12.24.png"
     },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Longer-reaching adjustable airflow helps in large open rooms.",
-        "con": "Air will not reliably reach around corners or closed doors; confirm the heating-and-cooling version."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built into WF1 versions.",
-        "con": "Other versions need checking for adapter support; phone access needs internet and an account."
-      },
-      {
-        "criterion": "installation",
-        "pro": "One wall unit can serve a larger open area.",
-        "con": "Installer must check room shape and sizing; closed rooms may need separate units."
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Mitsubishi Heavy Industries Bronte",
+        "basis": "Manufacturer residential five-year parts and labour cover for the air-conditioning system; installation and maintenance conditions apply.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+        "checkedAt": "2026-10-10"
       }
+    },
+    "freshness": {
+      "generation": "Bronte WF1",
+      "released": "2024-11-08",
+      "sourceUrl": "https://commercial.mhiaa.com.au/mitsubishi-heavy-industries-expands-their-award-winning-split-systems/",
+      "note": "Australian manufacturer announced the WF1 built-in Wi-Fi update on 8 November 2024; not the original family launch."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Current generation",
+        "value": "Bronte WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/"
+      },
+      {
+        "label": "Placement",
+        "value": "Wall-mounted indoor unit plus matched outdoor unit",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi on this WF generation",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/"
+      },
+      {
+        "label": "Airflow",
+        "value": "Motorised swing adjusts airflow",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years residential",
+        "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/"
+      }
+    ],
+    "pros": [
+      "Long-reaching airflow is designed for larger open living areas.",
+      "The WF1 version includes phone control and a fine-particle filter."
+    ],
+    "cons": [
+      "No sizes below 6.3 kW are offered in this range."
     ]
   },
   {
     "id": "general-lifestyle-next",
     "name": "GENERAL Lifestyle Next",
-    "group": "Room comfort and smart controls",
-    "fit": "Someone who wants heating and cooling that can follow their schedule through an app.",
-    "why": "The supplied Wi-Fi adaptor supports scheduling and location-based controls through the maker's app.",
-    "check": "App features need the compatible adaptor, account and connection. Confirm the model and where it can be purchased; GENERAL was formerly Fujitsu General.",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -553,191 +560,56 @@
       "alt": "GENERAL Lifestyle Next ASTG09KMTC indoor unit; representative Lifestyle Next range photograph",
       "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/shared-album/product-tiles/astg09kmtc673304b5-2f59-46d2-aef2-838e2e37218a.jpg?sfvrsn=cf2505f_7"
     },
-    "comparisons": [
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": null
+    },
+    "freshness": {
+      "generation": "Lifestyle Next range with supplied phone adapter",
+      "released": null,
+      "sourceUrl": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
       {
-        "criterion": "comfort",
-        "pro": null,
-        "con": "Ask about aiming airflow away from seating; confirm the version provides heating if you need it."
+        "label": "Current Australian range",
+        "value": "Lifestyle Next",
+        "sourceUrl": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range"
       },
       {
-        "criterion": "controls",
-        "pro": "A phone-control adapter is supplied with this range.",
-        "con": "App needs a compatible phone, account and internet; check which features are available."
+        "label": "Placement",
+        "value": "Wall-mounted indoor unit plus matched outdoor unit",
+        "sourceUrl": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range"
       },
       {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
-    ]
-  },
-  {
-    "id": "general-comfort",
-    "name": "GENERAL Comfort",
-    "group": "Everyday room heating and cooling",
-    "fit": "A household looking for a straightforward wall-mounted heating-and-cooling option.",
-    "why": "The current Australian range offers inverter models for different room sizes, with ordinary remote control.",
-    "check": "Comfort Cooling is a separate cooling-only range. Ask for the exact heating-and-cooling pair, climate rating and any optional phone-control cost.",
-    "checkedAt": "2026-10-10",
-    "sources": [
+        "label": "Phone control",
+        "value": "Supplied adapter; account and internet required",
+        "sourceUrl": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range"
+      },
       {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
+        "label": "Heating version",
+        "value": "Confirm reverse-cycle model",
+        "sourceUrl": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range"
+      },
+      {
+        "label": "Climate rating",
+        "value": "Exact matched model label needed; no family star rating used",
+        "sourceUrl": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range"
       }
     ],
-    "brand": "GENERAL",
-    "image": {
-      "src": "/products/air-conditioning/general-comfort.webp",
-      "alt": "GENERAL Comfort ASTH09KNCA indoor unit; representative Comfort range photograph",
-      "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/shared-album/product-tiles/fujitsu-airstage-products/asth0709knca.png?sfvrsn=183ec9ab_3"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": null,
-        "con": "Airflow direction was not verified; ask about draughts and choose the heating-and-cooling version."
-      },
-      {
-        "criterion": "controls",
-        "pro": null,
-        "con": "Phone control was not verified for every version; ask which adapter and app the quote includes."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
-    ]
-  },
-  {
-    "id": "general-floor-console",
-    "name": "GENERAL Floor Console",
-    "group": "Low wall installation",
-    "fit": "Someone with little high wall space who wants heating and cooling from a low-level unit.",
-    "why": "The Australian model page identifies a matched heating-and-cooling pair and separate ratings for hot, average and cold climates.",
-    "check": "The quoted pair must suit your room and climate. Keep furniture clear of its outlets; the model number matters more than the family name.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.generalairstage.com.au/product/set-agtg09kvca",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
+    "pros": [
+      "The supplied adapter adds phone control without buying separate hardware.",
+      "Weekly schedules let you time heating and cooling around your routine.",
+      "Low-noise mode reduces outdoor noise during quieter hours."
     ],
-    "brand": "GENERAL",
-    "image": {
-      "src": "/products/air-conditioning/general-floor-console.webp",
-      "alt": "GENERAL AGTG09KVCA floor-console indoor air-conditioning unit; representative range photograph",
-      "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/articles/agtg09kvca060230fd-dbbd-4983-8d37-66121410c771.jpg?sfvrsn=6c24aa70_1"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": null,
-        "con": "Ask how its airflow is aimed away from seating; keep furniture clear of outlets."
-      },
-      {
-        "criterion": "controls",
-        "pro": null,
-        "con": "Phone controls were not verified; confirm the exact model's adapter support, compatible app and setup."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Fits rooms where high wall space is limited.",
-        "con": "Keep furniture clear of the outlets; outdoor placement and electrical work still need checking."
-      }
-    ]
-  },
-  {
-    "id": "panasonic-hz",
-    "name": "Panasonic HZ (YKR)",
-    "group": "Room comfort and smart controls",
-    "fit": "A room where cooling comfort, humidity control and remote scheduling matter.",
-    "why": "Built-in Wi-Fi, adjustable airflow and a humidity sensor provide more control over comfort.",
-    "check": "The humidity feature works within the system's cooling controls. It is not whole-home ventilation, and air-cleaning marketing is not proof of a health benefit.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/ultra-premium-reverse-cycle-inverter-hz-series-ykr.html",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Panasonic",
-    "image": {
-      "src": "/products/air-conditioning/panasonic-hz.webp",
-      "alt": "Panasonic CS-HZ35YKR indoor unit; representative HZ YKR range photograph",
-      "sourceUrl": "https://www.airwaresales.com.au/wp-content/uploads/2024/09/panasonic-hz-series-2.5kw-3.5kw.jpg"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Adjustable airflow helps steer the breeze through the room.",
-        "con": "Confirm whether direction is manual or automatic, and how it avoids your seating area."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built in through Comfort Cloud.",
-        "con": "Remote access needs internet, a compatible phone and account setup."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Select the right size for winter; plan outdoor placement, pipework and electrical work."
-      }
-    ]
-  },
-  {
-    "id": "panasonic-z",
-    "name": "Panasonic Z (AKR)",
-    "group": "Room comfort and smart controls",
-    "fit": "Someone wanting heating and cooling with built-in phone control and directed airflow.",
-    "why": "Comfort Cloud control and two airflow flaps let you schedule operation and adjust how air travels through the room.",
-    "check": "Z, RZ and HZ are different ranges. Get the exact indoor/outdoor pair and compare its climate label; do not assume every HZ feature is included.",
-    "checkedAt": "2026-10-10",
-    "sources": [
-      {
-        "title": "Manufacturer Australian product information",
-        "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/rac/z-akr/cu-cs-z35akrw.html",
-        "kind": "Manufacturer information",
-        "revision": "Current public page or linked AU document, checked 10 October 2026"
-      }
-    ],
-    "brand": "Panasonic",
-    "image": {
-      "src": "/products/air-conditioning/panasonic-z.webp",
-      "alt": "Panasonic CS-Z35AKRW indoor unit; representative Z AKR range photograph",
-      "sourceUrl": "https://cdn.shopify.com/s/files/1/0641/9388/8321/files/50091563_924164.png?v=1776228513"
-    },
-    "comparisons": [
-      {
-        "criterion": "comfort",
-        "pro": "Two air flaps help spread warm or cool air through the room.",
-        "con": "Check whether its airflow settings avoid your seating area; features differ from HZ."
-      },
-      {
-        "criterion": "controls",
-        "pro": "Phone control is built in through Comfort Cloud.",
-        "con": "Phone schedules need a compatible phone, account and internet connection."
-      },
-      {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
-      }
+    "cons": [
+      "Extra app features require a paid subscription."
     ]
   },
   {
     "id": "lg-dualcool-ai-standard",
-    "name": "LG DUALCOOL AI Air Standard",
-    "group": "Room comfort and smart controls",
-    "fit": "Someone who wants app control, scheduled operation and adjustable airflow in one room.",
-    "why": "Dual airflow vanes and ThinQ controls provide options for directing air and managing operation.",
-    "check": "Some automatic features require the app and connection. Energy targets shown by an app are not a guaranteed bill saving; confirm the exact AU pair.",
+    "name": "LG DUALCOOL AI Standard 3.5 kW",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -751,6 +623,24 @@
         "url": "https://www.lg.com/content/dam/channel/wcms/au/pdfs/LG_DualCool_AI_Air_Split_Systems_Brochure_Nov_25.pdf",
         "kind": "Manufacturer information",
         "revision": "November 2025 AU brochure; checked 10 October 2026"
+      },
+      {
+        "title": "Current 3.5 kW Standard system",
+        "url": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian upgraded Standard and Deluxe arrival",
+        "url": "https://www.lg.com/au/business/insights/air-solution/blog/lg-electronics-australia-launches-dualcool-ai-air-conditioner/",
+        "kind": "Manufacturer AU information",
+        "revision": "3 November 2025 announcement: available October 2025"
+      },
+      {
+        "title": "Listed complete equipment-kit price",
+        "url": "https://www.climatehvac.com.au/lg-dualcool-as12s0s-ai-air-standard-3.5kw-wall-spl",
+        "kind": "Australian retailer equipment price",
+        "revision": "Live public equipment price checked 10 October 2026"
       }
     ],
     "brand": "LG",
@@ -759,31 +649,63 @@
       "alt": "LG AS09S0S DUALCOOL AI Air Standard indoor air-conditioning unit",
       "sourceUrl": "https://www.climatehvac.com.au/assets/full/AS09S0S.png?20251112084440"
     },
-    "comparisons": [
+    "measurements": {
+      "cost": {
+        "value": 958,
+        "unit": "aud-system",
+        "variant": "AS12S0N / AS12S0U, AS12S0S 3.5 kW kit with wireless controller",
+        "basis": "Retailer complete 3.5 kW indoor/outdoor/controller equipment kit including GST, excluding installation and freight, before rebates. Listed price checked 10 October 2026; may change.",
+        "basisId": "single-ac-pair-gst",
+        "sourceUrl": "https://www.climatehvac.com.au/lg-dualcool-as12s0s-ai-air-standard-3.5kw-wall-spl",
+        "checkedAt": "2026-10-10"
+      },
+      "efficiency": null,
+      "warranty": null
+    },
+    "freshness": {
+      "generation": "DUALCOOL AI Air Standard AS12S0S",
+      "released": "2025-10",
+      "sourceUrl": "https://www.lg.com/au/business/insights/air-solution/blog/lg-electronics-australia-launches-dualcool-ai-air-conditioner/",
+      "note": "Upgraded Australian Standard and Deluxe ranges were available from October 2025; this is Australian arrival evidence."
+    },
+    "technicalSpecs": [
       {
-        "criterion": "comfort",
-        "pro": "Two air flaps offer direct or gentler airflow.",
-        "con": "Automatic direction needs your position set in the app; it does not track your movements."
+        "label": "Matched equipment kit",
+        "value": "AS12S0N indoor / AS12S0U outdoor",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/"
       },
       {
-        "criterion": "controls",
-        "pro": "Phone control is included through the ThinQ app.",
-        "con": "Remote access needs internet, an account and setup; some automatic features need extra app settings."
+        "label": "Cooling output",
+        "value": "3.5 kW",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/"
       },
       {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+        "label": "Phone control",
+        "value": "Built-in LG ThinQ Wi-Fi",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/"
+      },
+      {
+        "label": "Airflow",
+        "value": "Soft Air changes the direct breeze in supported modes",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/"
+      },
+      {
+        "label": "Warranty scope",
+        "value": "Full included-parts term not verified; compressor-only cover is not used",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/"
       }
+    ],
+    "pros": [
+      "Two air flaps offer a choice of direct or gentler airflow.",
+      "Phone control is included through the ThinQ app."
+    ],
+    "cons": [
+      "Automatic airflow uses the position you enter; it does not follow you around."
     ]
   },
   {
     "id": "samsung-geo-windfree",
-    "name": "Samsung AI Smart GEO WindFree",
-    "group": "Room comfort and smart controls",
-    "fit": "Someone who dislikes a direct cold draught once the room has cooled.",
-    "why": "WindFree mode spreads air through small openings, while built-in SmartThings control supports scheduling.",
-    "check": "It still needs ordinary airflow to bring the room to temperature. Some automatic modes need Wi-Fi and a Samsung account, with their own temperature limits.",
+    "name": "Samsung Geo WindFree AR12DX",
     "checkedAt": "2026-10-10",
     "sources": [
       {
@@ -799,22 +721,539 @@
       "alt": "Samsung AR12DXEANWKNSA AI Smart GEO WindFree indoor unit; representative range photograph",
       "sourceUrl": "https://images.samsung.com/is/image/samsung/p6pim/au/ar12dxeanwknsa/gallery/au-wall-mount-ar12dxeanwknsa-geo-windfree--purification-split-system-ai-smart-----kw-white-554025824?$Q90_684_547_JPG$"
     },
-    "comparisons": [
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": null
+    },
+    "freshness": {
+      "generation": "Geo WindFree AR12DXEANWKNSA",
+      "released": null,
+      "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
       {
-        "criterion": "comfort",
-        "pro": "Gentler airflow helps reduce cold draughts after the room cools.",
-        "con": "Normal airflow is still needed to cool the room down first."
+        "label": "Current Australian model",
+        "value": "AR12DXEANWKNSA",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
       },
       {
-        "criterion": "controls",
-        "pro": "Built-in phone control uses the SmartThings app.",
-        "con": "Needs internet and a Samsung account; some automatic settings work only within specified temperature limits."
+        "label": "Placement",
+        "value": "Wall-mounted indoor unit plus matched outdoor unit",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
       },
       {
-        "criterion": "installation",
-        "pro": "Wall-mounted indoor unit keeps your floor space free.",
-        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+        "label": "Phone control",
+        "value": "SmartThings; internet and Samsung account required",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
+      },
+      {
+        "label": "Airflow",
+        "value": "Gentler WindFree airflow after initial cooling",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
+      },
+      {
+        "label": "Heating version",
+        "value": "Confirm the matched reverse-cycle system on the quote",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
       }
+    ],
+    "pros": [
+      "WindFree spreads gentle air through small holes once the room has cooled.",
+      "Built-in SmartThings phone control lets you manage the unit remotely."
+    ],
+    "cons": [
+      "WindFree maintains an already-cooled room; normal airflow is needed to cool it down first."
     ]
+  },
+  {
+    "id": "emerald-select-split",
+    "name": "Emerald Select 3.5 kW",
+    "brand": "Emerald",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current Select split specification",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "2026.07 printed issue; June 2026 URL"
+      },
+      {
+        "title": "Air-conditioner warranty",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "December 2025 document; effective 1 July 2025"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/emerald-select-split.webp",
+      "alt": "Emerald Select wall-mounted indoor unit; representative current range photograph",
+      "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/11/Emerald-Air-Con-Split-System-indoor-unit-front.jpg"
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "variant": "Emerald Select split",
+        "basis": "Select: included five-year goods/parts cover across the system, before optional registration extension. Labour is two years.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "freshness": {
+      "generation": "Select ACSS35 matched 3.5 kW system",
+      "released": null,
+      "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "System example",
+        "value": "ACSS35; separate component codes not listed",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Cooling / heating output",
+        "value": "3.5 / 3.7 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Indoor size, width x height x depth",
+        "value": "850 x 270 x 208 mm",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Phone control",
+        "value": "Optional AC Link",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Parts cover",
+        "value": "Five years included; registration extension excluded",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf"
+      },
+      {
+        "label": "Labour cover",
+        "value": "Two years included",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf"
+      }
+    ],
+    "pros": [
+      "Swinging air flaps spread the breeze around the room."
+    ],
+    "cons": [
+      "Phone control needs the optional AC Link accessory; it is not built in.",
+      "Labour cover ends after two years, although parts cover lasts five years."
+    ]
+  },
+  {
+    "id": "lg-dualcool-ai-deluxe",
+    "name": "LG DUALCOOL AI Deluxe 3.5 kW",
+    "brand": "LG",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Australian Deluxe AH12S1S specification",
+        "url": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian upgraded ranges arrival",
+        "url": "https://www.lg.com/au/business/insights/air-solution/blog/lg-electronics-australia-launches-dualcool-ai-air-conditioner/",
+        "kind": "Manufacturer AU information",
+        "revision": "3 November 2025 announcement: available October 2025"
+      },
+      {
+        "title": "Listed complete equipment-kit price",
+        "url": "https://www.climatehvac.com.au/lg-dualcool-ah12s1s-ai-air-deluxe-3.5kw-wall-split",
+        "kind": "Australian retailer equipment price",
+        "revision": "Live public equipment price checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/lg-dualcool-ai-deluxe.webp",
+      "alt": "LG AH12S1S current DUALCOOL AI Deluxe indoor unit, cropped from its exact retailer kit photograph",
+      "sourceUrl": "https://www.climatehvac.com.au/lg-dualcool-ah12s1s-ai-air-deluxe-3.5kw-wall-split"
+    },
+    "measurements": {
+      "cost": {
+        "value": 1133,
+        "unit": "aud-system",
+        "variant": "AH12S1N / AH12S1U, AH12S1S 3.5 kW kit with wireless controller",
+        "basis": "Retailer complete 3.5 kW indoor/outdoor/controller equipment kit including GST, excluding installation and freight, before rebates. Listed price checked 10 October 2026; may change.",
+        "basisId": "single-ac-pair-gst",
+        "sourceUrl": "https://www.climatehvac.com.au/lg-dualcool-ah12s1s-ai-air-deluxe-3.5kw-wall-split",
+        "checkedAt": "2026-10-10"
+      },
+      "efficiency": null,
+      "warranty": null
+    },
+    "freshness": {
+      "generation": "DUALCOOL AI Air Deluxe AH12S1S",
+      "released": "2025-10",
+      "sourceUrl": "https://www.lg.com/au/business/insights/air-solution/blog/lg-electronics-australia-launches-dualcool-ai-air-conditioner/",
+      "note": "Upgraded Australian Deluxe range available from October 2025; maker model page also lists September 2025 launching month."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Matched equipment kit",
+        "value": "AH12S1N indoor / AH12S1U outdoor",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      },
+      {
+        "label": "Cooling / heating output",
+        "value": "3.5 / 3.7 kW",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      },
+      {
+        "label": "Indoor size, width x height x depth",
+        "value": "895 x 307 x 235 mm",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in LG ThinQ Wi-Fi",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      },
+      {
+        "label": "Soft Air limit",
+        "value": "Cooling, fan and supported AI modes; minimum 24 C in Soft Air cooling",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      },
+      {
+        "label": "Warranty scope",
+        "value": "Full included-parts term not verified; compressor-only cover is not used",
+        "sourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/"
+      }
+    ],
+    "pros": [
+      "Soft Air switches to an indirect breeze when your chosen temperature is reached.",
+      "Built-in phone control lets you adjust settings without reaching for the remote."
+    ],
+    "cons": [
+      "Soft Air cooling cannot be set below 24°C.",
+      "Automatic airflow uses a position entered in the app; it does not track you."
+    ]
+  },
+  {
+    "id": "rinnai-px",
+    "name": "Rinnai PX 3.5 kW",
+    "brand": "Rinnai",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current PX 3.5 kW specifications",
+        "url": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Air-conditioner warranty",
+        "url": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "Current linked 2512 file; booklet dated April 2025"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/rinnai-px.webp",
+      "alt": "Rinnai PX wall-mounted indoor unit; representative current PX range photograph",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/e7913b544b/ac-split-px-series-front-ima.png"
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 3.5,
+        "unit": "zoned-heating-stars",
+        "variant": "HINRPX35M / HONRPX35, HSNRPX35 3.5 kW",
+        "basis": "Manufacturer zoned label: Average/Mixed climate heating stars for this exact matched pair.",
+        "basisId": "mixed-climate-heating-stars",
+        "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": null
+    },
+    "freshness": {
+      "generation": "PX HSNRPX35 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Matched example",
+        "value": "HINRPX35M indoor / HONRPX35 outdoor; system HSNRPX35",
+        "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw"
+      },
+      {
+        "label": "Cooling / heating output",
+        "value": "3.5 / 3.8 kW",
+        "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "201 x 813 x 289 mm",
+        "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi; optional third-party NetHome Plus app",
+        "sourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw"
+      },
+      {
+        "label": "System parts and labour",
+        "value": "Seven years residential",
+        "sourceUrl": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf"
+      },
+      {
+        "label": "Shorter control cover",
+        "value": "Wi-Fi devices listed at one year; built-in module scope needs confirmation",
+        "sourceUrl": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf"
+      }
+    ],
+    "pros": [
+      "Phone control is built in, without a separate Wi-Fi accessory.",
+      "Air flaps swing up, down and sideways to spread the breeze."
+    ],
+    "cons": []
+  },
+  {
+    "id": "daikin-floor-standing-35-y",
+    "name": "Daikin floor-standing 3.5 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current floor-standing product",
+        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Current Y indoor/outdoor specifications",
+        "url": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Floor-standing table, page 30"
+      },
+      {
+        "title": "R32 floor-standing generation announcement",
+        "url": "https://www.daikin.com.au/article/daikin-new-r32-floor-standing-units-streamer-technology-built-in-wifi",
+        "kind": "Manufacturer Australian information",
+        "revision": "7 May 2024"
+      }
+    ],
+    "brand": "Daikin",
+    "image": {
+      "src": "/products/air-conditioning/daikin-floor-standing-35-y.webp",
+      "alt": "Daikin current R32 floor-standing indoor unit; shared housing for the FVXM-Y range, outdoor unit not pictured",
+      "sourceUrl": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing"
+    },
+    "pros": [
+      "Fits below a window instead of occupying a high wall.",
+      "Sends warm air near the floor rather than only from above.",
+      "Built-in phone control avoids buying a separate Wi-Fi adapter."
+    ],
+    "cons": [
+      "Uses low wall space that a high-mounted unit would leave free for furniture."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "FVXM35YVMA / RXM35YFVMA",
+        "basis": "Official residential heating stars for the exact indoor/outdoor pair in the Average/Mixed climate zone.",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "FVXM35YVMA / RXM35YFVMA",
+        "basis": "Five-year residential parts cover for the indoor and outdoor product; installation is separate.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Matched indoor/outdoor pair",
+        "value": "FVXM35YVMA / RXM35YFVMA",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf"
+      },
+      {
+        "label": "Cooling output",
+        "value": "3.5 kW rated; 1.2 to 3.8 kW range",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.5 kW rated; 1.2 to 5.5 kW range",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "600 x 750 x 238 mm",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing"
+      },
+      {
+        "label": "Room placement",
+        "value": "Floor-standing; can fit under a window or be semi-recessed",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing"
+      },
+      {
+        "label": "Electricity supply",
+        "value": "Single-phase 220 to 240 V, 50 Hz",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf"
+      },
+      {
+        "label": "Residential parts and labour",
+        "value": "Five years; installation is separate",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing"
+      }
+    ],
+    "freshness": {
+      "generation": "Current FVXM-Y R32 floor-standing range",
+      "released": null,
+      "sourceUrl": "https://www.daikin.com.au/article/daikin-new-r32-floor-standing-units-streamer-technology-built-in-wifi",
+      "note": "The R32 floor-standing generation was announced 7 May 2024. The first AU release day of the current Y suffix is not verified."
+    }
+  },
+  {
+    "id": "panasonic-z35akr",
+    "name": "Panasonic Z35 AKR 3.5 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian Z35 AKR pair",
+        "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/rac/z-akr/cu-cs-z35akrw.html",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian exact-pair performance table",
+        "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/premium-reverse-cycle-inverter-z-series-akr.html",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian AKR catalogue",
+        "url": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Information accurate as of July 2024; not a launch announcement"
+      },
+      {
+        "title": "Australian parts and labour warranty",
+        "url": "https://www.panasonic.com/au/hvac/learn-more/buyers-guide.html",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      }
+    ],
+    "brand": "Panasonic",
+    "image": {
+      "src": "/products/air-conditioning/panasonic-z35akr.webp",
+      "alt": "Panasonic CS-Z35AKRW indoor unit from its exact current Australian maker product page; outdoor unit not pictured",
+      "sourceUrl": "https://panasonic.scene7.com/is/image/Panasonic/ast-2455722-3?fmt=png-alpha&hei=644&wid=644"
+    },
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "Air-cleaning mode can run while heating and cooling are switched off.",
+      "Two moving air flaps direct cool air further into the room."
+    ],
+    "cons": [],
+    "measurements": {
+      "cost": null,
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "CS-Z35AKRW / CU-Z35AKR",
+        "basis": "Official residential heating stars for the exact indoor/outdoor pair in the Average/Mixed climate zone.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/premium-reverse-cycle-inverter-z-series-akr.html",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "CS-Z35AKRW / CU-Z35AKR",
+        "basis": "Five-year Australian air-conditioner parts and labour cover for the indoor and outdoor product.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/learn-more/buyers-guide.html",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Matched indoor/outdoor pair",
+        "value": "CS-Z35AKRW / CU-Z35AKR",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/rac/z-akr/cu-cs-z35akrw.html"
+      },
+      {
+        "label": "Cooling output",
+        "value": "3.5 kW rated; 1.0 to 4.2 kW range",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/premium-reverse-cycle-inverter-z-series-akr.html"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.0 kW rated; 0.9 to 5.7 kW range",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/premium-reverse-cycle-inverter-z-series-akr.html"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "290 x 779 x 209 mm",
+        "sourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi with Panasonic Comfort Cloud",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/rac/z-akr/cu-cs-z35akrw.html"
+      },
+      {
+        "label": "Separate air-cleaning operation",
+        "value": "nanoe X Mark 1 can run without heating or cooling",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/premium-reverse-cycle-inverter-z-series-akr.html"
+      },
+      {
+        "label": "Air direction",
+        "value": "AEROWINGS dual air flaps",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/products/air-conditioner/rac/z-akr/cu-cs-z35akrw.html"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years Australian air-conditioner cover",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/learn-more/buyers-guide.html"
+      }
+    ],
+    "freshness": {
+      "generation": "Current Australian Z-series AKR exact pair",
+      "released": null,
+      "sourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "note": "The current AU maker listing confirms this pair and the July 2024 catalogue identifies AKR. First AU launch date is not verified; catalogue dates are not launch dates."
+    }
   }
 ]

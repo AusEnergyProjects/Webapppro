@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: ProductGuidePageProps) {
   return buildPlatformMetadata({
     path: `/guides/products/${category.slug}`,
     title: `Compare ${category.title} | Australian Energy Assessments`,
-    description: `See ${category.title.toLowerCase()} photos and compare their pros and cons side by side. Find products from established brands without rankings or star ratings.`,
+    description: `Compare ${category.title.toLowerCase()} with product photos, simple pros and cons, visual ratings and sourced technical specs. See current models from established brands side by side.`,
   });
 }
 

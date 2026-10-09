@@ -1,0 +1,641 @@
+[
+  {
+    "id": "emerald-multi-pro",
+    "name": "Emerald Multi Pro 12.6 kW",
+    "brand": "Emerald",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current multi-head model specification",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "2025.03 Pro / 2026.05 Ultra printed issue"
+      },
+      {
+        "title": "Multi-head controls",
+        "url": "https://www.emerald.com.au/aircon-multihead/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Included parts and labour terms",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "December 2025; effective 1 July 2025"
+      },
+      {
+        "title": "Official multi-split rating boundary",
+        "url": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf",
+        "kind": "Australian Government energy-rating guidance",
+        "revision": "October 2022"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/emerald-multi-pro.webp",
+      "alt": "Emerald ACR126U outdoor unit; compatible indoor heads supplied separately",
+      "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "variant": "Emerald Multi Pro 12.6 kW",
+        "basis": "Pro/Ultra included seven-year goods/parts cover across the system, before optional registration extension; labour five years.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "freshness": {
+      "generation": "ACR126U current Australian multi-head specification",
+      "released": null,
+      "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Outdoor model",
+        "value": "ACR126U",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Indoor units allowed",
+        "value": "One to five; approved combinations required",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Nominal cooling output",
+        "value": "12.6 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Nominal heating output",
+        "value": "14.5 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Outdoor size, width x height x depth",
+        "value": "950 x 1050 x 340 mm",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Parts / labour cover",
+        "value": "Seven / five years included; registration extension excluded",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf"
+      },
+      {
+        "label": "Phone control",
+        "value": "Optional AC Link",
+        "sourceUrl": "https://www.emerald.com.au/aircon-multihead/"
+      },
+      {
+        "label": "Efficiency boundary",
+        "value": "Outdoor figures do not establish a complete matched-head climate rating",
+        "sourceUrl": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf"
+      }
+    ],
+    "pros": [
+      "Up to five indoor units share one outdoor box.",
+      "Sleep and quiet modes reduce disturbance during quieter hours."
+    ],
+    "cons": [
+      "Phone control requires the optional AC Link accessory."
+    ]
+  },
+  {
+    "id": "emerald-multi-ultra-18",
+    "name": "Emerald Multi Ultra 18.1 kW",
+    "brand": "Emerald",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current multi-head model specification",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "2025.03 Pro / 2026.05 Ultra printed issue"
+      },
+      {
+        "title": "Multi-head controls",
+        "url": "https://www.emerald.com.au/aircon-multihead/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Included parts and labour terms",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "December 2025; effective 1 July 2025"
+      },
+      {
+        "title": "Official multi-split rating boundary",
+        "url": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf",
+        "kind": "Australian Government energy-rating guidance",
+        "revision": "October 2022"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/emerald-multi-ultra-18.webp",
+      "alt": "Emerald ACV180U outdoor unit; compatible indoor heads supplied separately",
+      "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/02/Emerald-Air-Con-Ultra-Multi-Head-18kw-ODU-1_-300dpi-RGB-1404x1536.png"
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "variant": "Emerald Multi Ultra 18.1 kW",
+        "basis": "Pro/Ultra included seven-year goods/parts cover across the system, before optional registration extension; labour five years.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "freshness": {
+      "generation": "ACV180U current Australian multi-head specification",
+      "released": null,
+      "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Outdoor model",
+        "value": "ACV180U",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      },
+      {
+        "label": "Indoor units allowed",
+        "value": "Two to nine; approved combinations required",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      },
+      {
+        "label": "Nominal cooling output",
+        "value": "18.1 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      },
+      {
+        "label": "Nominal heating output",
+        "value": "20.4 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      },
+      {
+        "label": "Outdoor size, width x height x depth",
+        "value": "980 x 1080 x 360 mm",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R410A",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      },
+      {
+        "label": "Parts / labour cover",
+        "value": "Seven / five years included; registration extension excluded",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf"
+      },
+      {
+        "label": "Phone control",
+        "value": "Optional AC Link",
+        "sourceUrl": "https://www.emerald.com.au/aircon-multihead/"
+      },
+      {
+        "label": "Efficiency boundary",
+        "value": "Outdoor figures do not establish a complete matched-head climate rating",
+        "sourceUrl": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf"
+      }
+    ],
+    "pros": [
+      "Up to nine indoor units share one outdoor box.",
+      "The outdoor box is 1.08 metres tall, compared with 1.65 metres for the 20 kW version."
+    ],
+    "cons": [
+      "Needs at least two indoor units, so it cannot serve just one room.",
+      "Phone control requires the optional AC Link accessory."
+    ]
+  },
+  {
+    "id": "emerald-multi-ultra-20",
+    "name": "Emerald Multi Ultra 20 kW",
+    "brand": "Emerald",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current multi-head model specification",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "2025.03 Pro / 2026.05 Ultra printed issue"
+      },
+      {
+        "title": "Multi-head controls",
+        "url": "https://www.emerald.com.au/aircon-multihead/",
+        "kind": "Manufacturer AU information",
+        "revision": "Current Australian product information; checked 10 October 2026"
+      },
+      {
+        "title": "Included parts and labour terms",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "December 2025; effective 1 July 2025"
+      },
+      {
+        "title": "Official multi-split rating boundary",
+        "url": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf",
+        "kind": "Australian Government energy-rating guidance",
+        "revision": "October 2022"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/emerald-multi-ultra-20.webp",
+      "alt": "Emerald ACV200U outdoor unit; compatible indoor heads supplied separately",
+      "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/05/Emerald_Air-Con-Ducted-Ultra-ODU-front.png"
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "variant": "Emerald Multi Ultra 20 kW",
+        "basis": "Pro/Ultra included seven-year goods/parts cover across the system, before optional registration extension; labour five years.",
+        "basisId": "included-all-parts",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "freshness": {
+      "generation": "ACV200U current Australian multi-head specification",
+      "released": null,
+      "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Outdoor model",
+        "value": "ACV200U",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      },
+      {
+        "label": "Indoor units allowed",
+        "value": "Two to nine; approved combinations required",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      },
+      {
+        "label": "Nominal cooling output",
+        "value": "20 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      },
+      {
+        "label": "Nominal heating output",
+        "value": "26 kW",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      },
+      {
+        "label": "Outdoor size, width x height x depth",
+        "value": "1250 x 1650 x 440 mm",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R410A",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      },
+      {
+        "label": "Parts / labour cover",
+        "value": "Seven / five years included; registration extension excluded",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf"
+      },
+      {
+        "label": "Phone control",
+        "value": "Optional AC Link",
+        "sourceUrl": "https://www.emerald.com.au/aircon-multihead/"
+      },
+      {
+        "label": "Efficiency boundary",
+        "value": "Outdoor figures do not establish a complete matched-head climate rating",
+        "sourceUrl": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf"
+      }
+    ],
+    "pros": [
+      "Up to nine indoor units share one outdoor box.",
+      "Provides 26 kW of shared heating capacity across the connected rooms."
+    ],
+    "cons": [
+      "The outdoor box is 1.65 metres tall and 1.25 metres wide.",
+      "Phone control requires the optional AC Link accessory."
+    ]
+  },
+  {
+    "id": "rinnai-multi-px",
+    "name": "Rinnai Multi with PX room units",
+    "brand": "Rinnai",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current Australian multi-split combinations",
+        "url": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "RA122.07.26R printed revision; July 2026"
+      },
+      {
+        "title": "Full air-conditioner warranty",
+        "url": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf",
+        "kind": "Manufacturer AU information",
+        "revision": "Current linked 2512 file; April 2025"
+      },
+      {
+        "title": "Official multi-split rating boundary",
+        "url": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf",
+        "kind": "Australian Government energy-rating guidance",
+        "revision": "October 2022"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/rinnai-multi-px.webp",
+      "alt": "Rinnai PX indoor wall unit for the current multi-split range; outdoor unit and additional room units supplied separately",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/e7913b544b/ac-split-px-series-front-ima.png"
+    },
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": null
+    },
+    "freshness": {
+      "generation": "MON outdoor systems with HINRPX current PX wall heads",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf",
+      "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Outdoor choices",
+        "value": "MON2H05B1LA through MON6H19B1TA; two to six heads",
+        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+      },
+      {
+        "label": "Outdoor example",
+        "value": "MON3H07B1LA: three heads, 7.2 kW cooling / 7.3 kW heating",
+        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+      },
+      {
+        "label": "Current indoor heads",
+        "value": "HINRPX20M / 25M / 35M / 50M / 60M / 70M / 80M",
+        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "PX wall heads: built-in Wi-Fi; other head styles differ",
+        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+      },
+      {
+        "label": "Matching requirement",
+        "value": "Complete indoor/outdoor combination must be approved for the design",
+        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+      },
+      {
+        "label": "System parts / labour",
+        "value": "Seven years residential",
+        "sourceUrl": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf"
+      },
+      {
+        "label": "Shorter control cover",
+        "value": "Wi-Fi devices listed at one year; built-in module scope needs confirmation",
+        "sourceUrl": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf"
+      },
+      {
+        "label": "Efficiency boundary",
+        "value": "No complete matched-head climate rating verified; outdoor figures are not scored",
+        "sourceUrl": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf"
+      }
+    ],
+    "pros": [
+      "Up to six room units share one outdoor box.",
+      "Separate room controls let you condition only the rooms you are using.",
+      "PX wall units include phone control without a separate Wi-Fi accessory."
+    ],
+    "cons": []
+  },
+  {
+    "id": "mitsubishi-electric-ap-two-room-kit52",
+    "name": "Mitsubishi Electric AP two-room 5.2 kW kit",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact two-bedroom equipment combination",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "April 2025 kit flyer"
+      },
+      {
+        "title": "Two-port outdoor unit and room controls",
+        "url": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Built-in Wi-Fi indoor update",
+        "url": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+        "kind": "Manufacturer Australian information",
+        "revision": "1 April 2025"
+      },
+      {
+        "title": "Australian residential warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      }
+    ],
+    "brand": "Mitsubishi Electric",
+    "image": {
+      "src": "/products/multi-split/mitsubishi-electric-ap-two-room-kit52.webp",
+      "alt": "MXZ-2F52VGD-A1 outdoor unit extracted from the exact MXZFAPVGKDKIT52A maker kit flyer; two indoor units not pictured",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+    },
+    "pros": [
+      "Two rooms share one outdoor unit, reducing equipment outside your home.",
+      "Phone control and remote controls are included for both rooms.",
+      "Set each room's temperature separately when both are heating or both are cooling."
+    ],
+    "cons": [
+      "Both rooms must use the same heating or cooling mode.",
+      "Outdoor quiet mode reduces the heating or cooling power available."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "MXZFAPVGKDKIT52A: MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
+        "basis": "Five-year residential manufacturing-defect parts cover across the listed indoor and outdoor units; labour is separately five years.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "MXZFAPVGKDKIT52A: 1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Number of rooms",
+        "value": "Two selected high-wall room units",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Cooling in this selected combination",
+        "value": "2.6 kW per room; not the standalone rating of each head",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Outdoor rated cooling output",
+        "value": "5.2 kW",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/"
+      },
+      {
+        "label": "Phone and handheld controls",
+        "value": "Built-in Wi-Fi and remote controllers included in this kit",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Room settings",
+        "value": "Individual temperatures; all operating rooms must use the same heat/cool mode",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/"
+      },
+      {
+        "label": "Outdoor quiet mode",
+        "value": "Available; reduces heating/cooling output",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Outdoor size, height x width x depth",
+        "value": "710 x 840 x 330 mm",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/"
+      },
+      {
+        "label": "Parts cover",
+        "value": "Five years residential manufacturing-defect cover; installation is separate",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      }
+    ],
+    "freshness": {
+      "generation": "2025 AP built-in Wi-Fi two-room kit",
+      "released": "2025-04-01",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/news-release/built-in-wi-fi-across-popular-air-conditioners/",
+      "note": "The April 2025 flyer identifies this kit with updated built-in Wi-Fi AP room units. The date concerns the indoor control update, not a new launch of the outdoor unit."
+    }
+  },
+  {
+    "id": "mhi-avanti-wf1-two-room-scm40",
+    "name": "MHI Avanti Wi-Fi two-room 4.0 kW combination",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current multi-split indoor/outdoor compatibility and specifications",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Avanti WF1 built-in Wi-Fi update, indexed manufacturer news",
+        "url": "https://www.mhiaa.com.au/latest-news/page/2/",
+        "kind": "Manufacturer Australian information",
+        "revision": "8 November 2024; dated maker news index remains indexed, current GET unavailable"
+      }
+    ],
+    "brand": "Mitsubishi Heavy Industries",
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "One of the two selected DXK06ZSA-WF1 Avanti indoor units; current maker range photograph, outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "pros": [
+      "Two rooms share one outdoor unit, reducing the number of outside units.",
+      "Built-in phone control is included in both selected room units.",
+      "Turn each room on or off and set its temperature separately."
+    ],
+    "cons": [
+      "This outdoor unit supports two rooms only; adding a third needs a different system.",
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "measurements": {
+      "cost": null,
+      "efficiency": null,
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "included-all-parts",
+        "variant": "SCM40ZS-W + 2 x DXK06ZSA-WF1",
+        "basis": "Manufacturer multi-split brochure lists five-year parts and labour cover for the indoor and outdoor product.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM40ZS-W + 2 x DXK06ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Number of rooms",
+        "value": "Two room units; this outdoor unit accepts two only",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Outdoor rated cooling/heating output",
+        "value": "4.0 / 4.5 kW; room output changes with the selected combination",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected indoor size, height x width x depth",
+        "value": "290 x 870 x 230 mm per room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi in both selected WF1 room units",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Pipe length limit",
+        "value": "25 m to one room; 30 m total for SCM40ZS-W",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Allergen-cleaning cycle",
+        "value": "Invalid in SCM multi-split operation; pressing that button stops the receiving room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Parts and labour",
+        "value": "Five years; installation is separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "freshness": {
+      "generation": "Avanti WF1 built-in Wi-Fi room-unit update",
+      "released": "2024-11-08",
+      "sourceUrl": "https://www.mhiaa.com.au/latest-news/page/2/",
+      "note": "The indexed maker news dates the Avanti WF1 control update. SCM40ZS-W is the existing compatible outdoor unit, not a newly launched 2024 outdoor generation."
+    }
+  }
+]

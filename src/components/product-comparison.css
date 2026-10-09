@@ -11,6 +11,11 @@
 .product-comparison-toolbar label { color: #dbe9ed; display: grid; font-size: .78rem; font-weight: 700; gap: 6px; }
 .product-comparison-toolbar input, .product-comparison-toolbar select { background: #fff; border: 1px solid #91b1b5; border-radius: 10px; color: #062f37; font: inherit; font-size: .94rem; min-height: 46px; padding: 10px 12px; width: 100%; }
 .product-comparison-toolbar p { color: #b7d0d7; font-size: .87rem; margin: 0 0 12px; text-align: right; }
+.product-comparison-toolbar-help { text-align: right; }
+.product-comparison-toolbar-help p { margin-bottom: 8px; }
+.product-comparison-toolbar-help button { background: transparent; border: 1px solid #57777b; border-radius: 8px; color: #d1eee5; cursor: pointer; font: inherit; font-size: .8rem; min-height: 44px; padding: 8px 12px; }
+.product-comparison-toolbar-help button:disabled { cursor: wait; opacity: .6; }
+.product-comparison-rating-key { color: #bdd0d5; font-size: .78rem; line-height: 1.5; margin: 0 0 18px; }
 .product-comparison-toolbar :is(input, select):disabled { background: #edf1f1; color: #526567; cursor: wait; }
 .product-comparison-grid { display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .product-comparison-card { background: #fff; border: 2px solid transparent; border-radius: 20px; color: #083037; display: flex; flex-direction: column; overflow: hidden; scroll-margin-top: 20px; }
@@ -20,18 +25,26 @@
 .product-comparison-photo > span { background: #fffffff0; border: 1px solid #e1e7e7; border-radius: 100px; color: #234a4e; font-size: .7rem; font-weight: 800; left: 14px; padding: 5px 10px; position: absolute; top: 12px; }
 .product-comparison-card-body { display: flex; flex: 1; flex-direction: column; padding: 20px; }
 .product-comparison-card h2, .product-comparison-comparison-grid h2 { color: #082f37; font-size: 1.15rem; line-height: 1.3; margin: 0 0 16px; overflow-wrap: anywhere; }
+.product-comparison-ratings { display: grid; gap: 12px; margin-bottom: 20px; }
+.product-comparison-rating-label { align-items: center; display: flex; gap: 8px; justify-content: space-between; margin-bottom: 6px; }
+.product-comparison-rating-label h3 { color: #294b50; font-size: .78rem; margin: 0; }
+.product-comparison-rating-label > span { color: #51666b; font-size: .7rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.product-comparison-rating-track { background: #e3ecea; border-radius: 3px; height: 8px; mask-image: repeating-linear-gradient(to right, #000 0, #000 calc(20% - 3px), transparent calc(20% - 3px), transparent 20%); overflow: hidden; }
+.product-comparison-rating-track > span { background: #12896b; display: block; height: 100%; }
+.product-comparison-rating-cost .product-comparison-rating-track > span { background: #b87524; }
+.product-comparison-rating-warranty .product-comparison-rating-track > span { background: #337f91; }
+.product-comparison-rating-unavailable { background: #e8ecee; }
+.product-comparison-rating-figure { color: #536a6e; display: block; font-size: .7rem; line-height: 1.4; margin-top: 5px; }
 .product-comparison-facts { display: grid; gap: 18px; }
-.product-comparison-criterion { border-top: 1px solid #e3ebea; padding-top: 14px; }
-.product-comparison-criterion h3 { color: #103a41; font-size: .84rem; line-height: 1.4; margin: 0 0 9px; }
-.product-comparison-criterion p { align-items: baseline; color: #3e575c; display: flex; font-size: .88rem; gap: 9px; line-height: 1.5; margin: 0; }
-.product-comparison-criterion p + p { margin-top: 7px; }
-.product-comparison-criterion p strong { border-radius: 5px; flex: 0 0 38px; font-size: .67rem; line-height: 1.6; padding: 2px 4px; text-align: center; }
-.product-comparison-pro strong { background: #def6ea; color: #08775a; }
-.product-comparison-con strong { background: #fff0df; color: #8b4d23; }
-.product-comparison-unknown strong { background: #edf1f2; color: #51676b; }
-.product-comparison-unknown span { color: #697b7e; }
+.product-comparison-facts > section { border-top: 1px solid #e3ebea; padding-top: 14px; }
+.product-comparison-facts h3 { color: #08775a; font-size: .84rem; line-height: 1.4; margin: 0 0 9px; }
+.product-comparison-facts .product-comparison-cons h3 { color: #8b4d23; }
+.product-comparison-facts ul { color: #3e575c; display: grid; font-size: .88rem; gap: 8px; line-height: 1.5; list-style: disc; margin: 0; padding-left: 19px; }
+.product-comparison-pros li::marker { color: #12896b; }
+.product-comparison-cons li::marker { color: #b87524; }
+.product-comparison-unknown { color: #697b7e; font-size: .8rem; margin: 0; }
 .product-comparison-warning { background: #fff5e8; border: 1px solid #e8bb83; border-radius: 10px; color: #6b3d18; font-size: .8rem; line-height: 1.55; margin: 0; padding: 10px 12px; }
-.product-comparison-card-actions { align-items: center; display: flex; gap: 10px; justify-content: space-between; margin-top: auto; padding-top: 20px; }
+.product-comparison-card-actions { align-items: center; display: flex; gap: 16px; justify-content: flex-start; margin-top: auto; padding-top: 20px; }
 .product-comparison-card-actions button, .product-comparison-tray-actions button, .product-comparison-empty button { background: #0a6d54; border: 1px solid #0a6d54; border-radius: 9px; color: #fff; cursor: pointer; font: inherit; font-size: .86rem; font-weight: 750; min-height: 44px; padding: 10px 16px; }
 .product-comparison-card-actions button[aria-pressed="true"] { background: #e0f8ec; color: #065841; }
 .product-comparison-card-actions .product-comparison-info-button { background: transparent; border-color: transparent; color: #536c71; font-size: .77rem; padding: 10px 3px; }
@@ -53,14 +66,16 @@
 .product-comparison-dialog-header h2 { font-size: 1.15rem; margin: 0; overflow-wrap: anywhere; }
 .product-comparison-dialog-header button { background: #eef6f4; border: 1px solid #b9d2ca; border-radius: 9px; color: #173f39; cursor: pointer; flex-shrink: 0; font: inherit; font-size: .8rem; font-weight: 750; min-height: 44px; padding: 10px 14px; }
 .product-comparison-comparison-scroll { overflow-x: auto; }
-.product-comparison-comparison-grid { display: grid; column-gap: 16px; grid-template-rows: 180px auto repeat(9, auto) auto; padding: 20px; }
-.product-comparison-comparison-grid article { background: #fff; border: 1px solid #dbe5e5; border-radius: 14px; display: grid; grid-row: span 12; grid-template-rows: subgrid; overflow: hidden; }
+.product-comparison-comparison-grid { display: grid; column-gap: 16px; grid-template-rows: 180px auto repeat(3, auto) repeat(4, auto) auto; padding: 20px; }
+.product-comparison-comparison-grid article { background: #fff; border: 1px solid #dbe5e5; border-radius: 14px; display: grid; grid-row: span 10; grid-template-rows: subgrid; overflow: hidden; }
 .product-comparison-comparison-grid .product-comparison-photo { height: 180px; }
 .product-comparison-comparison-grid h2 { min-height: 3em; padding: 18px 18px 0; }
-.product-comparison-comparison-grid .product-comparison-facts, .product-comparison-comparison-grid .product-comparison-criterion { display: contents; }
-.product-comparison-comparison-grid .product-comparison-criterion h3 { border-top: 1px solid #e3ebea; margin: 0; padding: 14px 18px 9px; }
-.product-comparison-comparison-grid .product-comparison-criterion p { margin: 0; padding: 0 18px 9px; }
-.product-comparison-comparison-grid .product-comparison-criterion p:last-child { padding-bottom: 18px; }
+.product-comparison-comparison-grid .product-comparison-ratings { display: contents; }
+.product-comparison-comparison-grid .product-comparison-rating { padding: 0 18px 12px; }
+.product-comparison-comparison-grid .product-comparison-facts, .product-comparison-comparison-grid .product-comparison-facts > section { display: contents; }
+.product-comparison-comparison-grid .product-comparison-facts h3 { border-top: 1px solid #e3ebea; margin: 0; padding: 14px 18px 9px; }
+.product-comparison-comparison-grid .product-comparison-facts ul { margin: 0 18px; padding-bottom: 18px; }
+.product-comparison-comparison-grid .product-comparison-unknown { margin: 0; padding: 0 18px 18px; }
 .product-comparison-comparison-grid .product-comparison-warning { margin: 0 18px 18px; }
 .product-comparison-dialog > .product-comparison-note { color: #49656b; padding: 0 20px; }
 .product-comparison-information { max-width: 650px; }
@@ -69,8 +84,17 @@
 .product-comparison-information-body ul { display: grid; gap: 18px; padding-left: 20px; }
 .product-comparison-information-body a { color: #08715b; font-size: .9rem; font-weight: 700; overflow-wrap: anywhere; }
 .product-comparison-information-body small { color: #51666b; display: block; font-size: .75rem; margin-top: 4px; }
+.product-comparison-information-body h3 { font-size: 1rem; margin: 24px 0 10px; }
+.product-comparison-generation { background: #e8f3ef; border-radius: 10px; padding: 12px; }
+.product-comparison-specs { display: grid; font-size: .85rem; gap: 0; margin: 20px 0; }
+.product-comparison-specs > div { border-bottom: 1px solid #d6e3e1; display: grid; gap: 12px; grid-template-columns: minmax(100px, .7fr) minmax(0, 1.3fr); padding: 10px 0; }
+.product-comparison-specs dt { font-weight: 750; }
+.product-comparison-specs dd { margin: 0; overflow-wrap: anywhere; }
+.product-comparison-measurement { border-top: 1px solid #d6e3e1; padding: 12px 0; }
+.product-comparison-measurement :is(h3, h4) { font-size: .9rem; margin: 0 0 6px; }
+.product-comparison-measurement p { margin: 6px 0; }
 .product-comparison-sr-only { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 .product-comparison-page :is(a, button, input, select):focus-visible, .product-comparison-dialog :is(a, button):focus-visible, .product-comparison-comparison-scroll:focus-visible { outline: 3px solid #b97818; outline-offset: 3px; }
-@media (max-width: 1000px) { .product-comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .product-comparison-toolbar { grid-template-columns: minmax(0, 1fr) minmax(130px, .6fr); } .product-comparison-toolbar p { grid-column: 1 / -1; margin: 0; text-align: left; } }
+@media (max-width: 1000px) { .product-comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .product-comparison-toolbar { grid-template-columns: minmax(0, 1fr) minmax(130px, .6fr); } .product-comparison-toolbar-help { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; grid-column: 1 / -1; justify-content: space-between; text-align: left; } .product-comparison-toolbar p { margin: 0; text-align: left; } }
 @media (max-width: 600px) { .product-comparison-hero { margin: 20px 0 14px; } .product-comparison-hero a { font-size: .78rem; } .product-comparison-categories { gap: 6px; margin-bottom: 16px; } .product-comparison-categories a { font-size: .8rem; padding: 11px 13px; } .product-comparison-toolbar { gap: 10px; } .product-comparison-toolbar input, .product-comparison-toolbar select { font-size: .85rem; } .product-comparison-grid { gap: 14px; grid-template-columns: minmax(0, 1fr); } .product-comparison-photo { height: 180px; } .product-comparison-card-body { padding: 18px; } .product-comparison-tray { bottom: 8px; flex-direction: column; gap: 10px; padding: 10px; width: calc(100% - 16px); } .product-comparison-picks { width: 100%; } .product-comparison-picks button { font-size: .65rem; gap: 4px; padding: 4px; } .product-comparison-picks img { height: 28px; width: 28px; } .product-comparison-tray-actions { justify-content: flex-end; width: 100%; } .product-comparison-dialog-header { padding: 14px; } .product-comparison-comparison-grid { gap: 10px; padding: 12px; } }
-@media (forced-colors: active) { .product-comparison-card, .product-comparison-tray, .product-comparison-dialog, .product-comparison-categories a { border-color: ButtonText; } .product-comparison-selected, .product-comparison-categories a[aria-current="page"] { outline: 2px solid Highlight; } }
+@media (forced-colors: active) { .product-comparison-card, .product-comparison-tray, .product-comparison-dialog, .product-comparison-categories a { border-color: ButtonText; } .product-comparison-selected, .product-comparison-categories a[aria-current="page"] { outline: 2px solid Highlight; } .product-comparison-rating-track { background: Canvas; border: 1px solid CanvasText; mask-image: none; } .product-comparison-rating-track > span { background: Highlight; } }

@@ -5,7 +5,7 @@ import { buildPlatformMetadata } from "@/lib/public-site";
 export const metadata = buildPlatformMetadata({
   path: "/guides/products",
   title: "Compare Solar, Battery and Home Upgrade Products | Australian Energy Assessments",
-  description: "See product photos and compare clear pros and cons for solar panels, inverters, batteries, heat-pump hot water and air conditioners.",
+  description: "Compare photos, clear pros and cons, visual ratings and sourced specs for panels, inverters, batteries, heat pumps, single or multi-room aircon and EV chargers.",
 });
 
 export default function ProductGuidesPage() {

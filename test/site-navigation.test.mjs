@@ -250,7 +250,7 @@ test("desktop categories and the mobile page browser use lightweight native disc
   assert.match(publicSiteSearch, /document\.removeEventListener\("keydown", closeNavigationOnEscape\)/);
   assert.match(publicSiteSearch, /focusedDisclosure\?\.querySelector<HTMLElement>\("summary"\)\?\.focus\(\)/);
   assert.match(styles, /@media \(max-width: 720px\) \{[\s\S]*?\.site-book-link \.site-action-icon, \.site-call-link \.site-action-icon \{ display: none; \}/);
-  assert.match(styles, /\.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: minmax\(96px, \.62fr\) minmax\(0, 4fr\);[^}]*overflow: visible;/);
+  assert.match(styles, /\.comparator-nav \{[^}]*display: grid;[^}]*grid-template-columns: max-content minmax\(0, 1fr\);[^}]*overflow: visible;/);
   assert.match(styles, /\.site-nav-desktop-categories \{[^}]*display: flex;[^}]*justify-content: center;/);
   assert.match(styles, /\.site-nav-category \{[^}]*flex: 1 1 150px;/);
   assert.match(styles, /\.site-nav-panel \{[^}]*position: absolute;[^}]*width: min\(360px, calc\(100vw - 48px\)\);/);
