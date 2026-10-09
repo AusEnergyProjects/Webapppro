@@ -87,7 +87,7 @@
 :global(body.aea-platform) main.page .finalCta h2 { font-size: clamp(1.7rem, 2.2vw, 2.6rem); font-weight: 500; letter-spacing: -.04em; margin: 13px 0 8px; }
 :global(body.aea-platform) main.page .finalCta p { color: #48705f; font-size: 1rem; margin: 0; }
 :global(body.aea-platform) main.page .primaryLink { flex-shrink: 0; }
-:global(body.aea-platform) main.page .partners { display: flex; justify-content: space-between; align-items: center; gap: 25px; margin: 24px 8px 48px; }
+:global(body.aea-platform) main.page .partners { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 25px; margin: 24px 8px 48px; }
 :global(body.aea-platform) main.page .partners p, :global(body.aea-platform) main.page .partners a { color: #9fbcc6; font-size: .875rem; line-height: 1.6; }
 :global(body.aea-platform) main.page .partners strong { color: #e8f4f6; font-weight: 500; }
 :global(body.aea-platform) main.page .partners a { flex-shrink: 0; }

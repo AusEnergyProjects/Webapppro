@@ -1,59 +1,36 @@
+import Link from "next/link";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
-import { buildPlatformMetadata } from "@/lib/public-site";
+import { JsonLd } from "@/components/JsonLd";
+import { buildPlatformMetadata, PUBLIC_SITE } from "@/lib/public-site";
 
 export const metadata = buildPlatformMetadata({
   path: "/platform",
-  title: "Full service energy and trade platform | Australian Energy Assessments",
-  description: "See how no-account household planning, the installer CRM, wholesaler catalogue and protected administration layer work together.",
+  title: "How AEA Helps: Compare Bills and Plan Home Energy Upgrades",
+  description: "Understand your bills, compare solar and electrification, choose the right assessment and prepare better quotes. See what is free and when expert help matters.",
 });
 
-const workspaces = [
-  {
-    role: "Households",
-    access: "Always free",
-    title: "Plan, compare and manage every home upgrade",
-    items: ["Guided no-account home plan", "Electricity and gas comparison", "Customer-controlled trade enquiries", "Multi-service matching", "Personalised plan PDF", "Clear rebate pathways", "No sale of household leads"],
-  },
-  {
-    role: "Installers",
-    access: "Free after verification",
-    title: "Run the business and complete the work",
-    items: ["Verification and service coverage", "Protected opportunity responses", "Customers owned by the business", "Jobs, schedule, tasks and templates", "Field time, evidence and sign-off", "Quotes, invoices and accounting status", "Xero, MYOB and QuickBooks draft exports", "Reviewed customer handovers"],
-  },
-  {
-    role: "Wholesalers",
-    access: "Free after verification",
-    title: "Publish products and support fulfilment",
-    items: ["Draft product catalogue", "Bulk CSV maintenance", "Trade pricing and stock status", "Install-ready product bundles", "Installer product enquiries", "Order and fulfilment workflow", "Warranty and product identity records", "No household leads or contact data"],
-  },
-  {
-    role: "Platform operations",
-    access: "Role restricted",
-    title: "Protect quality across the ecosystem",
-    items: ["Approval and notification inbox", "Filtered account directory", "Verification and evidence review", "Opportunity allocation controls", "Product and handover approval", "Role and access controls", "Asset safety and ownership governance", "Audited support access"],
-  },
-];
-
-const accessRows = [
-  ["Build a home plan and contact matching trades", "No account required", "Not applicable", "Not applicable"],
-  ["Create a business profile and prepare verification", "Not applicable", "Included", "Included"],
-  ["Receive household opportunities", "Customer controls submission", "Verified installers", "Never"],
-  ["Appear in installer product selection", "Not applicable", "Browse when verified", "Verified wholesalers"],
-  ["Installer CRM and field app", "Private project view", "Included after verification", "Not applicable"],
-  ["Bulk catalogue and fulfilment tools", "Not applicable", "Product selection", "Included after verification"],
-  ["Team access and reporting", "Not applicable", "Included after verification", "Included after verification"],
-];
+const steps = [
+  { title: "Understand the starting point", label: "Your home and bills", items: ["Start with a recent bill and your postcode", "Use smart-meter readings for a clearer picture of when you use electricity", "Note which rooms feel uncomfortable and which appliances need replacing"], href: "/guides", action: "Choose a guide" },
+  { title: "Compare the options", label: "Plan costs and upgrades", items: ["Compare published electricity or mains gas offers", "Explore solar alone against solar with a battery", "Estimate running-cost changes when replacing gas appliances"], href: "/case-studies", action: "See the savings examples" },
+  { title: "Put the work in order", label: "Now, next and later", items: ["Build a home energy plan around your goal, budget and timing", "Check whether a visit or formal rating would change the decision", "Confirm rebates for the exact work before counting a discount"], href: "/plan", action: "Build my home energy plan" },
+  { title: "Get a useful written quote", label: "When you are ready", items: ["Specify the equipment, installation and enabling work", "Check credentials, site suitability, exclusions and support", "Choose to send an enquiry, then decide who to work with"], href: "/guides/project-preparation", action: "Prepare for quotes" },
+] as const;
 
 export default function PlatformPage() {
   return <main className="wrap platform-page">
-    <SiteHeader active="direct-trade-access" />
-    <header className="platform-hero"><div><span>One protected ecosystem</span><h1>A full service platform without selling household contact data</h1><p>Households plan, compare and contact matching trades without creating an account. Installers run jobs and respond to consented opportunities. Wholesalers publish fixed-price products. Platform operations keep approvals, quality and safety visible.</p><div><a className="btn" href="/plan">Build my home energy plan</a><a className="btn ghost" href="/direct-trade/dashboard?setup=1">Create a business profile</a></div></div><aside><strong>Four connected workspaces</strong><ol><li>Household planning</li><li>Installer operations</li><li>Wholesaler supply</li><li>Platform governance</li></ol><p>Each role sees only the information needed for its work.</p></aside></header>
+    <SiteHeader active="guides" />
+    <JsonLd data={{ "@context": "https://schema.org", "@type": "WebPage", "@id": `${PUBLIC_SITE.apexUrl}/platform#webpage`, url: `${PUBLIC_SITE.apexUrl}/platform`, name: "How Australian Energy Assessments helps households", description: metadata.description, dateModified: "2026-10-09", inLanguage: "en-AU", isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId }, publisher: { "@id": PUBLIC_SITE.organizationId } }} />
+    <header className="platform-hero"><div><span>From a question to a clearer decision</span><h1>Understand your options before you spend</h1><p>Energy plans, ratings, rebates and upgrade quotes can be difficult to connect. Australian Energy Assessments brings the explanations, comparison tools and assessment pathways together so you can work out what your home needs and what to confirm next.</p><div><Link className="btn" href="/plan">Build my home energy plan</Link><Link className="btn ghost" href="/guides">Start with a guide</Link></div></div><aside><strong>You can start without an account</strong><ol><li>Read a plain-language guide</li><li>Try a comparison with your bill</li><li>Save a practical home energy plan</li><li>Ask for help when you choose</li></ol><p>Reading and using the tools does not send an enquiry. Review the named recipients and information before submitting a request.</p></aside></header>
 
-    <section className="platform-workspaces" aria-labelledby="platform-workspaces-title"><div className="guide-section-heading"><span>Complete role coverage</span><h2 id="platform-workspaces-title">Useful alone, stronger together</h2><p>The platform does not force a household into a sales journey or require a trade business to abandon its own direct customers.</p></div><div>{workspaces.map((workspace) => <article key={workspace.role}><span>{workspace.access}</span><small>{workspace.role}</small><h3>{workspace.title}</h3><ul>{workspace.items.map((item) => <li key={item}>{item}</li>)}</ul></article>)}</div></section>
+    <section className="platform-workspaces" aria-labelledby="platform-steps"><div className="guide-section-heading"><span>One decision at a time</span><h2 id="platform-steps">A practical path through your home energy choices</h2><p>Start at the stage that fits you. You do not need to replace everything or complete every tool.</p></div><div>{steps.map((step, index) => <article key={step.title}><span>Step {index + 1}</span><small>{step.label}</small><h3>{step.title}</h3><ul>{step.items.map((item) => <li key={item}>{item}</li>)}</ul><Link className="platform-access-link" href={step.href}>{step.action}</Link></article>)}</div></section>
 
-    <section className="platform-access" aria-labelledby="platform-access-title"><div className="guide-section-heading"><span>Clear verification boundaries</span><h2 id="platform-access-title">Core trade operations cost A$0 after verification</h2><p>Verified installers receive leads and operating tools. Verified wholesaler products can appear in installer selection. Wholesalers never receive household opportunities.</p></div><div className="platform-table-wrap"><table><thead><tr><th>Capability</th><th>Household</th><th>Installer</th><th>Wholesaler</th></tr></thead><tbody>{accessRows.map((row) => <tr key={row[0]}>{row.map((cell, index) => index === 0 ? <th scope="row" key={`${row[0]}-${index}`}>{cell}</th> : <td key={`${row[0]}-${index}`}>{cell}</td>)}</tr>)}</tbody></table></div><a className="platform-access-link" href="/direct-trade/dashboard?setup=1">Get started with TLink</a></section>
+    <section className="platform-access" aria-labelledby="platform-free"><div className="guide-section-heading"><span>Know what you are getting</span><h2 id="platform-free">Free tools help you prepare. Assessments provide property-specific evidence.</h2><p>The guides, comparisons, home energy planner and Wattzun guidance are free. Property visits, formal ratings and installation work have their own scope and prices.</p></div><div className="guide-principle-grid"><article><strong>Compare and plan</strong><p>Use your bills and household answers to explore options. These tools estimate costs and priorities; they do not inspect the home or issue a rating certificate.</p><Link href="/compare">Compare electricity</Link> · <Link href="/gas-compare">Compare gas</Link></article><article><strong>Practical on-site advice</strong><p>A visit can help investigate comfort problems and identify an order of improvements. This advice service includes a written summary without a formal rating certificate.</p><Link href="/services/onsite-energy-assessment">See the advice service and price</Link></article><article><strong>Formal ratings and approvals</strong><p>An existing-home rating and a plan-based new-home NatHERS assessment use different methods and outputs. Choose the pathway for your property and the decision it must support.</p><Link href="/assessments">Choose the right assessment</Link></article></div></section>
 
-    <section className="platform-difference"><div><span>Designed around trust</span><h2>What the connected model adds</h2></div><div><article><strong>One useful household journey</strong><p>The guided plan, comparisons, rebate tools, personalised PDF and trade enquiry work without creating an account.</p></article><article><strong>One daily trade workspace</strong><p>Jobs, reusable templates, field records, invoice progress, accounting status and handovers stay attached to the system job ID. The trade workspace does not initiate payments.</p></article><article><strong>One product truth</strong><p>Approved catalogue items preserve supplier, price, stock, compatibility, warranty and product identity context.</p></article><article><strong>One explicit privacy boundary</strong><p>Trades receive only the fields named in the household&apos;s consent. The full home plan and PDF remain private.</p></article></div></section>
-    <SiteFooter>Platform access does not replace licensing, accreditation, insurance, product approval, site assessment or each participant&apos;s legal obligations.</SiteFooter>
+    <section className="platform-difference"><div><span>Useful evidence, clear limits</span><h2>How to use a result well</h2></div><div><article><strong>Your bill matters</strong><p>Plan costs depend on usage, timing, network and eligibility. A published plan ID can help identify an offer, but its rates still need checking against your current bill.</p></article><article><strong>Your roof matters</strong><p>A postcode-based solar estimate reflects local climate. Shade, roof layout, installation and export limits need site-specific checks.</p></article><article><strong>Your quote matters</strong><p>Planning prices are starting points. Enter the complete installed price after confirmed discounts and compare the same equipment and work.</p></article><article><strong>Your choice matters</strong><p>We do not sell household leads or offer paid placement. You decide whether to share an enquiry and whether to accept any quote.</p></article></div></section>
+
+    <section className="guide-callout"><div><h2>See how the numbers change a decision</h2><p>Follow four worked examples of plan timing, using solar at home, adding storage and ending a gas connection. Each shows its assumed figures and the next question to ask.</p></div><Link href="/case-studies">Explore energy savings examples</Link></section>
+    <section className="guide-callout"><div><h2>Prefer to talk it through?</h2><p>A five-minute call helps confirm the right assessment and booking logistics. It is separate from a paid assessment or installation quote.</p></div><Link href="/book-an-assessment">Book a quick call</Link></section>
+    <section className="guide-section"><div className="guide-section-heading"><span>For businesses and community teams</span><h2>Explore TLink for your work</h2></div><p>See how the trade workspace supports service businesses, and how the council workspace connects community programs with maps and reporting.</p><div className="guide-source-links"><Link href="/direct-trade/for-trades">TLink for trades and businesses</Link><Link href="/direct-trade/for-councils">TLink for councils</Link><Link href="/direct-trade/standards">Read the participation standards</Link></div></section>
+    <SiteFooter>Estimates support decisions and remain indicative. Confirm current rates, eligibility, licences, site suitability and the full written quote before committing.</SiteFooter>
   </main>;
 }

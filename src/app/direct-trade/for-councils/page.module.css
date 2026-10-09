@@ -1,0 +1,57 @@
+.page { color: #eef9fa; padding-bottom: 40px; }
+.hero { background: radial-gradient(ellipse at 90% 10%, #126d633d, transparent 65%), #071f2e; border: 1px solid #31565b; border-radius: 24px; display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); margin-top: 24px; padding: clamp(24px, 3vw, 48px); }
+.brand { align-items: center; color: #b5f5e4; display: flex; font-weight: 750; gap: 12px; }
+.brand img { border-radius: 10px; }
+.heroCopy h1 { font-size: clamp(2.4rem, 4.1vw, 4.6rem); letter-spacing: -.045em; line-height: 1.08; margin: 26px 0; }
+.heroCopy h1 span { color: #96f1d1; }
+.heroCopy > p { color: #c3dadd; max-width: 620px; }
+.actions { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.primary, .secondary { border: 1px solid #71d3b4; border-radius: 10px; display: inline-flex; gap: 14px; justify-content: space-between; min-height: 48px; padding: 14px 18px; text-decoration: none; }
+.primary { background: #a0f2d7; color: #092e28; font-weight: 750; }
+.primary:hover { background: #ceffed; }
+.secondary { color: #edfff8; }
+.secondary:hover { background: #144538; }
+.heroCopy .heroNote { color: #8db4b9; margin-top: 20px; }
+.heroVisual { align-self: center; margin: 0; transform: perspective(1500px) rotateY(-4deg); }
+.heroVisual img, .mapSection img { border: 1px solid #50736e; border-radius: 14px; box-shadow: 0 24px 70px #0006; display: block; height: auto; width: 100%; }
+.heroVisual figcaption, .mapSection figcaption { color: #a8c5c9; font-size: .8125rem; line-height: 1.6; margin-top: 12px; }
+.quickLinks { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 56px; }
+.quickLinks a { border-bottom: 1px solid #446762; color: #9ff2d8; padding: 10px 4px; text-decoration: none; }
+.section { margin: 56px 0; scroll-margin-top: 24px; }
+.heading { margin-bottom: 26px; max-width: 930px; }
+.heading > span, .eyebrow { color: #9aebd0; font-weight: 750; }
+.heading h2, .mapSection h2, .finalCta h2 { font-size: clamp(1.9rem, 3vw, 3.1rem); letter-spacing: -.035em; line-height: 1.15; margin: 15px 0; }
+.heading p { color: #b9d0d5; }
+.benefits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.benefits article { background: linear-gradient(135deg, #113e42, #0b293a); border: 1px solid #3b6264; border-radius: 18px; padding: 28px; }
+.benefits article > span { color: #87b9b0; }
+.benefits h3 { color: #f2fbf8; margin: 18px 0 12px; }
+.benefits p { color: #bfd8d8; }
+.mapSection { align-items: center; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 40px; margin: 72px 0; scroll-margin-top: 24px; }
+.mapSection figure { margin: 0; min-width: 0; }
+.mapSection p, .mapSection li { color: #c0d7dc; }
+.mapSection ul { line-height: 1.6; padding-left: 20px; }
+.mapSection li + li { margin-top: 12px; }
+.textLink { color: #a0f2d7; display: inline-block; margin-top: 16px; }
+.journey { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; list-style: none; padding: 0; }
+.journey li { background: #fff; border-radius: 16px; color: #123b47; padding: 26px; }
+.journey li > span { color: #0d835e; }
+.journey h3 { margin: 18px 0 12px; }
+.journey p { color: #466571; }
+.note { background: #10363f; border-left: 4px solid #66d5b0; border-radius: 12px; color: #c8dfe2; margin-top: 20px; padding: 22px; }
+.note strong { color: #a4f2d7; }
+.note p { margin: 8px 0 0; }
+.reporting { background: #eef8f4; border-radius: 22px; color: #103b3a; margin: 56px 0; padding: clamp(24px, 3vw, 40px); scroll-margin-top: 24px; }
+.reporting .heading > span { color: #097755; }
+.reportingGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; }
+.reportingGrid h3 { color: #124d42; }
+.reportingGrid p { color: #3b6266; }
+.finalCta { background: radial-gradient(ellipse at 95% 10%, #237e6266, transparent 70%), #0b343c; border: 1px solid #52746a; border-radius: 24px; margin: 56px 0 28px; padding: clamp(28px, 4vw, 54px); }
+.finalCta > p { color: #c4dedb; max-width: 820px; }
+.finalCta .accessNote { color: #a3c5c0; margin: 28px 0 0; }
+.accessNote a { color: #c4ffe8; }
+.related { display: flex; flex-wrap: wrap; gap: 22px; margin: 24px 0; }
+.related a { color: #a5e9d3; }
+.page a:focus-visible { outline: 3px solid #21cfa0; outline-offset: 5px; }
+@media (max-width: 1100px) { .hero { grid-template-columns: 1fr; } .heroVisual { transform: none; } .benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); } .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .mapSection, .benefits, .journey, .reportingGrid { grid-template-columns: 1fr; } .mapSection { gap: 28px; } .actions { align-items: stretch; flex-direction: column; } .primary, .secondary { width: 100%; } .section { margin: 40px 0; } }

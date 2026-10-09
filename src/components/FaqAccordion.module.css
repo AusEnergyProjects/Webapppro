@@ -1,4 +1,7 @@
 .breadcrumb a { border: 0; color: #9fe7ce; padding: 4px 2px; text-decoration: underline; }
+.topics a { border-color: #52777f; color: #e6f7f4; }
+.topics a:hover { background: #123e45; border-color: #6ee7b7; }
+.topics a:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 4px; }
 .list { background: #fff; border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; }
 .item + .item { border-top: 1px solid #dce8e5; }
 .question { align-items: center; cursor: pointer; display: flex; font-weight: 850; gap: 14px; justify-content: space-between; list-style: none; min-height: 56px; padding: 13px 17px; }

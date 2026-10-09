@@ -75,7 +75,10 @@ const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
       ["/guides", "Guides"],
       ["/faq", "Frequently asked questions"],
       ["/trusted-suppliers", "Trusted resources"],
-      ["/case-studies", "Case studies"],
+      ["/case-studies", "Energy savings examples"],
+      ["/platform", "How AEA helps"],
+      ["/direct-trade/for-trades", "TLink for trades"],
+      ["/direct-trade/for-councils", "TLink for councils"],
       ["/communities-schools", "Community education"],
       ["/team", "Our team"],
       ["/privacy", "Privacy"],
@@ -131,6 +134,7 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
           <div aria-label="Browse pages" className="site-nav-mobile-panel">
             <div className="site-nav-mobile-heading"><strong>Choose a page</strong></div>
             <div className="site-nav-mobile-groups">
+              <section><h2>Start here</h2><div><Link href="/guides">Find a guide</Link><Link href="/case-studies">Energy savings examples</Link><Link href="/platform">How AEA helps</Link><Link href="/direct-trade/for-trades">TLink for trades</Link><Link href="/direct-trade/for-councils">TLink for councils</Link></div></section>
               {NAVIGATION_CATEGORIES.map((category) => (
                 <section key={category.label}>
                   <h2>{category.label}</h2>

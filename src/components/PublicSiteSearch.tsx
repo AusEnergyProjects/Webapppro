@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { searchPublicSite, type PublicSiteSearchResult } from "@/lib/public-site-search";
+import type { PublicSiteSearchResult } from "@/lib/public-site-search";
 import styles from "./PublicSiteSearch.module.css";
 
 const OPEN_NAVIGATION_SELECTOR = ".site-nav-shell details[open]";
@@ -15,8 +15,21 @@ export function PublicSiteSearch() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const results = useMemo(() => searchPublicSite(query), [query]);
+  const [searchIndex, setSearchIndex] = useState<typeof import("@/lib/public-site-search") | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const results = useMemo(() => searchIndex?.searchPublicSite(query) ?? [], [query, searchIndex]);
   const showResults = open && query.trim().length > 0;
+
+  useEffect(() => {
+    if (!open || searchIndex) return;
+    let cancelled = false;
+    import("@/lib/public-site-search").then((index) => {
+      if (!cancelled) setSearchIndex(index);
+    }).catch(() => {
+      if (!cancelled) setLoadFailed(true);
+    });
+    return () => { cancelled = true; };
+  }, [open, searchIndex]);
 
   useEffect(() => {
     if (!showResults || !results.length) return;
@@ -99,11 +112,13 @@ export function PublicSiteSearch() {
           aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
           onChange={(event) => {
             setQuery(event.target.value);
+            if (!open) setLoadFailed(false);
             setOpen(true);
             setActiveIndex(-1);
           }}
           onFocus={() => {
-            if (query.trim()) setOpen(true);
+            if (!open) setLoadFailed(false);
+            setOpen(true);
           }}
           onKeyDown={handleKeyDown}
         />
@@ -111,7 +126,9 @@ export function PublicSiteSearch() {
 
       {showResults ? (
         <div className={styles.results} id={listboxId} role="listbox" aria-label="Suggested pages">
-          {results.length > 0 ? results.map((result, index) => (
+          {!searchIndex ? (
+            <p role="status">{loadFailed ? <>Search could not load. <a href="/guides">Browse the guides</a> or refresh this page to try again.</> : "Loading suggested pages…"}</p>
+          ) : results.length > 0 ? results.map((result, index) => (
             <button
               key={result.path}
               id={`${listboxId}-${index}`}
@@ -135,7 +152,7 @@ export function PublicSiteSearch() {
         </div>
       ) : null}
       <span className={styles.status} role="status" aria-live="polite">
-        {showResults ? `${results.length} suggested ${results.length === 1 ? "page" : "pages"}` : ""}
+        {showResults && searchIndex ? `${results.length} suggested ${results.length === 1 ? "page" : "pages"}` : ""}
       </span>
     </div>
   );

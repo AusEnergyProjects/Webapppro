@@ -3,6 +3,8 @@ import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { PUBLIC_SITE } from "@/lib/public-site";
+import { AEA_SERVICE_IDENTITIES } from "@/lib/aea-service-identity.mjs";
+import { audPrice, gstInclusiveCents } from "@/lib/aea-services.mjs";
 import styles from "@/components/FaqAccordion.module.css";
 
 const canonical = `${PUBLIC_SITE.apexUrl}/faq`;
@@ -230,7 +232,7 @@ const faqGroups: readonly FaqGroup[] = [
       },
       {
         question: "How much does a home energy assessment cost?",
-        answer: "Cost depends on the property stage, assessment pathway, dwelling size and complexity, number and quality of documents, location, travel and required output. Australian Energy Assessments confirms the scope before quoting so a five-minute logistics call is not mistaken for the paid assessment.",
+        answer: `Our practical on-site advice service is ${audPrice(gstInclusiveCents(AEA_SERVICE_IDENTITIES.onsiteEnergyAssessment.priceExGstCents))} including GST and provides a written summary without a formal rating certificate. The existing-home Home Energy Rating is ${audPrice(gstInclusiveCents(AEA_SERVICE_IDENTITIES.nathersExisting.priceExGstCents))} including GST. Confirm coverage, access and the exact scope before booking. Other services and additional work have their own prices. A five-minute logistics call is separate from the paid assessment.`,
       },
       {
         question: "What happens during the five-minute booking call?",
@@ -279,7 +281,7 @@ const structuredData = {
       name: title,
       description,
       inLanguage: "en-AU",
-      dateModified: "2026-09-01",
+      dateModified: "2026-10-09",
       publisher: { "@id": PUBLIC_SITE.organizationId },
       isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
       breadcrumb: { "@id": `${canonical}#breadcrumb` },
@@ -326,6 +328,12 @@ export default function FrequentlyAskedQuestionsPage() {
         <h1>Home Energy Rating, NatHERS, BASIX and energy assessor FAQ</h1>
         <p>Start with one simple question: is the home already built or still on plans? The answers below explain Home Energy Rating, NatHERS, BASIX, old Scorecard terms, costs and what happens during an assessment without assuming you already know the industry language.</p>
       </header>
+
+      <section className={`assessment-two-column ${styles.support}`} aria-label="Start with your home">
+        <article><span>Already built</span><h2>Advice or a formal rating?</h2><p>Choose practical advice for comfort and upgrade priorities, or a Home Energy Rating when you need the formal assessment output.</p><Link href="/assessments#existing-home-choice">Compare existing-home services and prices</Link></article>
+        <article><span>Building or renovating</span><h2>Check the approval pathway</h2><p>Start with the plans, location and what your certifier needs. NatHERS and NSW BASIX are related but distinct pathways.</p><Link href="/nathers-for-new-homes">Understand new-home assessments</Link></article>
+      </section>
+      <nav className={`guide-source-links ${styles.topics}`} aria-label="FAQ topics">{faqGroups.map((group) => <a href={`#${group.id}`} key={group.id}>{group.title}</a>)}<Link href="/services">All services and prices</Link></nav>
 
       <div className="assessment-asat">
         <strong>Official guidance reviewed 1 September 2026</strong>

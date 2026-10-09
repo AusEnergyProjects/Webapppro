@@ -1,0 +1,35 @@
+.page { color: var(--canvas-text); }
+.disclosure { background: #11353f; border: 1px solid #46757a; border-radius: 14px; margin: 20px 0; padding: 20px 24px; }
+.disclosure strong { color: #9af3d3; }
+.disclosure p { color: #cee1e5; margin: 8px 0 0; }
+.jumpLinks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 22px 0 34px; }
+.jumpLinks a { align-items: center; background: #0b2838; border: 1px solid #456772; border-radius: 10px; color: #eafff7; display: flex; gap: 12px; justify-content: space-between; padding: 16px; text-decoration: none; }
+.jumpLinks a:hover { background: #17443e; }
+.example { background: #fff; border: 1px solid #bbd9d2; border-radius: 20px; color: #092d3a; margin: 24px 0; padding: clamp(22px, 3vw, 42px); scroll-margin-top: 24px; }
+.example header > span { color: #067556; font-weight: 750; }
+.example h2 { margin: 10px 0; max-width: 900px; }
+.example header p { max-width: 900px; }
+.assumptions { background: #f0f7f5; border-radius: 12px; margin: 22px 0; padding: 18px 22px; }
+.assumptions p { margin: 7px 0 0; }
+.tableWrap { overflow-x: auto; }
+.tableWrap table { border-collapse: collapse; font-variant-numeric: tabular-nums; width: 100%; }
+.tableWrap caption { color: #1c5260; font-weight: 750; padding-bottom: 12px; text-align: left; }
+.tableWrap th, .tableWrap td { border-bottom: 1px solid #cfdfdd; line-height: 1.5; padding: 14px 12px; text-align: left; vertical-align: top; }
+.tableWrap thead { background: #eaf4f0; }
+.total { background: #e8faf2; color: #056446; font-weight: 750; }
+.calculation { color: #345764; margin: 20px 0; }
+.takeaway { background: #e8faf2; border-left: 4px solid #08a773; border-radius: 10px; margin: 24px 0 18px; padding: 20px 22px; }
+.takeaway strong { color: #07533f; }
+.takeaway p { margin: 8px 0 0; }
+.limitation { color: #46606b; }
+.actions { align-items: center; display: flex; flex-wrap: wrap; gap: 18px; margin-top: 24px; }
+.actions > a:not(.action) { color: #076448; }
+.action { align-items: center; background: #076448; border-radius: 10px; color: #fff; display: inline-flex; gap: 18px; justify-content: space-between; min-height: 48px; padding: 14px 20px; text-decoration: none; }
+.action:hover { background: #034b36; }
+.mathSteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; list-style-position: inside; padding: 0; }
+.mathSteps li { background: #f0f7f5; border: 1px solid #c5dfd6; border-radius: 12px; padding: 20px; }
+.mathSteps strong { display: block; margin: 10px 0; }
+.mathSteps span { color: #345764; }
+.page a:focus-visible { outline: 3px solid #13b98d; outline-offset: 4px; }
+@media (max-width: 800px) { .jumpLinks { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mathSteps { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .example { padding: 22px 18px; } .tableWrap th, .tableWrap td { font-size: .8125rem; padding: 10px 7px; } .action { width: 100%; } .actions { align-items: stretch; flex-direction: column; } }

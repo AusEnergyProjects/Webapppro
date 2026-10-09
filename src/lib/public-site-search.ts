@@ -12,9 +12,11 @@ export type PublicSiteSearchResult = PublicSiteSearchEntry & {
 };
 
 export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
+  { path: "/direct-trade/for-trades", title: "TLink for trades and businesses", description: "Free core software for leads, jobs, quotes, field records and teams. Optional services have separate charges.", keywords: ["why tlink", "trade crm", "business software", "job management", "installer tools"] },
+  { path: "/direct-trade/for-councils", title: "TLink for councils", description: "Community campaign journeys, postcode maps, local participation and reporting. Explore the demonstration.", keywords: ["council", "community energy program", "local government", "council dashboard", "campaign reporting"] },
   { path: "/services", title: "Services and prices", description: "Australian Energy Assessments rental safety checks, NatHERS ratings and onsite energy assessments.", keywords: ["services", "prices", "checks", "smoke", "blinds", "gas", "electrical"] },
   { path: "/offers", title: "Two-year rental safety offers", description: "$225 or $350 + GST per year equivalent. See total two-year prices and included checks.", keywords: ["offers", "bundles", "safety", "two years", "landlord", "rental"] },
-  ...Object.values(AEA_SERVICE_IDENTITIES).filter((service) => service.path.startsWith("/services/")).map((service) => ({ path: service.path, title: service.name, description: service.summary, keywords: [service.id, service.category, service.area, "price", "inspection", "assessment"] })),
+  ...Object.values(AEA_SERVICE_IDENTITIES).filter((service) => service.path.startsWith("/services/")).map((service) => ({ path: service.path, title: service.name, description: service.summary, keywords: [service.id, service.category, service.area, "price", "inspection", "assessment", ...(service.id === "onsite-energy-assessment" ? ["onsite energy audit", "practical energy advice", "energy advice visit", "home comfort assessment", "advice without a rating certificate"] : [])] })),
   {
     path: "/wholesale-electricity",
     title: "Live wholesale energy prices",
@@ -35,9 +37,9 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   },
   {
     path: "/assessments",
-    title: "Home energy assessments and ratings",
-    description: "Understand which assessment, rating or report suits your home.",
-    keywords: ["energy assessor", "energy assessment", "house assessment", "rating", "assessor near me"],
+    title: "Home energy assessments and audits",
+    description: "Choose practical onsite advice, a formal Home Energy Rating or NatHERS from plans, with clear service prices.",
+    keywords: ["energy assessor", "energy assessment", "house assessment", "rating", "assessor near me", "home energy audit", "energy audits", "energy efficiency assessment", "home energy assessment", "home energy assessment cost"],
   },
   {
     path: "/blower-door-thermal-imaging",
@@ -53,15 +55,15 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   },
   {
     path: "/nathers-for-new-homes",
-    title: "NatHERS for new homes",
-    description: "Desktop energy ratings for new homes, renovations and building approval.",
-    keywords: ["nathers", "new home", "new house", "energy rating", "building plans", "thermal performance"],
+    title: "NatHERS assessments for new homes",
+    description: "Plan-based NatHERS assessments for new homes and applicable renovations, with thermal and Whole of Home certificate guidance.",
+    keywords: ["nathers", "nathers assessment", "nathers assessor", "nathers certificate", "new home", "new house", "new home energy assessment", "energy rating", "building plans", "thermal performance"],
   },
   {
     path: "/home-energy-rating-for-existing-homes",
     title: "Home Energy Rating for existing homes",
-    description: "Learn about the national rating pathway for an existing home.",
-    keywords: ["existing home nathers", "existing house rating", "home energy rating", "new existing homes brand"],
+    description: "Formal onsite Home Energy Rating, two ratings, estimated energy use and upgrade guidance in NSW and Victoria.",
+    keywords: ["existing home nathers", "existing house rating", "home energy rating", "existing home energy assessment", "formal home energy rating", "home energy rating cost"],
   },
   {
     path: "/nathers-whole-of-home",
@@ -77,8 +79,8 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   },
   {
     path: "/residential-efficiency-scorecard",
-    title: "Residential Efficiency Scorecard",
-    description: "Learn why Residential Efficiency Scorecard closed and what the current Home Energy Rating replaced it.",
+    title: "Residential Efficiency Scorecard (closed)",
+    description: "Learn why Residential Efficiency Scorecard closed and how the current Home Energy Rating replaces it.",
     keywords: ["scorecard", "victorian scorecard", "home efficiency scorecard", "existing home assessment victoria"],
   },
   {
@@ -103,7 +105,7 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
     path: "/commercial-and-industrial-assessments",
     title: "Commercial and industrial assessments",
     description: "Energy assessment support for commercial and industrial buildings.",
-    keywords: ["business energy audit", "commercial assessment", "industrial energy", "commercial building"],
+    keywords: ["business energy audit", "commercial energy audit", "commercial assessment", "industrial energy audit", "industrial energy", "commercial building"],
   },
   {
     path: "/calculator",
@@ -269,15 +271,15 @@ export const PUBLIC_SITE_SEARCH_ENTRIES: readonly PublicSiteSearchEntry[] = [
   },
   {
     path: "/platform",
-    title: "Australian Energy Assessments platform",
-    description: "See how planning, assessments, Wattzun AI and TLink work together.",
-    keywords: ["platform", "how the site works", "customer tools", "services overview"],
+    title: "Your home energy journey",
+    description: "Use free planning, comparison and Wattzun tools, then choose a paid assessment when it fits your decision.",
+    keywords: ["platform", "how the site works", "customer tools", "services overview", "home energy journey", "free energy tools"],
   },
   {
     path: "/case-studies",
-    title: "Case studies",
-    description: "See practical examples of Australian home-energy decisions.",
-    keywords: ["examples", "case study", "projects", "real homes"],
+    title: "Energy savings examples",
+    description: "Follow four assumed-number decisions: compare plans, solar self-use, battery value and leaving gas. These are worked examples, not customer outcomes.",
+    keywords: ["examples", "case study", "case studies", "worked examples", "solar savings example", "battery savings example", "gas savings example"],
   },
   {
     path: "/communities-schools",

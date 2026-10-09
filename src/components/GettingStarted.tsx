@@ -22,6 +22,7 @@ export function GettingStarted() {
           <h1 id="home-title">A better home.<br /><span>A clearer next step.</span></h1>
           <p>From rental safety checks and NatHERS assessments to everyday energy upgrades. Choose a service, see the price and find your next step.</p>
           <div className={styles.serviceActions}><Link href="/services" className={styles.cardAction}>Services + prices</Link><Link href="/offers" className={styles.cardAction}>Two-year safety offers</Link></div>
+          <Link className={styles.callLink} href="/guides">Understand your options first <span aria-hidden="true">↗</span></Link>
           <a className={styles.mobileStart} href="#home-enquiry">Start your request <span aria-hidden="true">↗</span></a>
         </div>
       </HomeHeroScene>
@@ -67,13 +68,13 @@ export function GettingStarted() {
         </div>
       </div>
       <div className={styles.toolGrid}>
-        <article><span className={styles.toolNumber}>Compare energy plans</span><h3>Find a plan that fits.</h3><p>Compare electricity and mains gas plans using your location and usage.</p><div className={styles.toolLinks}><Link href="/compare">Compare electricity <span aria-hidden="true">↗</span></Link><Link href="/gas-compare">Compare gas <span aria-hidden="true">↗</span></Link></div></article>
+        <article><span className={styles.toolNumber}>Compare energy plans</span><h3>Find a plan that fits.</h3><p>Compare electricity and mains gas plans with your postcode and a bill. Explore solar and batteries, or estimate what switching gas appliances to efficient electric options could save.</p><div className={styles.toolLinks}><Link href="/compare">Compare electricity + solar <span aria-hidden="true">↗</span></Link><Link href="/gas-compare">Compare gas + electric upgrades <span aria-hidden="true">↗</span></Link></div></article>
         <article><span className={styles.toolNumber}>Plan your upgrades</span><h3>Make your next move count.</h3><p>Put your home upgrades in order and explore rebates that may apply.</p><div className={styles.toolLinks}><Link href="/plan">Build my home energy plan <span aria-hidden="true">↗</span></Link><Link href="/calculator">Estimate a rebate <span aria-hidden="true">↗</span></Link></div></article>
       </div>
-      <div className={styles.resourceLinks}><Link href="/guides">Browse all guides, rebates and examples</Link><Link href="/rebates">Rebates & assistance</Link><Link href="/direct-trade/standards">Read the marketplace standards</Link></div>
+      <div className={styles.resourceLinks}><Link href="/guides">Choose a plain-language guide</Link><Link href="/case-studies">See energy savings examples</Link><Link href="/platform">How AEA helps you decide</Link><Link href="/rebates">Rebates & assistance</Link></div>
     </section>
     <section className={styles.finalCta} aria-labelledby="home-next-title"><div><span className={styles.eyebrow}>Your next step starts here</span><h2 id="home-next-title">Let&apos;s get your home moving forward.</h2><p>One request. The right service. Your choice.</p></div><a className={styles.primaryLink} href="#home-enquiry">Tell us what you need <span aria-hidden="true">↗</span></a></section>
-    <aside className={styles.partners}><p><strong>Good at what you do?</strong> Connect your trade or service business through TLink.</p><a href="/direct-trade/dashboard?setup=1">Trade participation</a></aside>
+    <aside className={styles.partners}><p><strong>Good at what you do?</strong> Connect your trade or service business through TLink.</p><Link href="/direct-trade/for-trades">Why TLink for trades</Link><Link href="/direct-trade/for-councils">TLink for councils</Link><a href="/direct-trade/dashboard?setup=1">Trade participation</a><Link href="/direct-trade/standards">Read the marketplace standards</Link></aside>
     <SiteFooter>Prices, rebates and rules can change. Confirm the full quote, credentials and conditions before you commit. Need help? <a href={PUBLIC_SITE.phoneHref}>{PUBLIC_SITE.phoneDisplay}</a>.</SiteFooter>
   </main>;
 }

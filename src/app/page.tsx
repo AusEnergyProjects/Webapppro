@@ -19,7 +19,7 @@ const homepageSchema = {
       name: "Australian Energy Assessments | Home Energy Assessments and NatHERS",
       description: metadata.description,
       inLanguage: "en-AU",
-      dateModified: "2026-09-10",
+      dateModified: "2026-10-09",
       isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
       about: { "@id": PUBLIC_SITE.organizationId },
       mainEntity: { "@id": `${PUBLIC_SITE.apexUrl}/#home-energy-assessment-service` },

@@ -153,6 +153,10 @@ test("the shared header includes private, typo-tolerant predictive page search",
   assert.match(publicSiteSearchIndex, /path: "\/home-energy-rating-for-existing-homes"/);
   assert.doesNotMatch(publicSiteSearchIndex, /path: "\/(?:account|operations|creditex|direct-trade\/dashboard)/);
   assert.doesNotMatch(publicSiteSearch, /\bfetch\(|localStorage|sessionStorage|gtag|dataLayer/);
+  assert.match(publicSiteSearch, /import\("@\/lib\/public-site-search"\)/);
+  assert.doesNotMatch(publicSiteSearch, /import \{[^}]*searchPublicSite[^}]*\} from/);
+  assert.match(publicSiteSearch, /Loading suggested pages/);
+  assert.match(publicSiteSearch, /Search could not load/);
   assert.match(styles, /\.site-header \{ display: grid; grid-template-columns: auto minmax\(150px, 1fr\) auto;[^}]*overflow: visible;[^}]*z-index: 40;/);
   assert.match(styles, /\.public-site-search \{ grid-column: 2; grid-row: 1; \}/);
   assert.match(publicSiteSearchStyles, /\.root \{[^}]*max-width: 560px;/);

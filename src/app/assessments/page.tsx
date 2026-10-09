@@ -2,6 +2,11 @@ import Link from "next/link";
 import { JsonLd } from "@/components/JsonLd";
 import { SiteFooter, SiteHeader } from "@/components/ComparatorChrome";
 import { buildApexMetadata, PUBLIC_SITE } from "@/lib/public-site";
+import { getAeaService, audPrice, gstInclusiveCents } from "@/lib/aea-services.mjs";
+
+const onsiteAdvice = getAeaService("onsite-energy-assessment")!;
+const existingHomeRating = getAeaService("nathers-existing")!;
+const newHomeAssessment = getAeaService("nathers-new")!;
 
 export const metadata = buildApexMetadata({
   path: "/assessments",
@@ -45,7 +50,7 @@ const pathways = [
   },
 ] as const;
 
-const assessmentServiceNodes = pathways.map((pathway) => ({
+const assessmentServiceNodes = [...pathways.map((pathway) => ({
   "@type": "Service",
   "@id": `${PUBLIC_SITE.apexUrl}${pathway.internalHref}#service`,
   name: pathway.title,
@@ -55,8 +60,19 @@ const assessmentServiceNodes = pathways.map((pathway) => ({
   provider: { "@id": PUBLIC_SITE.organizationId },
   areaServed: pathway.internalHref === "/basix-nsw"
     ? { "@type": "AdministrativeArea", name: "New South Wales" }
+    : pathway.internalHref === "/home-energy-rating-for-existing-homes"
+      ? [{ "@type": "AdministrativeArea", name: "New South Wales" }, { "@type": "AdministrativeArea", name: "Victoria" }]
     : { "@type": "Country", name: "Australia" },
-}));
+})), {
+  "@type": "Service",
+  "@id": `${PUBLIC_SITE.apexUrl}${onsiteAdvice.path}#service`,
+  name: onsiteAdvice.name,
+  serviceType: "Practical onsite home energy advice without a rating certificate",
+  description: onsiteAdvice.summary,
+  url: `${PUBLIC_SITE.apexUrl}${onsiteAdvice.path}`,
+  provider: { "@id": PUBLIC_SITE.organizationId },
+  areaServed: [{ "@type": "AdministrativeArea", name: "New South Wales" }, { "@type": "AdministrativeArea", name: "Victoria" }],
+}];
 
 const assessmentHubSchema = {
   "@context": "https://schema.org",
@@ -102,11 +118,13 @@ export default function AssessmentsPage() {
   return <main className="wrap assessments-page">
     <JsonLd data={assessmentHubSchema} />
     <SiteHeader active="assessments" />
-    <header className="guide-hero assessments-hero"><span>NatHERS, Home Energy Rating and BASIX</span><h1>Choose the right home energy assessment</h1><p>Home energy assessments are not all the same. For a new home, we rate the plans before construction. For a home that is already built, an assessor visits the property and shows how it performs now. We help you choose the right service before you pay or collect documents you do not need.</p></header>
+    <header className="guide-hero assessments-hero"><span>Practical advice, Home Energy Rating, NatHERS and BASIX</span><h1>Choose the right home energy assessment</h1><p>Home energy assessments are not all the same. For a new home, we rate the plans before construction. For an existing home, choose practical onsite advice or a formal Home Energy Rating with a certificate. We help you choose the right service before you pay or collect documents you do not need.</p></header>
 
     <section className="assessment-two-column" aria-label="Home energy assessment overview"><article><span>The short answer</span><h2>What is a home energy assessment?</h2><p>It is a structured check of a home&apos;s design or current condition. Depending on the job, the result may be a NatHERS certificate for proposed plans, a Home Energy Rating for an existing property or practical advice for a narrower energy question.</p></article><article><span>Where we work</span><h2>Plan-based work is available Australia-wide</h2><p>We can complete new-home NatHERS work from plans anywhere in Australia. Most of our existing-home visits are currently in New South Wales and Victoria, and we confirm availability elsewhere before booking.</p></article></section>
 
-    <section className="assessment-two-column" aria-label="Energy audits and efficiency assessments"><article><span>Know what to ask for</span><h2>Is a home energy audit the same as an assessment?</h2><p>A home energy audit is a broad description of checking how a home uses energy and where it could improve. The agreed scope determines whether you receive practical advice, a formal Home Energy Rating or a specific diagnostic test. Ask which output is included before booking.</p><Link href="/home-energy-rating-for-existing-homes">See the existing-home assessment and its results</Link><Link href="/blower-door-thermal-imaging">Explore air leakage and insulation diagnostics</Link></article><article><span>Choose the right scope</span><h2>What does an energy efficiency assessment cover?</h2><p>For an existing home, the assessment records the building fabric and fixed systems, then provides ratings, estimated energy use and upgrade guidance. New-home NatHERS work models the proposed plans. Commercial energy audits need a separate scope based on the site, its equipment and available energy data.</p><Link href="/nathers-for-new-homes">Explore NatHERS assessments from plans</Link><Link href="/commercial-and-industrial-assessments">Explore commercial energy audits</Link></article></section>
+    <section className="assessment-two-column" id="existing-home-choice" aria-label="Choose advice or a formal existing-home rating"><article><span>Practical advice for an existing home</span><h2>Onsite energy assessment: advice without a certificate</h2><p>Choose this visit to understand comfort issues, energy use and which upgrades to consider first. You receive written advice and practical priorities, without a formal rating certificate.</p><p><strong>{audPrice(gstInclusiveCents(onsiteAdvice.priceExGstCents))} including GST</strong>. Visits are available mainly in NSW and Victoria; we confirm the address and access before booking.</p><Link href={onsiteAdvice.path}>See the advice visit, inclusions and enquiry options</Link></article><article><span>A formal existing-home rating</span><h2>Home Energy Rating: two ratings and a certificate</h2><p>Choose this pathway when you want a formal Home Energy Rating, a Star Rating, estimated annual energy use and upgrade guidance. It uses the current accredited assessment method for completed homes.</p><p><strong>{audPrice(gstInclusiveCents(existingHomeRating.priceExGstCents))} including GST</strong>. On-site delivery is mainly in NSW and Victoria, with location and access confirmed before booking.</p><Link href={existingHomeRating.path}>See the formal rating, inclusions and enquiry options</Link></article></section>
+
+    <section className="assessment-two-column" aria-label="Energy audits and efficiency assessments"><article><span>Know what to ask for</span><h2>Is a home energy audit the same as an assessment?</h2><p>A home energy audit is a broad description of checking how a home uses energy and where it could improve. The agreed scope determines whether you receive practical advice, a formal Home Energy Rating or a specific diagnostic test. Ask which output is included before booking.</p><Link href={onsiteAdvice.path}>Explore practical onsite advice</Link><Link href="/home-energy-rating-for-existing-homes">See the formal rating and its results</Link><Link href="/blower-door-thermal-imaging">Explore air leakage and insulation diagnostics</Link></article><article><span>Choose the right scope</span><h2>What does an energy efficiency assessment cover?</h2><p>A formal existing-home Home Energy Rating records the building fabric and fixed systems, then provides ratings, estimated energy use and upgrade guidance. Practical onsite advice focuses on comfort, energy use and upgrade priorities without a rating certificate. New-home NatHERS work models the proposed plans. Commercial energy audits need a separate scope based on the site, its equipment and available energy data.</p><Link href="/nathers-for-new-homes">Explore NatHERS assessments from plans</Link><Link href="/commercial-and-industrial-assessments">Explore commercial energy audits</Link></article></section>
 
     <div className="assessment-asat"><strong>Official guidance checked 1 September 2026</strong><span>Requirements can change by location and project. We explain the likely pathway, but your certifier, council or approval authority confirms what is required.</span></div>
 
@@ -120,7 +138,7 @@ export default function AssessmentsPage() {
 
     <section className="assessment-section" aria-labelledby="assessment-process-title"><div className="guide-section-heading"><span>What happens next</span><h2 id="assessment-process-title">From the first call to a useful result</h2></div><ol className="assessment-process"><li><span>01</span><div><h3>Tell us about the home</h3><p>We check the location, project stage and what the assessment needs to help you do.</p></div></li><li><span>02</span><div><h3>Gather the right information</h3><p>For a design, that means current plans and specifications. For an existing home, it means safe access to the property and its fixed systems.</p></div></li><li><span>03</span><div><h3>Assess and clarify</h3><p>The assessor records the evidence, explains any missing details and tests relevant options where they are part of the scope.</p></div></li><li><span>04</span><div><h3>Receive the agreed result</h3><p>You receive the certificate, rating or guidance named in the quote, together with the important assumptions and limits.</p></div></li><li><span>05</span><div><h3>Tell us if the project changes</h3><p>Changes to plans, products or the home can affect the result, so the assessment may need to be checked again.</p></div></li></ol></section>
 
-    <section className="assessment-two-column"><article><span>Clear pricing</span><h2>How much does a home energy assessment cost?</h2><p>There is no honest single price for every assessment. The quote depends on the service, home size, project complexity, location, travel, plans already available and the certificate or report you need. We confirm the scope and price before paid work starts.</p><Link href="/guides/free-home-energy-assessments">See what affects the price and when funding may apply</Link></article><article><span>Independent help</span><h2>Why speak with Australian Energy Assessments?</h2><p>We explain the options in plain language, separate current Home Energy Rating terms from older names and link to the official rules behind our guidance. The first five-minute call is only to check what you need.</p><Link href="/team">Meet the assessment team</Link><Link href="/book-an-assessment">Book the five-minute call</Link></article></section>
+    <section className="assessment-two-column"><article><span>Clear pricing</span><h2>How much does a home energy assessment cost?</h2><p>Our practical onsite energy assessment is {audPrice(gstInclusiveCents(onsiteAdvice.priceExGstCents))} including GST. A formal existing-home Home Energy Rating is {audPrice(gstInclusiveCents(existingHomeRating.priceExGstCents))} including GST, and a new-home NatHERS assessment is {audPrice(gstInclusiveCents(newHomeAssessment.priceExGstCents))} including GST. We confirm the location, access and included scope before booking. BASIX, separate specialist reports and redesign work are scoped separately.</p><Link href="/services#energy-assessments">Compare service prices and inclusions</Link><Link href="/guides/free-home-energy-assessments">Check when assessment funding may apply</Link></article><article><span>Independent help</span><h2>Why speak with Australian Energy Assessments?</h2><p>We explain the options in plain language, separate current Home Energy Rating terms from older names and link to the official rules behind our guidance. The first five-minute call is only to check what you need.</p><Link href="/team">Meet the assessment team</Link><Link href="/book-an-assessment">Book the five-minute call</Link></article></section>
 
     <section className="assessment-two-column"><article><span>NatHERS boundary</span><h2>Assessment expertise does not replace the approval authority</h2><p>A valid NatHERS certificate uses accredited software and the relevant assessor pathway. The certifier, council, consent authority and current building rules determine what evidence the project must submit and accept.</p><a href="https://www.homeenergyrating.gov.au/about/about-us/nationwide-house-energy-rating-scheme-nathers" target="_blank" rel="noopener noreferrer">Read the official NatHERS scheme overview</a></article><article><span>BASIX thermal methods</span><h2>Choose the method that fits the NSW project</h2><p>NSW guidance provides DIY, NatHERS simulation and Passive House methods for eligible project types. Complex and multi-dwelling projects may require simulation using NatHERS accredited software.</p><a href="https://www.planningportal.nsw.gov.au/basix-thermal-performance-section" target="_blank" rel="noopener noreferrer">Confirm the official thermal performance methods</a></article></section>
 
