@@ -1160,6 +1160,95 @@ test('cached inspection results do not regress and successful records stay until
   assert.equal((await h.queue.getRentalSaveState('job-1')).result.inspection.revision, 2);
 });
 
+test('editing a queued or conflicted answer durably restores its saved snapshot before cancelling it', async () => {
+  for (const status of ['queued', 'conflict']) {
+    const h = harness(), { input, result } = fixture();
+    const record = { ...input, schemaVersion: 1, id: 'restore-answer', ownerKey: h.state.owner.key, createdAt: 1,
+      status, error: status === 'conflict' ? 'An answer changed elsewhere.' : '', photos: [] };
+    h.store.set('rental-save:firebase%3Aalice:restore-answer', JSON.stringify(record));
+    await h.queue.cacheRentalResult('job-1', result);
+    let restored;
+    await h.queue.restoreRentalSaveForEditing(record.id, async (latest, cached) => {
+      assert.equal((await h.queue.getRentalSaveState('job-1')).records.length, 1, 'The save remains recoverable until the draft is restored');
+      restored = { record: latest, result: cached };
+    });
+    assert.deepEqual(restored.record, record);
+    assert.deepEqual(restored.result, result);
+    assert.equal((await h.queue.getRentalSaveState('job-1')).records.length, 0);
+    assert.equal(h.state.calls.length, 0, 'Restoring a draft sends no assessment mutation');
+  }
+});
+
+test('editing waits for an active upload and restores its latest item and uploaded-media checkpoints', async () => {
+  const h = harness(), wait = deferred(), started = deferred();
+  h.state.handler = async (path, init) => {
+    if (path === '/api/trade-field-work') { started.resolve(); await wait.promise; }
+    if (typeof init?.body === 'string' && JSON.parse(init.body).action === 'link_evidence') {
+      throw new h.ApiError('Evidence changed elsewhere.', 409, 'RENTAL_MUTATION_CONFLICT');
+    }
+    return h.defaultRequest(path, init);
+  };
+  const input = fixture().input; input.photos = [photo()];
+  const queued = await h.queue.enqueueRentalSave(input);
+  await started.promise;
+  let restored;
+  const editing = h.queue.restoreRentalSaveForEditing(queued.id, async (record, result) => { restored = { record, result }; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(restored, undefined, 'Draft restoration cannot race a worker holding an older record');
+  wait.resolve(); await editing;
+  assert.equal(restored.record.status, 'conflict');
+  assert.equal(restored.record.answerSaved, true);
+  assert.equal(restored.record.savedItem.id, 'item-ceiling');
+  assert.ok(restored.record.photos[0].mediaId);
+  assert.ok(restored.record.photos[0].prepared.envelope);
+  assert.equal(restored.record.photos[0].clientUploadId, queued.photos[0].clientUploadId);
+  assert.equal(restored.result.items[0].revision, restored.record.savedItem.revision);
+  assert.equal((await h.queue.getRentalSaveState('job-1')).records.length, 0);
+  assert.equal(h.state.calls.filter((call) => call.path === '/api/trade-field-work').length, 1);
+});
+
+test('failed draft restoration retains the complete queue record and does not invalidate Finish', async () => {
+  const h = harness(), { input, result } = fixture();
+  const record = { ...input, schemaVersion: 1, id: 'restore-answer', ownerKey: h.state.owner.key, createdAt: 1,
+    status: 'conflict', error: 'Review this answer.', photos: [] };
+  const finish = { ...record, id: 'finish-answer', draftKey: 'finish:module-1', createdAt: 2,
+    finish: { reviewed: result, dependencyIds: [record.id], email: false, recipientEmail: '' } };
+  const recordKey = 'rental-save:firebase%3Aalice:restore-answer', finishKey = 'rental-save:firebase%3Aalice:finish-answer';
+  h.store.set(recordKey, JSON.stringify(record)); h.store.set(finishKey, JSON.stringify(finish));
+  await h.queue.cacheRentalResult('job-1', result);
+  await assert.rejects(h.queue.restoreRentalSaveForEditing(record.id, async (latest) => {
+    latest.photos.push({ uri: 'callback-only' });
+    throw new Error('Draft storage is full');
+  }), /Draft storage is full/);
+  assert.deepEqual(JSON.parse(h.store.get(recordKey)), record, 'Callback edits cannot change the durable queue record');
+  assert.deepEqual(JSON.parse(h.store.get(finishKey)), finish);
+  await h.queue.restoreRentalSaveForEditing(record.id, async () => {});
+  assert.equal(h.store.has(recordKey), false);
+  const retainedFinish = JSON.parse(h.store.get(finishKey));
+  assert.equal(retainedFinish.status, 'conflict');
+  assert.match(retainedFinish.error, /edited after Finish/);
+});
+
+test('restoring an answer preserves action, access and completed-assessment locks', async () => {
+  for (const blocked of ['finish', 'photoRemoval', 'permission', 'complete']) {
+    const h = harness(), { input, result } = fixture();
+    const record = { ...input, schemaVersion: 1, id: 'restore-answer', ownerKey: h.state.owner.key, createdAt: 1,
+      status: 'conflict', error: 'Review this answer.', photos: [] };
+    if (blocked === 'finish') record.finish = { reviewed: result, dependencyIds: [], email: false, recipientEmail: '' };
+    if (blocked === 'photoRemoval') record.photoRemoval = { evidenceId: 'evidence-1' };
+    if (blocked === 'permission') result.permissions.canEdit = false;
+    if (blocked === 'complete') result.modules[0].status = 'complete';
+    h.store.set('rental-save:firebase%3Aalice:restore-answer', JSON.stringify(record));
+    await h.queue.cacheRentalResult('job-1', result);
+    let restored = false;
+    await assert.rejects(h.queue.restoreRentalSaveForEditing(record.id, async () => { restored = true; }),
+      (error) => error.code === (['finish', 'photoRemoval'].includes(blocked) ? 'RENTAL_SAVE_INVALID'
+        : blocked === 'permission' ? 'RENTAL_EDIT_PERMISSION_REQUIRED' : 'RENTAL_SAVE_CONFLICT'));
+    assert.equal(restored, false, blocked);
+    assert.deepEqual((await h.queue.getRentalSaveState('job-1')).records, [record]);
+  }
+});
+
 test('finalization refuses a stale reviewed revision and clears its local reservation after failure', async () => {
   const h = harness(); h.state.result.modules[0].revision = 3;
   await assert.rejects(h.queue.requestWhenRentalSynced('job-1', { action: 'complete_module', moduleId: 'module-1', expectedRevision: 2 }), (error) => error.code === 'RENTAL_SAVE_CONFLICT');

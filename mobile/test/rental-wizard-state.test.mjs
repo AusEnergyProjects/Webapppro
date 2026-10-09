@@ -43,6 +43,10 @@ test('photo linking cannot run before its upload reference has been saved locall
 });
 
 const source = readFileSync(new URL('../src/components/rental-inspection-workflow.tsx', import.meta.url), 'utf8');
+const findingHelper = ts.transpileModule(source.slice(source.indexOf('function findingChoices('), source.indexOf('export function RentalInspectionWorkflow')), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+const { findingDescription, findingChoices } = new Function(`${findingHelper}; return { findingDescription, findingChoices };`)();
 
 function mountedOpenQueuedAnswer(environment) {
   const implementation = source.slice(source.indexOf('  function openQueuedAnswer('), source.indexOf('  function openCompletionIssue('));
@@ -150,7 +154,7 @@ function saveEnvironment() {
   return {
     active: { id: 'module', revision: 1, template: { templateVersion: 3 } }, item: { revision: 0, instanceKey: 'property', sortOrder: 0 }, storedItem: undefined,
     section: { key: 'bathroom' }, check: { key: 'bathroom', repeatBy: 'property', requiredEvidenceCount: 1, prompt: 'Bathroom condition' },
-    draft, saves: [], data: { findings: [] }, evidence: [], simpleReview: false, RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationFieldIsVisible,
+    draft, saves: [], data: { findings: [] }, evidence: [], simpleReview: false, RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationFieldIsVisible, findingDescription,
     rentalAssessorEvidenceRequirement, rentalObservationBlockers,
     workOrderId: 'job', key: 'draft', cacheRef: { current: { drafts: { draft }, answers: {} } },
     setSaves() {}, setCache() {}, persist: async () => {}, advanced: false,
@@ -227,7 +231,7 @@ function nextEnvironment() {
   const env = { draft: { outcome: 'meets', response: { applianceType: 'Split system' }, findingDescription: '', severity: 'required' },
     check: { responseType: 'outcome' }, simpleReview: false, editable: true, page: 'answer', responseFields: [{ key: 'applianceType' }],
     RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet', 'specialist_verification_required']), calls: [],
-    detailIndex: 0, detailField: undefined };
+    detailIndex: 0, detailField: undefined, findingDescription };
   env.setPage = (page) => { env.page = page; env.calls.push(page); };
   env.setDetailIndex = (index) => { env.detailIndex = index; };
   env.setError = (error) => env.calls.push(error);
@@ -258,13 +262,63 @@ test('an explicitly tapped observation saves inline and immediate danger still r
 test('a missing observation and a missing licensed test result cannot be silently skipped', async () => {
   const env = nextEnvironment(); env.draft.outcome = 'does_not_meet';
   await mountedNext(env)();
-  assert.deepEqual(env.calls, ['Add a short note about what you saw or could not check.']);
+  assert.deepEqual(env.calls, ['Choose what you noticed above. Additional details are optional.']);
   env.calls.length = 0; env.draft.outcome = 'meets'; env.check.responseType = 'test_result';
   await mountedNext(env)();
   assert.deepEqual(env.calls, ['details']);
   env.calls.length = 0; env.detailField = { key: 'testResult', required: true };
   await mountedNext(env)();
   assert.deepEqual(env.calls, ['Record this result before continuing.']);
+});
+
+test('choosing an observation advances with blank optional details, while legacy notes remain valid', async () => {
+  for (const patch of [{ findingObservation: 'Gaps visible', findingDescription: '' }, { findingDescription: 'Existing recorded window condition' }]) {
+    const env = nextEnvironment(); env.draft.outcome = 'does_not_meet'; Object.assign(env.draft, patch);
+    await mountedNext(env)(); assert.deepEqual(env.calls, ['saved']);
+  }
+  assert.equal(findingDescription({ findingObservation: 'Gaps visible', findingDescription: ' ' }), 'Gaps visible');
+  assert.equal(findingDescription({ findingObservation: 'Gaps visible', findingDescription: 'Kitchen window' }), 'Gaps visible: Kitchen window');
+});
+
+test('a selected window observation queues a factual finding without a typed optional note', async () => {
+  const env = saveEnvironment();
+  Object.assign(env.draft, { outcome: 'does_not_meet', locationLabel: 'Property', publicNotes: '', internalNotes: '', findingTitle: '',
+    findingObservation: 'Gaps visible', findingDescription: '', scopeSummary: '', quotation: {}, severity: 'required', immediateAction: '', notified: false,
+    response: { sealLengthMetres: '8', limitationStatus: 'No limitation' } });
+  env.active.key = 'minimum_standards'; env.check.key = 'windows_2027_readiness'; env.RENTAL_ADVERSE_OUTCOMES.add('does_not_meet');
+  env.readable = value => value.replaceAll('_', ' ');
+  let saved; env.enqueueRentalSave = async input => { saved = input; return { id: 'saved' }; }; env.advanceQuestion = () => {};
+  await mountedSaveAnswer(env)();
+  assert.equal(saved.body.finding.description, 'Gaps visible');
+  assert.equal(saved.draftSnapshot.findingDescription, '');
+  assert.equal(saved.draftSnapshot.findingObservation, 'Gaps visible');
+});
+
+test('quick observation and optional details are separate actual controls', () => {
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === "check.responseType === 'outcome' && !simpleReview && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)";
+  const env = { check: { responseType: 'outcome' }, simpleReview: false, RENTAL_ADVERSE_OUTCOMES: new Set(['does_not_meet']),
+    draft: { outcome: 'does_not_meet', findingObservation: 'Gaps visible', findingDescription: '' }, editable: true, busy: '', styles: {},
+    findingChoices, rentalFindingDescriptionLabel: () => 'What did you notice?', View: 'view', Text: 'text', Pressable: 'button', FieldButton: 'button', RentalTextField: 'input',
+    change(patch) { Object.assign(env.draft, patch); } };
+  const render = () => renderedNativeBranch(select, env);
+  const input = () => renderedNodes(render(), node => node.type === 'input')[0];
+  assert.equal(input().props.label, 'Additional details (optional)'); assert.equal(input().props.value, '');
+  input().props.onChange('Bedroom');
+  assert.equal(env.draft.findingObservation, 'Gaps visible');
+  renderedNodes(render(), node => node.type === 'button' && renderedText(node) === 'Missing')[0].props.onPress();
+  assert.equal(env.draft.findingObservation, 'Missing'); assert.equal(env.draft.findingDescription, 'Bedroom');
+});
+
+test('a locked queued answer has an actionable edit button beside the question', () => {
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === 'queuedAnswer' && ts.isJsxElement(node.whenTrue);
+  const env = { queuedAnswer: { status: 'conflict' }, canReviewQueuedAnswer: true, busy: '', styles: {}, View: 'view', Text: 'text', FieldButton: 'button',
+    reviewQueuedAnswer() { env.edited = true; } };
+  const render = () => renderedNativeBranch(select, env);
+  const button = () => renderedNodes(render(), node => node.type === 'button')[0];
+  assert.equal(renderedText(button()), 'Edit saved answer'); button().props.onPress(); assert.equal(env.edited, true);
+  env.queuedAnswer.status = 'queued'; assert.equal(button().props.disabled, false);
+  env.busy = 'restore'; assert.equal(button().props.disabled, true);
+  env.canReviewQueuedAnswer = false; assert.equal(button(), undefined);
 });
 
 test('queued read-only answers advance and compact controls use numeric keyboards rather than giant textareas', async () => {
@@ -625,8 +679,8 @@ test('submitted drafts reconcile after GPS completes, but real later edits and n
   const helpers = source.slice(source.indexOf('const emptyCache'), source.indexOf('function RentalTextField'))
     .replace('function unfinishedDrafts(', 'export function unfinishedDrafts(');
   const compiled = ts.transpileModule(helpers, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-  const assessDrafts = new Function('rentalQuotation', 'RENTAL_ADVERSE_OUTCOMES', 'rentalSharedObservationResponse', 'const exports = {}; ' + compiled + '; return exports.unfinishedDrafts;')(
-    () => ({}), new Set(['does_not_meet']), rentalSharedObservationResponse);
+  const assessDrafts = new Function('rentalQuotation', 'RENTAL_ADVERSE_OUTCOMES', 'rentalSharedObservationResponse', 'findingChoices', 'findingDescription', 'const exports = {}; ' + compiled + '; return exports.unfinishedDrafts;')(
+    () => ({}), new Set(['does_not_meet']), rentalSharedObservationResponse, findingChoices, findingDescription);
   const assessmentModule = { id: 'module', key: 'minimum_standards', template: { assessmentScope: 'current_minimum_standards', templateVersion: 3,
     sections: [{ key: 'bathroom', title: 'Bathroom', checks: [{ key: 'working' }] }] } };
   const key = 'module:current_minimum_standards:3:bathroom:0:property';
@@ -648,6 +702,13 @@ test('submitted drafts reconcile after GPS completes, but real later edits and n
   assert.deepEqual(assessDrafts(assessmentModule, { items: [item] }, cache, []), [], 'An unchanged saved answer is not an unfinished draft');
   retained.outcome = 'does_not_meet';
   assert.equal(assessDrafts(assessmentModule, { items: [item] }, cache, []).length, 1);
+  item.outcome = 'does_not_meet'; retained.findingObservation = 'Missing';
+  const findingResult = { items: [item], findings: [{ itemId: item.id, description: 'Missing', severity: 'required', quantityMilli: 0, unitLabel: 'each', details: {} }] };
+  assert.equal(assessDrafts(assessmentModule, findingResult, cache, []).length, 0, 'An unchanged selected observation matches its saved description');
+  retained.findingObservation = 'Gaps visible';
+  assert.equal(assessDrafts(assessmentModule, findingResult, cache, []).length, 1, 'Changing only the selection must be saved before Finish');
+  retained.findingObservation = 'Missing'; retained.findingDescription = 'Bedroom';
+  assert.equal(assessDrafts(assessmentModule, findingResult, cache, []).length, 1, 'Additional details also remain an unsaved edit');
   const legacyLocal = structuredClone(draft);
   legacyLocal.photos[0].locationPending = false;
   const heaterKey = 'module:current_minimum_standards:3:heating:0:property';

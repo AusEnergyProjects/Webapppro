@@ -26,14 +26,14 @@ import { RENTAL_ASSESSMENT_TEMPLATE_VERSION } from '../../../src/lib/trade-renta
 import { RENTAL_ASSESSOR_TITLE, rentalAssessorMetadataField, rentalAssessorOutcomePatch, rentalWindowIsFixed,
   rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorSections,
   RENTAL_SHOWER_CHOICES, rentalShowerChoicePatch, rentalShowerChoiceValue } from '../../../src/lib/rental-assessor-workflow.mjs';
-import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRentalSave, enqueueRentalFinish, enqueueRentalPhotoRemoval, getRentalSaveState,
+import { acknowledgeRentalSave, loadRentalResult, restoreRentalSaveForEditing, enqueueRentalSave, enqueueRentalFinish, enqueueRentalPhotoRemoval, getRentalSaveState,
   processRentalSaveQueue, rememberRentalPhotoLocation, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
 
 type Props = { workOrderId: string; summary: FieldRentalInspectionSummary; online: boolean; onChanged: () => Promise<void>; onReturnToJob: () => void };
 type Photo = RentalQueuedPhoto;
 type Draft = { outcome: string; locationLabel: string; publicNotes: string; internalNotes: string;
-  findingTitle: string; findingDescription: string; scopeSummary: string;
+  findingTitle: string; findingDescription: string; findingObservation?: string; scopeSummary: string;
   quantity: string; unitLabel: string; quotation: Record<string, string>;
   severity: string; immediateAction: string; notified: boolean; response: Record<string, unknown>; photos: Photo[] };
 type Cursor = { sectionKey: string; checkIndex: number; instanceKey: string };
@@ -50,8 +50,10 @@ function isDraft(value: unknown): value is Draft {
 }
 function initialDraft(item: RentalAssessmentItem, data: RentalAssessmentResult): Draft {
   const finding = data.findings?.find((f) => f.itemId === item.id);
+  const description = finding?.description || item.publicNotes || '';
+  const observation = findingChoices(item.outcome).includes(description) ? description : '';
   return { outcome: item.outcome, locationLabel: item.locationLabel, publicNotes: item.publicNotes, internalNotes: item.internalNotes,
-    findingTitle: finding?.title || '', findingDescription: finding?.description || item.publicNotes || '',
+    findingTitle: finding?.title || '', findingDescription: observation ? '' : description, ...(observation ? { findingObservation: observation } : {}),
     scopeSummary: finding?.scopeSummary || '', severity: finding?.severity || 'required',
     quantity: finding ? String(finding.quantityMilli / 1000) : '', unitLabel: finding?.unitLabel || 'each', quotation: rentalQuotation(finding?.details.quotation),
     immediateAction: String(finding?.details.immediateAction || ''), notified: finding?.details.responsiblePeopleNotified === true,
@@ -94,7 +96,7 @@ function unfinishedDrafts(module: RentalAssessmentModule, data: RentalAssessment
     const values = (draft: Draft) => ({ outcome: draft.outcome, locationLabel: saved.instanceKey === 'property' ? 'Property' : draft.locationLabel.trim(),
       publicNotes: draft.publicNotes.trim(), internalNotes: draft.internalNotes.trim(), response: draft.response,
       ...(RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? { findingTitle: draft.findingTitle.trim() || `${group?.title}: ${readable(draft.outcome)}`,
-        findingDescription: draft.findingDescription.trim(), scopeSummary: draft.scopeSummary.trim(), severity: draft.severity,
+        findingDescription: findingDescription(draft), scopeSummary: draft.scopeSummary.trim(), severity: draft.severity,
         quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), notified: draft.notified } : {}) });
     return draftContent(values(local)) !== draftContent(values(baseline));
   });
@@ -137,6 +139,9 @@ function findingChoices(outcome: string): string[] {
   if (outcome === 'not_accessible') return ['Access blocked', 'Area locked', 'Unsafe to access', 'Occupant did not allow access'];
   if (outcome === 'exemption_evidence_pending') return ['Supporting document not available', 'Exemption evidence not provided'];
   return ['Missing', 'Not working when checked', 'Visible damage', 'Worn or deteriorated', 'Gaps visible'];
+}
+function findingDescription(draft: Draft): string {
+  return [draft.findingObservation?.trim(), draft.findingDescription.trim()].filter(Boolean).join(': ');
 }
 export function RentalInspectionWorkflow({ workOrderId, summary, online, onChanged, onReturnToJob }: Props) {
   const insets = useSafeAreaInsets();
@@ -310,6 +315,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       : finishRequest ? 'Finish queued' : pendingSaves.some((entry) => entry.status === 'syncing') ? 'Syncing answers'
         : pendingSaves.length ? 'Saved on phone' : '';
   const queuedAnswer = [...pendingSaves].reverse().find((entry) => entry.draftKey === key);
+  const canReviewQueuedAnswer = data.permissions?.canEdit === true && active?.status !== 'complete'
+    && Boolean(queuedAnswer && ['queued', 'conflict'].includes(queuedAnswer.status));
   const queuedDraft = queuedAnswer && isDraft(queuedAnswer.draftSnapshot) ? queuedAnswer.draftSnapshot : undefined;
   const pendingAnswers: Record<string, unknown> = {};
   for (const entry of pendingSaves) {
@@ -393,7 +400,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   function change(values: Partial<Draft>) {
     timing.activity();
     if (!draft) return;
-    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...(cacheRef.current.drafts[key] || draft), response: draft.response, ...values } } };
+    const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...(cacheRef.current.drafts[key] || draft), response: draft.response,
+      ...(values.outcome && values.outcome !== draft.outcome ? { findingObservation: '' } : {}), ...values } } };
     cacheRef.current = next; setCache(next);
   }
   async function request(body: Record<string, unknown>) {
@@ -582,13 +590,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     }
     if (draft.outcome === 'not_applicable' && !draft.publicNotes.trim()) throw new Error('Explain why this check does not apply.');
     const adverse = RENTAL_ADVERSE_OUTCOMES.has(draft.outcome);
-    if (adverse && !simpleReview && !draft.findingDescription.trim()) throw new Error('Add a short note about what you saw or could not check.');
+    if (adverse && !simpleReview && !findingDescription(draft)) throw new Error(check.responseType === 'outcome' ? 'Choose what you noticed above. Additional details are optional.' : 'Add a short note about what you saw or could not check.');
     if (adverse && !simpleReview && draft.severity === 'immediate_safety_risk' && (!draft.immediateAction.trim() || !draft.notified)) throw new Error('Record the make-safe action and notification.');
     const existingFinding = data.findings?.find((finding) => finding.itemId === item.id);
     const body = { action: 'save_item', moduleId: active.id, expectedModuleRevision: active.revision,
       expectedItemRevision: item.revision, sectionKey: section.key, checkKey: check.key, instanceKey: item.instanceKey,
       locationLabel: draft.locationLabel.trim(), outcome: draft.outcome, response: draft.response, publicNotes: draft.publicNotes.trim(), internalNotes: draft.internalNotes.trim(), sortOrder: item.sortOrder,
-      finding: adverse && (!simpleReview || draft.publicNotes.trim() || draft.findingDescription.trim()) ? { ...existingFinding, title: draft.findingTitle.trim() || section.title + ': ' + readable(draft.outcome), description: simpleReview ? draft.publicNotes.trim() || draft.findingDescription.trim() : draft.findingDescription.trim(),
+      finding: adverse && (!simpleReview || draft.publicNotes.trim() || findingDescription(draft)) ? { ...existingFinding, title: draft.findingTitle.trim() || section.title + ': ' + readable(draft.outcome), description: simpleReview ? draft.publicNotes.trim() || findingDescription(draft) : findingDescription(draft),
         scopeSummary: draft.scopeSummary.trim(), severity: draft.severity, recommendedAction: draft.scopeSummary.trim(),
         quantityMilli: existingFinding?.quantityMilli || 0, unitLabel: existingFinding?.unitLabel || 'each',
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined };
@@ -632,7 +640,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       setPage('finding'); return;
     }
     if (!simpleReview && (page === 'finding' || (page === 'answer' && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome)))) {
-      if (editable && !draft.findingDescription.trim()) return setError('Add a short note about what you saw or could not check.');
+      if (editable && !findingDescription(draft)) return setError(check.responseType === 'outcome' ? 'Choose what you noticed above. Additional details are optional.' : 'Add a short note about what you saw or could not check.');
       if (draft.severity === 'immediate_safety_risk') { setPage('safety'); return; }
     }
     if (editable) await perform('save', saveAnswer); else advanceQuestion();
@@ -690,11 +698,17 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     const record = page === 'metadata' ? queuedMetadata : queuedAnswer;
     if (!record || !active) return;
     await perform('restore', async () => {
-      const restored = isDraft(record.draftSnapshot)
-        ? { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...record.draftSnapshot, photos: record.draftSnapshot.photos.map((photo) => record.photos.find((checkpoint) => checkpoint.uri === photo.uri) || photo).filter((photo) => !photo.mediaId || !data.evidence?.some((entry) => entry.jobMediaId === photo.mediaId && entry.status === 'active')) } } }
-        : { ...cacheRef.current, answers: { ...cacheRef.current.answers, [active.id]: { ...cacheRef.current.answers[active.id], ...pendingAnswers } } };
-      await persist(restored); cacheRef.current = restored; setCache(restored);
-      await discardRentalSave(record.id);
+      if (online) await loadRentalResult(workOrderId);
+      await restoreRentalSaveForEditing(record.id, async (latest, result) => {
+        if (result) applyResult(result);
+        const metadataAnswers = latest.body.action === 'save_module_answers' && latest.body.answers && typeof latest.body.answers === 'object' && !Array.isArray(latest.body.answers) ? latest.body.answers : {};
+        const restored = isDraft(latest.draftSnapshot)
+          ? { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...latest.draftSnapshot, photos: latest.draftSnapshot.photos.map((photo) => latest.photos.find((checkpoint) => checkpoint.uri === photo.uri) || photo).filter((photo) => !photo.mediaId || !result?.evidence?.some((entry) => entry.jobMediaId === photo.mediaId && entry.status === 'active')) } } }
+          : { ...cacheRef.current, answers: { ...cacheRef.current.answers, [active.id]: { ...cacheRef.current.answers[active.id], ...metadataAnswers } } };
+        await persist(restored); cacheRef.current = restored; setCache(restored);
+      });
+      const latest = await getRentalSaveState(workOrderId);
+      setSaves(latest.records); if (latest.result) applyResult(latest.result);
       setError('Your answer is back in the form. Review it against the latest job before saving again.');
       if (page !== 'metadata') setPage('answer');
     });
@@ -885,6 +899,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       </> : draft && item && section && check ? <>
         <Text style={styles.small}>{section.title + ' | ' + (cursor.checkIndex + 1) + ' of ' + section.checks.length}</Text>
         <Text style={styles.title}>{presentation?.prompt || check.prompt}</Text>
+        {queuedAnswer ? <View style={styles.syncNotice}>
+          <Text style={styles.body}>{queuedAnswer.status === 'conflict' ? 'This saved answer needs review. Restore it to change any answer or photo.' : 'This answer is saved on your phone and is waiting to sync.'}</Text>
+          {canReviewQueuedAnswer ? <FieldButton disabled={Boolean(busy)} onPress={() => void reviewQueuedAnswer()}>Edit saved answer</FieldButton> : null}
+        </View> : null}
         {presentation?.help ? <Text style={styles.small}>{presentation.help}</Text> : null}
         {page === 'answer' ? <>
           {active.key !== 'minimum_standards' && check.repeatBy !== 'property' ? <>
@@ -909,8 +927,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
           {check.responseType === 'outcome' && !simpleReview && RENTAL_ADVERSE_OUTCOMES.has(draft.outcome) ? <>
             <Text style={styles.label}>{rentalFindingDescriptionLabel(draft.outcome)}</Text>
             <View style={styles.options}>{findingChoices(draft.outcome).map((choice) => <Pressable key={choice} disabled={!editable || Boolean(busy)}
-              onPress={() => change({ findingDescription: choice })} style={[styles.option, draft.findingDescription === choice && styles.selected]}><Text style={styles.categoryTitle}>{choice}</Text></Pressable>)}</View>
-            <RentalTextField label="Details, if needed" value={draft.findingDescription} editable={editable && !busy} onChange={(value) => change({ findingDescription: value })} />
+              onPress={() => change({ findingObservation: choice })} style={[styles.option, draft.findingObservation === choice && styles.selected]}><Text style={styles.categoryTitle}>{choice}</Text></Pressable>)}</View>
+            <RentalTextField label="Additional details (optional)" value={draft.findingDescription} editable={editable && !busy} onChange={(value) => change({ findingDescription: value })} />
             <FieldButton variant={draft.severity === 'immediate_safety_risk' ? 'primary' : 'secondary'} disabled={!editable || Boolean(busy)} onPress={() => change({ severity: draft.severity === 'immediate_safety_risk' ? 'required' : 'immediate_safety_risk' })}>{draft.severity === 'immediate_safety_risk' ? 'Immediate danger flagged' : 'Flag an immediate danger'}</FieldButton>
           </> : null}
           <View style={styles.photo}>
@@ -952,11 +970,11 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         </> : null}
       </> : null}
       </>}
-      {(page === 'metadata' ? queuedMetadata : queuedAnswer)?.status === 'conflict' ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void reviewQueuedAnswer()}>Review saved answer</FieldButton> : null}
+      {page === 'metadata' && queuedMetadata?.status === 'conflict' ? <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void reviewQueuedAnswer()}>Edit saved answer</FieldButton> : null}
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     </KeyboardAwareScrollView>
     {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
-      {page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'save'} onPress={() => void next()}>Next</FieldButton>}
+      {page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy) || queuedAnswer?.status === 'syncing'} loading={busy === 'save' || busy === 'restore'} onPress={() => { if (canReviewQueuedAnswer) void reviewQueuedAnswer(); else void next(); }}>{canReviewQueuedAnswer ? 'Edit saved answer' : queuedAnswer?.status === 'syncing' ? 'Syncing answer...' : 'Next'}</FieldButton>}
     </View> : null}
   </View>;
 }

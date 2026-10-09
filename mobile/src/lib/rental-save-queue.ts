@@ -949,6 +949,41 @@ export async function discardRentalSave(id: string) {
   emit(record.workOrderId);
 }
 
+/** Restore the latest durable answer before cancelling its request, after any worker has settled. */
+export async function restoreRentalSaveForEditing(id: string,
+  restore: (record: RentalSaveRecord, result: RentalAssessmentResult) => Promise<void>) {
+  const owner = await ownerNow();
+  const original = (await recordsFor(owner)).find((entry) => entry.id === id);
+  if (!original) return;
+  const key = jobKey(owner, original.workOrderId);
+  await serial(jobGates, key, () => serial(localGates, key, async () => {
+    await checkOwner(owner);
+    assertJobAvailable(owner, original.workOrderId);
+    const records = await recordsFor(owner, original.workOrderId);
+    const record = records.find((entry) => entry.id === id);
+    if (!record) return;
+    if (record.finish || record.photoRemoval || !['save_item', 'save_module_answers'].includes(String(record.body.action))) {
+      throw new RentalSaveQueueError('Open the assessment to review this saved action.', 'RENTAL_SAVE_INVALID');
+    }
+    const result = await cachedResult(owner, record.workOrderId);
+    await checkOwner(owner);
+    if (!result) throw conflict('Reopen this assessment before editing the saved answer.');
+    if (result.permissions?.canEdit !== true) throw new ApiError('Your current Team access does not allow editing this assessment.', 403, 'RENTAL_EDIT_PERMISSION_REQUIRED');
+    currentModule(record, result);
+    await restore(copy(record), copy(result));
+    await checkOwner(owner);
+    assertJobAvailable(owner, record.workOrderId);
+    for (const finish of records.filter((entry) => entry.finish && entry.status !== 'succeeded'
+      && (entry.finish!.issueReport !== false || entry.module.id === record.module.id))) {
+      finish.status = 'conflict';
+      finish.error = 'The assessment was edited after Finish was requested. Review it and finish again.';
+      await persist(owner, finish);
+    }
+    await writeRentalSetting(owner, recordKey(record), null);
+  }));
+  emit(original.workOrderId);
+}
+
 export async function requestWhenRentalSynced(workOrderId: string, body: Record<string, unknown>) {
   const snapshot = copy(body);
   const owner = await ownerNow();
