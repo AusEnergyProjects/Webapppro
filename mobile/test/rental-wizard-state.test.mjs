@@ -44,6 +44,50 @@ test('photo linking cannot run before its upload reference has been saved locall
 
 const source = readFileSync(new URL('../src/components/rental-inspection-workflow.tsx', import.meta.url), 'utf8');
 
+function mountedOpenQueuedAnswer(environment) {
+  const implementation = source.slice(source.indexOf('  function openQueuedAnswer('), source.indexOf('  function openCompletionIssue('));
+  const compiled = ts.transpileModule(`export ${implementation.trim()}`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  return new Function('environment', `with (environment) { const exports = {}; ${compiled}; return exports.openQueuedAnswer; }`)(environment);
+}
+
+function photoReviewEnvironment() {
+  const changes = {};
+  return {
+    changes, saves: [],
+    data: {
+      modules: [{ id: 'assessment', template: { sections: [{ key: 'heating', checks: [{ key: 'heater_works' }] }] } }],
+      evidence: [{ id: 'mistaken-photo', itemId: 'heater-answer' }],
+      items: [{ id: 'heater-answer', moduleId: 'assessment', sectionKey: 'heating', checkKey: 'heater_works', instanceKey: 'property' }],
+    },
+    setModuleId(value) { changes.moduleId = value; }, setCursor(value) { changes.cursor = value; },
+    setPage(value) { changes.page = value; }, setError(value) { changes.error = value; },
+  };
+}
+
+test('a legacy photo-removal conflict opens its actual saved photo question without body module fields', () => {
+  const env = photoReviewEnvironment();
+  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'unlink_evidence' }, photoRemoval: { evidenceId: 'mistaken-photo' } });
+  assert.deepEqual(env.changes, { moduleId: 'assessment', cursor: { sectionKey: 'heating', checkIndex: 0, instanceKey: 'property' }, page: 'answer', error: '' });
+});
+
+test('a pending-photo removal opens the source answer before that answer has synced', () => {
+  const env = photoReviewEnvironment();
+  env.saves = [{ id: 'local-save', body: { sectionKey: 'heating', checkKey: 'heater_works', instanceKey: 'heater-2' } }];
+  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'unlink_evidence' }, photoRemoval: { sourceSaveId: 'local-save', uri: 'local-photo' } });
+  assert.deepEqual(env.changes.cursor, { sectionKey: 'heating', checkIndex: 0, instanceKey: 'heater-2' });
+  assert.equal(env.changes.page, 'answer');
+});
+
+test('a missing photo target returns to sections with an explanation instead of opening an unrelated answer', () => {
+  const env = photoReviewEnvironment();
+  mountedOpenQueuedAnswer(env)({ module: { id: 'assessment' }, body: { action: 'unlink_evidence' }, photoRemoval: { evidenceId: 'missing-photo' } });
+  assert.equal(env.changes.page, 'categories');
+  assert.match(env.changes.error, /review its latest photos/);
+  assert.equal(env.changes.cursor, undefined);
+});
+
 test('rental metadata inputs remain visible above the device keyboard', () => {
   assert.match(source, /<KeyboardAwareScrollView ref=\{scroll\}/);
   assert.match(source, /keyboardDismissMode="on-drag"/);

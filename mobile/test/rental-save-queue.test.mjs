@@ -550,6 +550,204 @@ test('synced removal rejects a stale module revision and a completed assessment'
   await assert.rejects(h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: h.state.result.modules[0], evidenceId: 'wrong' }), /locked/);
 });
 
+function savedPhotoTarget(h) {
+  const item = { ...fixture().input.baseItem, id: 'item-1', revision: 3, outcome: 'meets' };
+  h.state.result.items = [item];
+  h.state.result.evidence = ['wrong', 'keep'].map(id => ({ id, itemId: item.id,
+    jobMediaId: 'media-' + id, moduleId: 'module-1', status: 'active' }));
+  return clone(h.state.result);
+}
+
+test('removing a saved photo tolerates earlier queued answers and photos on a different question', async () => {
+  const h = harness(), reviewed = savedPhotoTarget(h), gate = deferred(), other = fixture().input;
+  other.body.checkKey = 'other'; other.baseItem.checkKey = 'other'; other.draftKey += ':other';
+  other.photos = [photo()];
+  h.state.handler = async (...args) => { await gate.promise; return h.defaultRequest(...args); };
+  await h.queue.enqueueRentalSave(other);
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.items.find(item => item.id === 'item-1').revision, 3);
+  assert.equal(h.state.result.evidence.find(e => e.id === 'wrong').status, 'superseded');
+  assert.equal(h.state.result.evidence.find(e => e.id === 'keep').status, 'active');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 1);
+  assert.ok(h.state.calls.find(call => call.body?.action === 'unlink_evidence').body.expectedModuleRevision > reviewed.modules[0].revision);
+});
+
+test('targeted photo removal rejects concurrent answer, finding and declaration edits', async () => {
+  for (const change of ['answer', 'finding', 'declaration', 'evidence', 'template', 'complete']) {
+    const h = harness(), reviewed = savedPhotoTarget(h);
+    h.state.result.findings = [{ id: 'finding-1', itemId: 'item-1', revision: 1 }];
+    reviewed.findings = clone(h.state.result.findings);
+    h.state.handler = async () => { throw new Error('Offline'); };
+    await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+    await h.queue.processRentalSaveQueue('job-1');
+    if (change === 'answer') h.state.result.items[0].revision++;
+    if (change === 'finding') h.state.result.findings[0].revision++;
+    if (change === 'declaration') h.state.result.modules[0].answers.assessorDeclaration = true;
+    if (change === 'evidence') h.state.result.evidence[0].jobMediaId = 'different-media';
+    if (change === 'template') h.state.result.modules[0].template.key = 'different-template';
+    if (change === 'complete') h.state.result.modules[0].status = 'complete';
+    h.state.result.modules[0].revision++;
+    h.state.handler = h.defaultRequest;
+    await h.queue.processRentalSaveQueue('job-1');
+    assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1, change);
+    assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 0, change);
+    assert.equal(h.state.result.evidence[0].status, 'active', change);
+  }
+});
+
+test('an old module-revision photo conflict recovers after restart when its target baseline is retained', async () => {
+  const h = harness(), reviewed = savedPhotoTarget(h);
+  h.state.handler = async () => { throw new Error('Offline'); };
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+  await h.queue.processRentalSaveQueue('job-1');
+  const [key, value] = [...h.store].find(([, value]) => JSON.parse(value).id === removal.id);
+  const record = JSON.parse(value);
+  record.status = 'conflict'; record.error = 'This assessment changed before the photo was removed. Review the latest photos and try again.';
+  h.store.set(key, JSON.stringify(record));
+  h.state.result.modules[0].revision += 4;
+  h.state.handler = h.defaultRequest;
+  const restarted = h.restart();
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.evidence[0].status, 'superseded');
+});
+
+test('legacy photo removal recovers using the retained source answer revision without overwriting another answer', async () => {
+  const h = harness(), input = fixture().input;
+  input.photos = [photo()];
+  const source = await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  const evidenceId = h.state.result.evidence[0].id;
+  h.state.handler = async () => { throw new Error('Offline'); };
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: h.state.result.modules[0], evidenceId });
+  await h.queue.processRentalSaveQueue('job-1');
+  const [key, value] = [...h.store].find(([, value]) => JSON.parse(value).id === removal.id);
+  const record = JSON.parse(value);
+  delete record.baseItem; delete record.baseFinding; delete record.photoRemoval.baseEvidence;
+  record.status = 'conflict'; record.error = 'This assessment changed before the photo was removed. Review the latest photos and try again.';
+  h.store.set(key, JSON.stringify(record));
+  h.state.result.modules[0].revision += 3;
+  h.state.handler = h.defaultRequest;
+  const restarted = h.restart(); await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.evidence[0].status, 'superseded');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).records.find(record => record.id === source.id).savedItem.revision, h.state.result.items[0].revision);
+});
+
+test('anchored removal keeps its answer baseline across a failed unlink request and a process restart', async () => {
+  const h = harness(), input = fixture().input;
+  input.photos = [photo()];
+  const source = await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  let failed = false;
+  h.state.handler = async (...args) => {
+    if (!failed && args[1]?.body && JSON.parse(args[1].body).action === 'unlink_evidence') {
+      failed = true; throw new Error('Disconnected before deletion');
+    }
+    return h.defaultRequest(...args);
+  };
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: input.module, sourceSaveId: source.id, uri: input.photos[0].uri });
+  await h.queue.processRentalSaveQueue('job-1');
+  const retained = (await h.queue.getRentalSaveState('job-1')).records.find(record => record.id === removal.id);
+  assert.equal(retained.status, 'retry');
+  assert.equal(retained.baseItem.id, h.state.result.items[0].id);
+  assert.equal(retained.baseItem.revision, h.state.result.items[0].revision);
+  h.state.result.modules[0].revision += 2;
+  const restarted = h.restart(); await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.evidence[0].status, 'superseded');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 1);
+});
+
+test('legacy photo conflict without a target snapshot requires a current reselect and retains every saved answer', async () => {
+  const h = harness(), reviewed = savedPhotoTarget(h);
+  h.state.handler = async () => { throw new Error('Offline'); };
+  const removal = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong' });
+  await h.queue.processRentalSaveQueue('job-1');
+  h.state.result.modules[0].revision += 2;
+  h.state.handler = h.defaultRequest;
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1);
+  assert.equal(h.state.result.evidence[0].status, 'active');
+  const updated = clone(h.state.result);
+  const reselected = await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: updated.modules[0], evidenceId: 'wrong', reviewed: updated });
+  assert.equal(reselected.id, removal.id);
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.deepEqual(h.state.result.items, reviewed.items);
+  assert.equal(h.state.result.evidence[0].status, 'superseded');
+  assert.equal(h.state.result.evidence[1].status, 'active');
+});
+
+test('Finish queued behind a photo removal completes and delivers after only the selected photo is unlinked', async () => {
+  const h = harness(), gate = deferred();
+  savedPhotoTarget(h);
+  const finish = prepareFinish(h);
+  h.state.result.permissions.canEdit = true;
+  const reviewed = clone(h.state.result);
+  h.state.handler = async (...args) => { await gate.promise; return h.defaultRequest(...args); };
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+  await h.queue.enqueueRentalFinish({ ...finish, reviewed });
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.evidence[0].status, 'superseded');
+  assert.equal(h.state.result.evidence[1].status, 'active');
+  assert.equal(h.state.result.modules[0].status, 'complete');
+  for (const action of ['unlink_evidence', 'complete_module', 'issue_report', 'email_report']) {
+    assert.equal(h.state.calls.filter(call => call.body?.action === action).length, 1, action);
+  }
+});
+
+test('Finish reconciles source-photo removal while uploading and after the source photos were linked', async () => {
+  for (const pendingUpload of [true, false]) {
+    const h = harness(), gate = deferred(), finish = prepareFinish(h), input = fixture().input;
+    h.state.result.permissions.canEdit = true;
+    input.module = clone(h.state.result.modules[0]);
+    input.photos = [photo(), { ...photo(), uri: 'file:///keep.jpg' }];
+    h.files.set('file:///keep.jpg', { size: 2048, bytes: 'keep' });
+    if (pendingUpload) h.state.handler = async (...args) => {
+      if (args[0] === '/api/trade-field-work' && !h.state.uploadStarted) { h.state.uploadStarted = true; await gate.promise; }
+      return h.defaultRequest(...args);
+    };
+    const source = await h.queue.enqueueRentalSave(input);
+    if (pendingUpload) await until(() => h.state.uploadStarted);
+    else {
+      await h.queue.processRentalSaveQueue('job-1');
+      h.state.handler = async (...args) => { await gate.promise; return h.defaultRequest(...args); };
+    }
+    const reviewed = clone(h.state.result);
+    await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], sourceSaveId: source.id, uri: input.photos[0].uri, reviewed });
+    await h.queue.enqueueRentalFinish({ ...finish, module: reviewed.modules[0], reviewed });
+    gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+    assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0, String(pendingUpload));
+    assert.equal(h.state.result.evidence.filter(e => e.status === 'active').length, 1);
+    assert.equal(h.state.result.modules[0].status, 'complete');
+    assert.equal(h.state.calls.filter(call => call.body?.action === 'email_report').length, 1);
+  }
+});
+
+test('a persisted Finish evidence conflict retries only its confirmed removal and still rejects unrelated evidence changes', async () => {
+  for (const unrelatedDeletion of [false, true]) {
+    const h = harness(); savedPhotoTarget(h);
+    const finish = prepareFinish(h); h.state.result.permissions.canEdit = true;
+    const reviewed = clone(h.state.result);
+    h.state.handler = async () => { throw new Error('Offline'); };
+    await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: reviewed.modules[0], evidenceId: 'wrong', reviewed });
+    const finishing = await h.queue.enqueueRentalFinish({ ...finish, reviewed });
+    await h.queue.processRentalSaveQueue('job-1');
+    const [key, value] = [...h.store].find(([, value]) => JSON.parse(value).id === finishing.id);
+    const record = JSON.parse(value);
+    record.status = 'conflict'; record.error = 'The report evidence changed after Finish was requested. Review it and finish again.';
+    h.store.set(key, JSON.stringify(record));
+    if (unrelatedDeletion) h.state.result.evidence[1].status = 'superseded';
+    h.state.handler = h.defaultRequest;
+    const restarted = h.restart(); await restarted.queue.processRentalSaveQueue('job-1');
+    assert.equal(h.state.calls.filter(call => call.body?.action === 'complete_module').length, unrelatedDeletion ? 0 : 1);
+    assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, unrelatedDeletion ? 1 : 0);
+    if (unrelatedDeletion) assert.equal((await restarted.queue.getRentalSaveState('job-1')).conflicts, 1);
+  }
+});
+
 test('gallery and camera evidence share durable upload/linking while their source remains truthful', async () => {
   for (const source of ['native_file_upload', undefined]) {
     const h = harness(), input = fixture().input;

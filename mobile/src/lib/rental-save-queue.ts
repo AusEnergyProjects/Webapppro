@@ -11,7 +11,7 @@ import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, rentalQueue
 import { captureSessionId, type observeLocation, type observedTime } from '@/lib/evidence';
 import { getFieldPrincipal } from '@/lib/field-session';
 import { getBusinessSession } from '@/lib/business-session';
-import { RENTAL_ADVERSE_OUTCOMES, type RentalAssessmentFinding, type RentalAssessmentItem,
+import { RENTAL_ADVERSE_OUTCOMES, type RentalAssessmentEvidence, type RentalAssessmentFinding, type RentalAssessmentItem,
   type RentalAssessmentModule, type RentalAssessmentResult } from '@/lib/rental-inspection';
 
 import { purgeRentalDocuments, restoreRentalDocumentAccess } from '@/lib/rental-document-attachments';
@@ -65,7 +65,7 @@ export type RentalSaveRecord = Omit<RentalSaveInput, 'photos'> & {
   savedFinding?: RentalAssessmentFinding | null;
   answerSaved?: boolean;
   finish?: { reviewed: RentalAssessmentResult; dependencyIds: string[]; email: boolean; recipientEmail: string; issueReport?: boolean; confirmCredential?: boolean };
-  photoRemoval?: { sourceSaveId?: string; uri?: string; evidenceId?: string };
+  photoRemoval?: { sourceSaveId?: string; uri?: string; evidenceId?: string; baseEvidence?: RentalAssessmentEvidence };
 };
 export type RentalSaveState = {
   records: RentalSaveRecord[];
@@ -283,7 +283,7 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
 
 /** Remove only this assessment link. Uploaded originals remain in the job files. */
 export async function enqueueRentalPhotoRemoval(input: { workOrderId: string; module: RentalAssessmentModule;
-  evidenceId?: string; sourceSaveId?: string; uri?: string }) {
+  evidenceId?: string; sourceSaveId?: string; uri?: string; reviewed?: RentalAssessmentResult }) {
   const snapshot = copy(input);
   if (!snapshot.module?.id || !snapshot.workOrderId || (!snapshot.evidenceId && (!snapshot.sourceSaveId || !snapshot.uri))) {
     throw new RentalSaveQueueError('The photo reference is unavailable. Reopen this assessment.', 'RENTAL_SAVE_INVALID');
@@ -294,11 +294,21 @@ export async function enqueueRentalPhotoRemoval(input: { workOrderId: string; mo
     await checkOwner(owner); assertJobAvailable(owner, snapshot.workOrderId);
     if (finalizing.has(jobKey(owner, snapshot.workOrderId))) throw pendingError();
     const records = await recordsFor(owner, snapshot.workOrderId);
+    const reviewed = snapshot.reviewed || await cachedResult(owner, snapshot.workOrderId);
+    const reviewedModule = reviewed?.modules?.find((entry) => entry.id === snapshot.module.id);
+    const baseEvidence = reviewedModule?.revision === snapshot.module.revision
+      ? reviewed?.evidence?.find((entry) => entry.id === snapshot.evidenceId && entry.moduleId === snapshot.module.id && entry.status === 'active') : undefined;
+    const baseItem = baseEvidence && reviewed?.items?.find((entry) => entry.id === baseEvidence.itemId && entry.moduleId === snapshot.module.id);
+    const baseFinding = baseItem && reviewed?.findings?.find((entry) => entry.itemId === baseItem.id);
     const prior = records.find((entry) => entry.photoRemoval && entry.status !== 'succeeded'
       && entry.photoRemoval.evidenceId === snapshot.evidenceId && entry.photoRemoval.sourceSaveId === snapshot.sourceSaveId
       && entry.photoRemoval.uri === snapshot.uri);
     if (prior) {
-      if (prior.status === 'conflict') { prior.module = snapshot.module; prior.status = 'queued'; prior.error = ''; prior.errorCode = ''; await persist(owner, prior); }
+      if (prior.status === 'conflict') {
+        prior.module = snapshot.module; prior.baseItem = baseItem; prior.baseFinding = baseItem ? baseFinding || null : undefined;
+        prior.photoRemoval = { ...prior.photoRemoval, baseEvidence: baseItem ? baseEvidence : undefined };
+        prior.status = 'queued'; prior.error = ''; prior.errorCode = ''; await persist(owner, prior);
+      }
       return prior;
     }
     if (snapshot.sourceSaveId && !records.some((entry) => entry.id === snapshot.sourceSaveId
@@ -313,7 +323,9 @@ export async function enqueueRentalPhotoRemoval(input: { workOrderId: string; mo
       workOrderId: snapshot.workOrderId, module: snapshot.module, body: { action: 'unlink_evidence' },
       draftKey: `remove-photo:${snapshot.evidenceId || snapshot.sourceSaveId + ':' + snapshot.uri}`, draftSnapshot: null,
       createdAt: Math.max(Date.now(), ...records.map((entry) => entry.createdAt + 1)), status: 'queued', error: '', photos: [],
-      photoRemoval: { evidenceId: snapshot.evidenceId, sourceSaveId: snapshot.sourceSaveId, uri: snapshot.uri } };
+      baseItem, baseFinding: baseItem ? baseFinding || null : undefined,
+      photoRemoval: { evidenceId: snapshot.evidenceId, sourceSaveId: snapshot.sourceSaveId, uri: snapshot.uri,
+        baseEvidence: baseItem ? baseEvidence : undefined } };
     await persist(owner, created); return created;
   });
   void processRentalSaveQueue(snapshot.workOrderId).catch(() => undefined);
@@ -367,6 +379,11 @@ function assertReviewedFinish(record: RentalSaveRecord, current: RentalAssessmen
   const expectedEvidence = new Set((reviewed.evidence || []).filter((entry) => inScope(entry) && entry.status === 'active').map((entry) => entry.jobMediaId + ':' + entry.itemId));
   for (const dependency of scopedDependencies) for (const photo of dependency.photos) {
     if (photo.linked && dependency.savedItem) expectedEvidence.add(photo.mediaId + ':' + dependency.savedItem.id);
+  }
+  for (const dependency of scopedDependencies.filter((entry) => entry.photoRemoval && entry.status === 'succeeded')) {
+    const removal = dependency.photoRemoval!;
+    const removed = removal.baseEvidence || reviewed.evidence?.find((entry) => entry.id === removal.evidenceId);
+    if (removed) expectedEvidence.delete(removed.jobMediaId + ':' + removed.itemId);
   }
   const activeEvidence = (current.evidence || []).filter((entry) => inScope(entry) && entry.status === 'active');
   if (activeEvidence.length !== expectedEvidence.size || activeEvidence.some((entry) => !expectedEvidence.has(entry.jobMediaId + ':' + entry.itemId))) {
@@ -688,15 +705,40 @@ async function processPhotoRemoval(owner: LocalDataOwner, record: RentalSaveReco
   const removal = record.photoRemoval!;
   if (result.permissions?.canEdit !== true) throw new ApiError('Your current Team access does not allow removing assessment photos.', 403, 'RENTAL_EDIT_PERMISSION_REQUIRED');
   const assessmentModule = currentModule(record, result);
-  const source = removal.sourceSaveId ? (await recordsFor(owner, record.workOrderId)).find((entry) => entry.id === removal.sourceSaveId) : undefined;
+  const records = await recordsFor(owner, record.workOrderId);
+  const source = removal.sourceSaveId ? records.find((entry) => entry.id === removal.sourceSaveId) : undefined;
   if (removal.sourceSaveId && !source) throw conflict('The saved photo changed. Reopen its question before removing it.');
   const photo = source?.photos.find((entry) => entry.uri === removal.uri);
   const evidence = removal.evidenceId ? result.evidence?.find((entry) => entry.id === removal.evidenceId)
     : result.evidence?.find((entry) => entry.jobMediaId === photo?.mediaId && entry.itemId === source?.savedItem?.id && entry.status === 'active');
   if (evidence && evidence.moduleId !== record.module.id) throw conflict('This photo belongs to another assessment.');
   if (evidence?.status === 'active') {
-    if (removal.evidenceId && assessmentModule.revision !== record.module.revision) throw conflict('This assessment changed before the photo was removed. Review the latest photos and try again.');
-    if (source?.savedItem && result.items?.find((entry) => entry.id === source.savedItem!.id)?.revision !== source.savedItem.revision) throw conflict();
+    // Module revisions also advance for other questions and photos. Protect the selected answer and
+    // evidence instead, then send the fresh module revision to the server's compare-and-swap guard.
+    const anchor = source || records.find((entry) => entry.savedItem?.id === evidence.itemId
+      && entry.photos.some((photo) => photo.linked && photo.mediaId === evidence.jobMediaId));
+    const expectedItem = removal.baseEvidence ? record.baseItem : anchor?.savedItem;
+    const expectedFinding = removal.baseEvidence ? record.baseFinding : anchor?.savedFinding;
+    if (removal.baseEvidence && !equal(evidence, removal.baseEvidence)) throw conflict('This photo reference changed. Reopen its question.');
+    if (expectedItem) {
+      const item = result.items?.find((entry) => entry.id === expectedItem.id);
+      const finding = result.findings?.find((entry) => entry.itemId === expectedItem.id);
+      if (evidence.itemId !== expectedItem.id || item?.revision !== expectedItem.revision
+        || (finding?.id || '') !== (expectedFinding?.id || '') || (finding?.revision || 0) !== (expectedFinding?.revision || 0)) throw conflict();
+      if (assessmentModule.template.metadataFields.map(rentalAssessorMetadataField).some((field) => field.phase === 'final'
+        && !metadataEqual(assessmentModule, field.key, assessmentModule.answers[field.key], record.module.answers[field.key]))) {
+        throw conflict('The assessment declaration changed before the photo was removed. Review it before retrying.');
+      }
+    } else if (removal.evidenceId && assessmentModule.revision !== record.module.revision) {
+      // Older saved removals have no target snapshot. An explicit reselect records the current target.
+      throw conflict('This assessment changed before the photo was removed. Review the latest photos and try again.');
+    }
+    if (!removal.baseEvidence) {
+      removal.baseEvidence = evidence;
+      record.baseItem = expectedItem;
+      record.baseFinding = expectedItem ? expectedFinding || null : undefined;
+      await persist(owner, record);
+    }
     result = await request(owner, record.workOrderId, { action: 'unlink_evidence', evidenceId: evidence.id,
       expectedModuleRevision: assessmentModule.revision });
   } else if (removal.evidenceId && !evidence) throw conflict('This photo reference changed. Reopen its question.');
@@ -766,6 +808,12 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
     const record = records.find((entry) => !attempted.has(entry.id)
       && (['queued', 'syncing', 'retry'].includes(entry.status)
         || (entry.status === 'conflict' && canRetryCredentialSave(entry))
+        || (entry.status === 'conflict' && entry.photoRemoval
+          && entry.error === 'This assessment changed before the photo was removed. Review the latest photos and try again.')
+        || (entry.status === 'conflict' && entry.finish
+          && entry.error === 'The report evidence changed after Finish was requested. Review it and finish again.'
+          && records.some((dependency) => entry.finish!.dependencyIds.includes(dependency.id)
+            && dependency.photoRemoval && dependency.status === 'succeeded'))
         || (entry.status === 'conflict' && entry.finish && entry.error === 'The other required assessment modules must be completed before the report can be emailed.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && entry.error === 'An assessment detail changed elsewhere. Review it before saving.')
         || (entry.status === 'conflict' && entry.body.action === 'save_module_answers' && !entry.photos.length

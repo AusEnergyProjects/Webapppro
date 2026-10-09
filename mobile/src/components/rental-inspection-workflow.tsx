@@ -535,7 +535,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       const photo = currentDraft.photos.find((entry) => entry.uri === uri);
       const linked = photo?.mediaId && evidence.find((entry) => entry.jobMediaId === photo.mediaId);
       if (source || linked) {
-        await enqueueRentalPhotoRemoval({ workOrderId, module: active,
+        await enqueueRentalPhotoRemoval({ workOrderId, module: active, reviewed: data,
           ...(source ? { sourceSaveId: source.id, uri } : { evidenceId: linked ? linked.id : undefined }) });
         setSaves((await getRentalSaveState(workOrderId)).records);
       }
@@ -548,7 +548,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     if (!canRemovePhotos || !active) return;
     Alert.alert('Remove photo from this assessment?', 'This removes the selected photo from the assessment. The original stays in the job files.', [
       { text: 'Keep photo', style: 'cancel' }, { text: 'Remove photo', style: 'destructive', onPress: () => void perform('remove', async () => {
-        await enqueueRentalPhotoRemoval({ workOrderId, module: active, evidenceId });
+        await enqueueRentalPhotoRemoval({ workOrderId, module: active, reviewed: data, evidenceId });
         setSaves((await getRentalSaveState(workOrderId)).records);
       }) },
     ]);
@@ -700,10 +700,20 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     });
   }
   function openQueuedAnswer(record: RentalSaveRecord) {
-    const assessmentModule = data.modules?.find((entry) => entry.id === record.body.moduleId);
+    const removal = record.photoRemoval;
+    const source = removal?.sourceSaveId ? saves.find((entry) => entry.id === removal.sourceSaveId) : undefined;
+    const photoItemId = removal?.evidenceId ? data.evidence?.find((entry) => entry.id === removal.evidenceId)?.itemId : source?.savedItem?.id;
+    const photoItem = removal ? data.items?.find((entry) => entry.id === photoItemId && entry.moduleId === record.module.id) : undefined;
+    const assessmentModule = data.modules?.find((entry) => entry.id === (removal ? record.module.id : record.body.moduleId));
     if (!assessmentModule) return;
     setModuleId(assessmentModule.id);
-    if (record.body.action === 'save_module_answers') {
+    if (removal) {
+      const section = assessmentModule.template.sections.find((entry) => entry.key === (photoItem?.sectionKey || source?.body.sectionKey));
+      const checkIndex = section?.checks.findIndex((entry) => entry.key === (photoItem?.checkKey || source?.body.checkKey)) ?? -1;
+      if (!section || checkIndex < 0) { setPage('categories'); setError('Reopen the photo\'s question and review its latest photos before removing it again.'); return; }
+      setCursor({ sectionKey: section.key, checkIndex, instanceKey: photoItem?.instanceKey || String(source?.body.instanceKey || 'property') });
+      setPage('answer');
+    } else if (record.body.action === 'save_module_answers') {
       if (record.body.answers && typeof record.body.answers === 'object' && 'roomRoster' in record.body.answers) { setPage('categories'); setError(record.error); return; }
       const fields = assessmentModule.template.metadataFields.map(rentalAssessorMetadataField).filter((entry) => entry.key !== 'roomRoster'
         && entry.phase !== 'profile' && entry.source !== 'team_profile' && entry.source !== 'automatic'
@@ -793,7 +803,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       {!online ? <Text style={styles.small}>Working offline. Answers and photos stay on this phone and sync when reception returns.</Text> : null}
       {pendingSaves.length ? <View style={styles.syncNotice}><Text style={styles.small}>{finishRequest ? 'Your finish request is saved. You can return to the job while it completes.' : `${pendingSaves.length} saved ${pendingSaves.length === 1 ? 'answer' : 'answers'}. You can keep assessing while they sync.`}{pendingPhotos ? ` ${pendingPhotos} ${pendingPhotos === 1 ? 'photo remains' : 'photos remain'} on this phone until linked to the report.` : ''}</Text>
         {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.error}</Text>
-          <FieldButton variant="quiet" onPress={() => record.finish ? setPage('review') : openQueuedAnswer(record)}>{record.finish ? 'Review finish request' : 'Open saved answer'}</FieldButton>
+          <FieldButton variant="quiet" onPress={() => record.finish ? setPage('review') : openQueuedAnswer(record)}>{record.finish ? 'Review finish request' : record.photoRemoval ? 'Review photo removal' : 'Open saved answer'}</FieldButton>
           {record.status !== 'conflict' ? <FieldButton variant="quiet" disabled={!online} onPress={() => { void processRentalSaveQueue(workOrderId).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Could not sync. Your answers remain on this phone.')); }}>Retry sync</FieldButton> : null}
         </View>)}
       </View> : null}
