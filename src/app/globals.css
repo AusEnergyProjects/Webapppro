@@ -1156,7 +1156,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--color-aea-green)
 .plan-actions { align-items: stretch; display: inline-flex; flex-direction: column; gap: 7px; margin-top: 8px; }
 .plan-actions .audit-button, .plan-actions a, .plan-actions .source-missing { margin-top: 0; text-align: center; }
 .source-missing { color: var(--color-aea-muted); display: inline-block; font-size: .78rem; margin-top: 8px; }
-.offerid { color: var(--color-aea-muted); font-family: var(--font-aea-body); font-size: .7rem; margin-top: 6px; }
+.offerid { color: var(--color-aea-muted); font-family: var(--font-aea-body); font-size: .7rem; margin-top: 6px; overflow-wrap: anywhere; }
 .breakdown { border-top: 1px dashed var(--color-aea-line); color: var(--color-aea-muted); display: none; font-size: .78rem; grid-column: 1 / -1; margin-top: 6px; padding-top: 8px; }
 .plan.open .breakdown { display: block; }
 .note { background: var(--color-aea-card); border: 1px dashed var(--color-aea-line); border-radius: 10px; color: var(--color-aea-muted); font-size: .78rem; margin-top: 16px; overflow-wrap: anywhere; padding: 12px 16px; }

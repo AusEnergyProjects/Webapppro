@@ -1,0 +1,25 @@
+.input { display: grid; gap: 8px; margin-top: 18px; }
+.input label { color: #073943; font-weight: 800; }
+.input label span { color: #42646d; font-size: .875rem; font-weight: 500; }
+.input input { background: #fff; color: #073943; width: 100%; }
+.input p { color: #42646d; font-size: .875rem; line-height: 1.55; margin: 0; }
+.reference { background: #f3fffa; border: 1px solid #a1d8c5; border-radius: 18px; color: #073943; margin: 20px 0; padding: clamp(18px, 3vw, 28px); }
+.reference h2 { font-size: 1.25rem; margin: 0; }
+.result { margin-top: 18px; }
+.result p { line-height: 1.55; margin: 8px 0; }
+.choice { display: grid; font-weight: 700; gap: 10px; }
+.choice select { min-width: 0; width: 100%; }
+.matched { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(180px, .6fr); margin-top: 16px; }
+.matched h3 { margin: 6px 0; }
+.matched > div > span { color: #08794c; font-size: .8rem; font-weight: 800; text-transform: uppercase; }
+.matched p { overflow-wrap: anywhere; }
+.cost { align-content: center; display: grid; gap: 8px; }
+.cost strong { color: #076d46; font-size: 1.5rem; }
+.matched .cost span { font-size: .875rem; text-transform: none; }
+.notice { border-top: 1px solid #bfe2d5; font-size: .875rem; grid-column: 1 / -1; padding-top: 12px; }
+.clear { background: transparent; border: 0; color: #086448; cursor: pointer; font-weight: 700; margin-top: 12px; padding: 6px 0; text-decoration: underline; }
+.offers { background: #07754e; border-radius: 10px; color: #fff; font-weight: 800; grid-column: 1 / -1; padding: 12px 16px; text-align: center; }
+.offers:hover { background: #055a3d; color: #fff; }
+.difference { background: #e4f9ef; border-radius: 8px; color: #075c3c; font-size: .875rem; font-weight: 800; line-height: 1.4; margin: 12px 0; padding: 10px; }
+.more { background: #fff3df; color: #744509; }
+@media (max-width: 600px) { .matched { grid-template-columns: minmax(0, 1fr); } .cost strong { font-size: 1.3rem; } }

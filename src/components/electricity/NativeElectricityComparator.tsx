@@ -37,6 +37,8 @@ import { allocateNem12Registers, parseNem12, scaleNem12AnnualAllocation } from "
 import type { HalfHourlyGrid, Nem12Success, RegisterRole } from "@/lib/electricity/nem12-types";
 import { InstalledQuoteField } from "@/components/InstalledQuoteField";
 import { parseInstalledQuote } from "@/lib/installed-quote";
+import { CurrentPlanInput, CurrentPlanComparison, PlanPriceDifference } from "@/components/CurrentPlanComparison";
+import { resolvePublishedPlanReference, type PublishedReferencePlan } from "@/lib/published-plan-reference";
 import {
   DISTRIBUTOR_INFO,
   cleanNmi,
@@ -210,6 +212,10 @@ function fmtCents(value: number): string {
   return value < 1 ? value.toFixed(2) : value.toFixed(1);
 }
 
+function electricityPlanKey(plan: NativePlanInput): string {
+  return `${plan.base || plan.brand}|${plan.planId}`;
+}
+
 function payback(value: number): string {
   if (!(value > 0) || !Number.isFinite(value)) return "n/a";
   const months = Math.max(1, Math.round(value * 12));
@@ -261,6 +267,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [distributor, setDistributor] = useState("");
   const [meterGuideDistributor, setMeterGuideDistributor] = useState("");
   const [plans, setPlans] = useState<NativePlanResult[]>([]);
+  const [currentPlanId, setCurrentPlanId] = useState("");
+  const [currentPlanKey, setCurrentPlanKey] = useState("");
   const [excluded, setExcluded] = useState<Record<string, number>>({});
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
   const [pricingContext, setPricingContext] = useState<PricingContext | null>(null);
@@ -758,6 +766,24 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     }
   }
 
+  const referenceOptions = useMemo(() => plans.map((plan) => ({
+    key: electricityPlanKey(plan),
+    id: plan.planId,
+    name: plan.name,
+    brand: plan.brand,
+    annualCost: plan.annualCost,
+    effectiveFrom: plan.effectiveFrom,
+    effectiveTo: plan.effectiveTo,
+    rateDescription: `Supply ${fmtCents(plan.supplyCentsPerDay)}c/day. ${[...plan.rates, ...plan.controlledRates].map((rate) => `${rate.label}: ${fmtCents(rate.centsPerKwh)}c/kWh`).join("; ")}. Prices include GST. ${plan.feedIn > 0 ? `Solar credit: ${fmtCents(plan.feedInCentsPerKwh)}c/kWh effective. ` : ""}${plan.demand > 0 ? "Measured demand charges are included. " : ""}${plan.discounts > 0 ? "Selected discounts are included. " : ""}Fees and uncosted benefits are excluded.`,
+  })), [plans]);
+  const referenceMatch = resolvePublishedPlanReference(currentPlanId, referenceOptions, currentPlanKey);
+  const referencePlan = referenceMatch.plan;
+
+  function changeCurrentPlanId(value: string) {
+    setCurrentPlanId(value);
+    setCurrentPlanKey("");
+  }
+
   const visible = useMemo(() => plans
     .filter((plan) => showTou || plan.tariffKind !== "tou")
     .filter((plan) => showSingle || plan.tariffKind !== "single")
@@ -939,6 +965,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
             <ChoiceCards name="usage-pattern" legend="When do you usually use the most power?" hint="This optional assumption estimates time-of-use charges when no smart-meter intervals are available." value={profileKind} options={PROFILE_OPTIONS} onChange={setProfileKind} />
           </div>
         </div>}
+        <CurrentPlanInput value={currentPlanId} onChange={changeCurrentPlanId} />
       </StepCard>
       <ComparisonStepActions step={2} total={4} onBack={() => moveToStep(1)} onContinue={continueFromUsage} />
       </>}
@@ -973,6 +1000,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
 
     {activeStep === 4 && plans.length > 0 && <section className="results" aria-live="polite" aria-labelledby="electricity-results-title">
       <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="electricity-results-title">Your electricity plan results</h2><p>Start with the lowest estimated annual cost, check its conditions and calculation audit, then open the retailer&apos;s current plan page before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>
+      <CurrentPlanComparison value={currentPlanId} onChange={changeCurrentPlanId} match={referenceMatch} selectedKey={currentPlanKey} onSelect={setCurrentPlanKey} fuel="electricity" />
       <div className="rsummary"><div className="stat"><div className="v">{visible.length}</div><div className="l">plans we could compare</div></div><div className="stat"><div className="v">{best ? fmtMoney(best.annualCost) : "n/a"}</div><div className="l">lowest estimated yearly bill</div></div><div className="stat"><div className="v">{median ? fmtMoney(median.annualCost) : "n/a"}</div><div className="l">middle-priced plan</div></div></div>
       {pricingContext && setupMode !== "battery" && <div className="native-scenarios">
         <div className="native-scenario-heading"><span>Your next energy move</span><h2>{setupMode === "none" ? "Go further with solar" : "Make more of your solar with storage"}</h2><p>Compare the estimated impact below, then ask about the option that suits you. No account needed.</p></div>
@@ -980,7 +1008,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         <div className="native-scenario-grid">{upgradeScenarios.map((scenario) => <article className="native-scenario" key={scenario.label}>
           <span className="native-scenario-kicker">{scenario.label === "Solar only" ? "Generate your own energy" : "Keep more energy for later"}</span><h3>{scenario.label === "Solar + battery" ? "Solar + storage" : scenario.label}</h3>
           <p>{scenario.description}</p>
-          <div className="native-scenario-saving"><b>{scenario.annualSaving > 0 ? `${fmtMoney(scenario.annualSaving)}/yr` : "No bill saving estimated"}</b><span>estimated bill saving against your best current plan</span></div>
+          <div className="native-scenario-saving"><b>{scenario.annualSaving > 0 ? `${fmtMoney(scenario.annualSaving)}/yr` : "No bill saving estimated"}</b><span>estimated bill saving against the lowest comparable published plan for your existing setup</span></div>
           <div><b>{fmtMoney(scenario.best.annualCost)}/yr</b><span> estimated electricity bill after this upgrade</span></div>
           <InstalledQuoteField label={scenario.label === "Solar only" ? "Solar installed price ($)" : scenario.label === "Solar + battery" ? "Solar + storage installed price ($)" : "Battery installed price ($)"} hint="Have a quote? Enter the total you would pay, including GST, after discounts. Otherwise keep this starting estimate." value={scenario.label === "Solar only" ? scenarioSolarCost : scenario.label === "Solar + battery" ? scenarioComboCost : scenarioBatteryCost} estimated={!(scenario.label === "Solar only" ? customQuotes.solar : scenario.label === "Solar + battery" ? customQuotes.combo : customQuotes.battery)} onChange={(value) => changeQuote(scenario.label === "Solar only" ? "solar" : scenario.label === "Solar + battery" ? "combo" : "battery", value)} onReset={() => resetQuote(scenario.label === "Solar only" ? "solar" : scenario.label === "Solar + battery" ? "combo" : "battery")} />
           <div><b>{!(scenario.installedCost > 0) ? "Enter an installed quote to calculate payback" : scenario.annualSaving > 0 ? payback(scenario.installedCost / scenario.annualSaving) : "No bill saving to recover the price"}</b><span> estimated time for bill savings to cover the price</span></div>
@@ -993,7 +1021,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       </div>}
       <div className="filters"><label className="toggle"><input type="checkbox" checked={showTou} onChange={(event) => setShowTou(event.target.checked)} /> Time of use</label><label className="toggle"><input type="checkbox" checked={showSingle} onChange={(event) => setShowSingle(event.target.checked)} /> Single rate</label><label className="toggle"><input type="checkbox" checked={showDemand} onChange={(event) => setShowDemand(event.target.checked)} /> Demand</label><label className="toggle"><input type="checkbox" checked={showStanding} onChange={(event) => setShowStanding(event.target.checked)} /> Standing offers</label><input aria-label="Filter native electricity plans" placeholder="Filter retailer or plan" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
       {visible.some((plan) => plan.eligibilityConfirmations.length > 0) && <div className="note"><b>Check eligibility before switching.</b> {visible.filter((plan) => plan.eligibilityConfirmations.length > 0).length} displayed offers have published retailer conditions that this calculator cannot confirm from your inputs. They remain priced, but each is labelled and the condition is shown in its calculation audit.</div>}
-      {visible.slice(0, shown).map((plan, index) => <NativePlanCard key={`${plan.planId}-${Math.round(plan.annualCost)}`} plan={plan} rank={index + 1} onAudit={(button) => { auditReturnRef.current = button; setAuditPlan(plan); }} />)}
+      <div id="electricity-plan-offers" tabIndex={-1} style={{ scrollMarginTop: "100px" }}>{visible.slice(0, shown).map((plan, index) => <NativePlanCard key={electricityPlanKey(plan)} plan={plan} rank={index + 1} referencePlan={referencePlan} onAudit={(button) => { auditReturnRef.current = button; setAuditPlan(plan); }} />)}</div>
       {!visible.length && <p className="note">No plans match the selected filters.</p>}
       {visible.length > shown && <button className="btn ghost showmore" type="button" onClick={() => setShown((value) => value + 12)}>Show more plans</button>}
       <p className="offer-count">Showing {Math.min(shown, visible.length)} of {visible.length} priceable offers</p>
@@ -1011,14 +1039,14 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   </>;
 }
 
-function NativePlanCard({ plan, rank, onAudit }: { plan: NativePlanResult; rank: number; onAudit: (button: HTMLButtonElement) => void }) {
+function NativePlanCard({ plan, rank, referencePlan, onAudit }: { plan: NativePlanResult; rank: number; referencePlan: PublishedReferencePlan | null; onAudit: (button: HTMLButtonElement) => void }) {
   const retailerLink = plan.link || plan.retailerUrl;
   return <article className="plan">
     <div><div className="top"><span className={`rank${rank === 1 ? " r1" : ""}`}>#{rank}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} loading="lazy" decoding="async" /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div>
       <div className="rateline"><span className="r"><b>{fmtCents(plan.supplyCentsPerDay)}c</b>/day <span>supply</span></span>{[...plan.rates, ...plan.controlledRates].slice(0, 6).map((rate, index) => <span className="r" key={`${rate.label}-${index}`}><b>{fmtCents(rate.centsPerKwh)}c</b>/kWh <span>{rate.label}</span></span>)}<span className="r"><span>prices inc GST</span></span></div>
       <div className="badges"><span className="badge">{plan.tariffKind === "tou" ? "Time of use" : plan.tariffKind === "demand" ? "Demand tariff" : "Single rate"}</span>{plan.demand > 0 && <span className="badge info">Measured peak {plan.demandPeakKw.toFixed(1)} kW</span>}{plan.feedIn > 0 && <span className="badge info">Feed-in credit {fmtCents(plan.feedInCentsPerKwh)}c/kWh effective</span>}{plan.controlled > 0 && <span className="badge info">Controlled load costed separately</span>}{plan.fees ? <span className="badge warn">Published fees not included</span> : null}{plan.validation?.limitations?.some((item) => item !== "fees_not_costed") && <span className="badge warn">Some published benefits not included</span>}{plan.eligibilityConfirmations.length > 0 && <span className="badge warn">Retailer eligibility must be confirmed</span>}</div>
     </div>
-    <div className="price"><div className="annual">{fmtMoney(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400 }}>/yr</span></div><div className="permo">about {fmtMoney(plan.annualCost / 12)} per month</div><div className="plan-actions">{retailerLink ? <a href={retailerLink} target="_blank" rel="noreferrer">{plan.link ? "View retailer plan" : "Go to retailer"}</a> : <span className="source-missing">Retailer link not published</span>}<button type="button" className="audit-button" onClick={(event) => onAudit(event.currentTarget)}>Open calculation audit</button></div><div className="offerid">Offer ID: {plan.planId.split("@")[0]} | Evidence: {plan.tariffHash?.replace("sha256:", "").slice(0, 12) || "unavailable"}{plan.lastUpdated ? ` | Retailer record updated ${new Date(plan.lastUpdated).toLocaleDateString()}` : " | Update time not published"}</div></div>
+    <div className="price"><div className="annual">{fmtMoney(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400 }}>/yr</span></div><div className="permo">about {fmtMoney(plan.annualCost / 12)} per month</div>{referencePlan && <PlanPriceDifference referenceCost={referencePlan.annualCost} annualCost={plan.annualCost} isReference={referencePlan.key === electricityPlanKey(plan)} />}<div className="plan-actions">{retailerLink ? <a href={retailerLink} target="_blank" rel="noreferrer">{plan.link ? "View retailer plan" : "Go to retailer"}</a> : <span className="source-missing">Retailer link not published</span>}<button type="button" className="audit-button" onClick={(event) => onAudit(event.currentTarget)}>Open calculation audit</button></div><div className="offerid">Offer ID: {plan.planId} | Evidence: {plan.tariffHash?.replace("sha256:", "").slice(0, 12) || "unavailable"}{plan.lastUpdated ? ` | Retailer record updated ${new Date(plan.lastUpdated).toLocaleDateString()}` : " | Update time not published"}</div></div>
     <div className="native-breakdown">Supply {fmtMoneyExact(plan.supply)} + general usage {fmtMoneyExact(plan.usage)}{plan.controlled > 0 ? ` + controlled load ${fmtMoneyExact(plan.controlled)}` : ""}{plan.demand > 0 ? ` + measured demand ${fmtMoneyExact(plan.demand)}` : ""}{plan.feedIn > 0 ? ` - feed-in credits ${fmtMoneyExact(plan.feedIn)}` : ""}{plan.discounts > 0 ? ` - discounts ${fmtMoneyExact(plan.discounts)}` : ""} = {fmtMoneyExact(plan.annualCost)} inc GST{plan.touMix ? ` | Usage mix: ${Object.entries(plan.touMix).map(([label, share]) => `${label} ${Math.round(share * 100)}%`).join(", ")}` : ""}</div>
   </article>;
 }

@@ -22,11 +22,14 @@ import {
 import { GasUpgradeQuestionnaire } from "./GasUpgradeQuestionnaire";
 import type { GasUsageProfile } from "@/lib/gas-tariff-engine";
 import { annualiseGasUsage, type GasUsageInputMode } from "@/lib/gas-usage-input";
+import { resolvePublishedPlanReference, type PublishedReferencePlan } from "@/lib/published-plan-reference";
+import { CurrentPlanInput, CurrentPlanComparison, PlanPriceDifference } from "./CurrentPlanComparison";
 
 type GasRate = { label: string; centsPerMj: number };
 type GasSeason = { label: string; days: number; usageMj: number; supply: number; usage: number; rates: GasRate[] };
 type Plan = {
   id: string;
+  base: string;
   brand: string;
   name: string;
   type: string;
@@ -77,6 +80,21 @@ type GasBundle = {
 function fmt$(value: number) { return "$" + Math.round(value).toLocaleString(); }
 function fmtD2(value: number) { return "$" + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+function gasPlanKey(plan: Pick<Plan, "base" | "id">) { return `${plan.base}|${plan.id}`; }
+
+function gasPublishedReference(plan: Plan, includeConditional: boolean): PublishedReferencePlan {
+  return {
+    key: gasPlanKey(plan),
+    id: plan.id,
+    name: plan.name,
+    brand: plan.brand,
+    annualCost: plan.annualCost,
+    rateDescription: `${plan.supplyChargeDaily.toFixed(1)}c/day supply; ${plan.rates.map((rate) => `${rate.centsPerMj.toFixed(2)}c/MJ ${rate.label}`).join("; ")}. Prices include GST.${plan.seasonal ? " Seasonal rates are applied using your gas-use pattern." : ""}${plan.conditionalDiscounts.length ? includeConditional ? " Selected conditional discounts are included; confirm every condition." : " Published conditional discounts are not applied." : ""}`,
+    effectiveFrom: plan.effectiveFrom,
+    effectiveTo: plan.effectiveTo,
+  };
+}
+
 const GAS_JOURNEY_STEPS = [
   { label: "Your home", description: "Find the property and confirm it has mains gas." },
   { label: "Your usage", description: "Enter a full-year total or the usage from one bill." },
@@ -107,7 +125,9 @@ export function GasComparator() {
   const [showStanding, setShowStanding] = useState(true);
   const [search, setSearch] = useState("");
   const [shown, setShown] = useState(12);
-  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [selectedPlanKeys, setSelectedPlanKeys] = useState<string[]>([]);
+  const [currentPlanId, setCurrentPlanId] = useState("");
+  const [selectedReferenceKey, setSelectedReferenceKey] = useState("");
   const [pricedInputKey, setPricedInputKey] = useState("");
   const [handoffStatus, setHandoffStatus] = useState<{ title: string; message: string } | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -225,7 +245,7 @@ export function GasComparator() {
 
   async function compare(preferredDistributor = distributor) {
     const requestedInputKey = comparisonInputKey;
-    setError(""); setPlans([]); setBundle(null); setDistributors([]); setPricedInputKey(""); setShown(12); setSelectedPlanIds([]);
+    setError(""); setPlans([]); setBundle(null); setDistributors([]); setPricedInputKey(""); setShown(12); setSelectedPlanKeys([]);
     if (supplyType !== "mains") { setError("This comparison covers reticulated mains gas only. LPG cylinder and bulk supply prices require quotes from LPG suppliers."); return; }
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     if (!annualisedUsage.ok) { setError(annualisedUsage.error); return; }
@@ -267,18 +287,21 @@ export function GasComparator() {
     } finally { window.clearTimeout(timeout); setLoading(false); }
   }
 
-  const visiblePlans = useMemo(() => plans
-    .filter((plan) => !distributor || plan.distributors.includes(distributor))
-    .filter((plan) => showStanding || plan.type !== "STANDING")
-    .filter((plan) => { const query = search.trim().toLowerCase(); return !query || plan.name.toLowerCase().includes(query) || plan.brand.toLowerCase().includes(query); })
-    .sort((a, b) => a.annualCost - b.annualCost), [distributor, plans, search, showStanding]);
-  const best = visiblePlans[0];
-  const median = visiblePlans[Math.floor(visiblePlans.length / 2)];
-  const displayedPlans = visiblePlans.slice(0, shown);
-  const selectedPlans = plans.filter((plan) => (!distributor || plan.distributors.includes(distributor)) && selectedPlanIds.includes(plan.id)).sort((a, b) => a.annualCost - b.annualCost);
   const needsDistributor = distributors.length > 1 && !distributor;
   const pricingInputsChanged = Boolean(pricedInputKey && pricedInputKey !== comparisonInputKey);
   const hasCurrentPricing = Boolean(plans.length && pricedInputKey === comparisonInputKey);
+  const networkPlans = useMemo(() => plans.filter((plan) => !distributor || plan.distributors.includes(distributor)), [distributor, plans]);
+  const referenceOptions = useMemo(() => hasCurrentPricing && distributor
+    ? networkPlans.map((plan) => gasPublishedReference(plan, includeConditional)) : [], [distributor, hasCurrentPricing, includeConditional, networkPlans]);
+  const referenceMatch = useMemo(() => resolvePublishedPlanReference(currentPlanId, referenceOptions, selectedReferenceKey), [currentPlanId, referenceOptions, selectedReferenceKey]);
+  const visiblePlans = useMemo(() => networkPlans
+    .filter((plan) => showStanding || plan.type !== "STANDING")
+    .filter((plan) => { const query = search.trim().toLowerCase(); return !query || plan.name.toLowerCase().includes(query) || plan.brand.toLowerCase().includes(query); })
+    .sort((a, b) => a.annualCost - b.annualCost), [networkPlans, search, showStanding]);
+  const best = visiblePlans[0];
+  const median = visiblePlans[Math.floor(visiblePlans.length / 2)];
+  const displayedPlans = visiblePlans.slice(0, shown);
+  const selectedPlans = networkPlans.filter((plan) => selectedPlanKeys.includes(gasPlanKey(plan))).sort((a, b) => a.annualCost - b.annualCost);
   const journeyStep = activeStep;
 
   const updateUsageProfileFromQuestionnaire = useCallback((profile: GasUsageProfile | null) => {
@@ -286,14 +309,20 @@ export function GasComparator() {
     setGasHeating(profile === null ? "" : profile === "heating" ? "yes" : "no");
   }, []);
 
-  function toggleSelectedPlan(planId: string) {
-    setSelectedPlanIds((current) => current.includes(planId) ? current.filter((id) => id !== planId) : current.length < 3 ? [...current, planId] : current);
+  function toggleSelectedPlan(planKey: string) {
+    setSelectedPlanKeys((current) => current.includes(planKey) ? current.filter((key) => key !== planKey) : current.length < 3 ? [...current, planKey] : current);
+  }
+
+  function changeCurrentPlanId(value: string) {
+    setCurrentPlanId(value);
+    setSelectedReferenceKey("");
   }
 
   function chooseDistributor(value: string) {
     setDistributor(value);
     setShown(12);
-    setSelectedPlanIds([]);
+    setSelectedPlanKeys([]);
+    setSelectedReferenceKey("");
     if (!value) return;
     if (!hasCurrentPricing) {
       void compare(value);
@@ -331,6 +360,7 @@ export function GasComparator() {
             </div></fieldset>
             <div className="grid c2 gas-primary-inputs"><Field label={usageMode === "annual" ? "Gas use (MJ per year)" : "Gas use on this bill (MJ)"} hint={usageMode === "annual" ? "Add the total MJ from bills covering the last 12 months." : "Use the total MJ shown for this billing period."}><input type="number" min="1" value={usageMj} inputMode="numeric" onChange={(event) => setUsageMj(event.target.value)} placeholder={usageMode === "annual" ? "e.g. 58000" : "e.g. 18000"} /></Field></div>
             {usageMode === "bill" && <div className="gas-bill-period"><Field label="Bill period starts" hint="Use the first date covered by the bill."><input type="date" value={billStart} data-date-range-group="gas-bill-period" data-date-range-role="start" onChange={(event) => setBillStart(event.target.value)} /></Field><Field label="Bill period ends" hint="Use the last date covered by the bill."><input type="date" value={billEnd} data-date-range-group="gas-bill-period" data-date-range-role="end" onChange={(event) => setBillEnd(event.target.value)} /></Field>{annualisedUsage.ok && <div className="gas-annual-equivalent"><span>Annualised usage</span><b>{Math.round(annualisedUsage.annualMj).toLocaleString()} MJ/year</b><small>Based on {annualisedUsage.billDays} bill days. The heating pattern is confirmed next.</small></div>}</div>}
+            <CurrentPlanInput value={currentPlanId} onChange={changeCurrentPlanId} />
           </StepCard>
           <ComparisonStepActions step={2} total={4} onBack={() => moveToStep(1)} onContinue={continueFromUsage} />
         </>}
@@ -352,6 +382,7 @@ export function GasComparator() {
         {error && <p ref={errorRef} className="error" role="alert" tabIndex={-1}>{error}</p>}
       </form>
       {activeStep === 4 && hasCurrentPricing && !needsDistributor && <section className="results" aria-live="polite" aria-labelledby="gas-results-title">
+        <CurrentPlanComparison value={currentPlanId} onChange={changeCurrentPlanId} match={referenceMatch} selectedKey={selectedReferenceKey} onSelect={setSelectedReferenceKey} fuel="gas" />
         <div className="rsummary">
           <div className="stat"><div className="v">{visiblePlans.length}</div><div className="l">priceable gas offers for {distributor || postcode}</div></div>
           <div className="stat"><div className="v">{best ? fmt$(best.annualCost) : "n/a"}</div><div className="l">best estimated annual cost</div></div>
@@ -368,8 +399,8 @@ export function GasComparator() {
         <div className="filters"><label className="toggle"><input type="checkbox" checked={showStanding} onChange={(event) => setShowStanding(event.target.checked)} /> Standing offers</label><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter by retailer or plan name" aria-label="Filter by retailer or plan name" /></div>
         {visiblePlans.some((plan) => plan.eligibilityConfirmations.length > 0) && <div className="note"><b>Confirm eligibility before switching.</b> {visiblePlans.filter((plan) => plan.eligibilityConfirmations.length > 0).length} displayed offers have retailer conditions this calculator cannot verify.</div>}
         {hasConcession && <div className="note"><b>Concession not deducted.</b> These offers are ranked before concessions so every plan uses the same comparable cost basis. Ask the retailer to confirm your concession can transfer and what evidence is required.</div>}
-        {selectedPlans.length > 0 && <GasPlanComparison plans={selectedPlans} onRemove={toggleSelectedPlan} />}
-        <div>{displayedPlans.map((plan, index) => <GasPlanCard key={`${plan.id}-${Math.round(plan.annualCost)}`} plan={plan} index={index} selected={selectedPlanIds.includes(plan.id)} compareFull={selectedPlanIds.length >= 3} onToggleCompare={toggleSelectedPlan} />)}{!visiblePlans.length && <div className="note">No offers match these filters. Turn on standing offers or clear the search field.</div>}</div>
+        {selectedPlans.length > 0 && <GasPlanComparison plans={selectedPlans} onRemove={toggleSelectedPlan} referencePlan={referenceMatch.plan} />}
+        <div id="gas-plan-offers" tabIndex={-1} style={{ scrollMarginTop: "100px" }}>{displayedPlans.map((plan, index) => <GasPlanCard key={gasPlanKey(plan)} plan={plan} index={index} selected={selectedPlanKeys.includes(gasPlanKey(plan))} compareFull={selectedPlanKeys.length >= 3} onToggleCompare={toggleSelectedPlan} referencePlan={referenceMatch.plan} />)}{!visiblePlans.length && <div className="note">No offers match these filters. Turn on standing offers or clear the search field.</div>}</div>
         {visiblePlans.length > shown && <button className="btn ghost showmore" type="button" onClick={() => setShown((current) => current + 12)}>Show more plans</button>}
         <p className="offer-count">Showing {displayedPlans.length} of {visiblePlans.length} available offers</p>
         <div className="note"><b>How these estimates work.</b> Annual cost equals published daily supply charges plus usage charges, less only the conditional discounts selected above, based on {effectiveAnnualMj.toLocaleString()} MJ per year. {usageMode === "bill" ? "The entered bill was annualised from its exact dates before pricing. " : ""}The {usageProfile === "heating" ? "gas heating" : "steady year-round"} profile allocates usage across each seasonal tariff period. Concessions are not deducted. Results include only offers that passed strict calendar coverage and rate validation. Confirm rates, eligibility and conditions with the retailer before switching.</div>
@@ -381,19 +412,19 @@ export function GasComparator() {
   );
 }
 
-function GasPlanCard({ plan, index, selected, compareFull, onToggleCompare }: { plan: Plan; index: number; selected: boolean; compareFull: boolean; onToggleCompare: (planId: string) => void }) {
+function GasPlanCard({ plan, index, selected, compareFull, onToggleCompare, referencePlan }: { plan: Plan; index: number; selected: boolean; compareFull: boolean; onToggleCompare: (planKey: string) => void; referencePlan: PublishedReferencePlan | null }) {
   const badges = [<span className="badge" key="type">{plan.type === "STANDING" ? "Standing offer" : "Market offer"}</span>, ...(plan.seasonal ? [<span className="badge info" key="seasonal">Seasonal rates</span>] : []), ...plan.conditionalDiscounts.slice(0, 2).map((discount) => <span className="badge info" key={discount}>Conditional discount published: {discount}</span>), ...(plan.eligibilityConfirmations.length ? [<span className="badge warn" key="eligibility">Eligibility must be confirmed</span>] : []), ...(plan.feeCount ? [<span className="badge warn" key="fees">Published fees not included</span>] : []), ...(plan.incentiveCount || plan.limitations.some((item) => item !== "published fees not costed") ? [<span className="badge warn" key="limitations">Some benefits or charges not included</span>] : [])];
   const toggleOpen = (event: React.KeyboardEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>) => { if ("key" in event && event.key !== "Enter" && event.key !== " ") return; event.currentTarget.closest(".plan")?.classList.toggle("open"); };
   return <article className="plan">
     <div><div className="top"><span className={`rank${index === 0 ? " r1" : ""}`}>#{index + 1}</span>{plan.logo && <span className="logo-box"><img className="logo" src={plan.logo} alt={`${plan.brand} logo`} loading="lazy" decoding="async" onError={(event) => { event.currentTarget.style.display = "none"; }} /></span>}<div><h3>{plan.name}</h3><div className="retailer">{plan.brand}</div></div></div><RateLine plan={plan} /><div className="badges">{badges}</div><div className="bd-toggle" role="button" tabIndex={0} onClick={toggleOpen} onKeyDown={toggleOpen}>Show cost breakdown</div></div>
-    <div className="price"><div className="annual">{fmt$(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400, color: "var(--color-aea-muted)" }}>/yr</span></div><div className="permo">about {fmt$(plan.annualCost / 12)} per month</div>{plan.link ? <a href={plan.link} target="_blank" rel="noreferrer">View retailer plan</a> : <span className="source-missing">Retailer link not published</span>}<button type="button" className={`gas-compare-toggle${selected ? " selected" : ""}`} disabled={!selected && compareFull} onClick={() => onToggleCompare(plan.id)}>{selected ? "Remove from comparison" : compareFull ? "Comparison full (3)" : "Add to comparison"}</button><div className="offerid">Offer ID: {plan.id.split("@")[0]}{plan.lastUpdated ? ` | Retailer record updated ${new Date(plan.lastUpdated).toLocaleDateString()}` : " | Update time not published"}</div></div>
+    <div className="price"><div className="annual">{fmt$(plan.annualCost)}<span style={{ fontSize: ".8rem", fontWeight: 400, color: "var(--color-aea-muted)" }}>/yr</span></div><div className="permo">about {fmt$(plan.annualCost / 12)} per month</div>{referencePlan && <PlanPriceDifference referenceCost={referencePlan.annualCost} annualCost={plan.annualCost} isReference={referencePlan.key === gasPlanKey(plan)} />}{plan.link ? <a href={plan.link} target="_blank" rel="noreferrer">View retailer plan</a> : <span className="source-missing">Retailer link not published</span>}<button type="button" className={`gas-compare-toggle${selected ? " selected" : ""}`} disabled={!selected && compareFull} onClick={() => onToggleCompare(gasPlanKey(plan))}>{selected ? "Remove from comparison" : compareFull ? "Comparison full (3)" : "Add to comparison"}</button><div className="offerid">Offer ID: {plan.id}{plan.lastUpdated ? ` | Retailer record updated ${new Date(plan.lastUpdated).toLocaleDateString()}` : " | Update time not published"}</div></div>
     <div className="breakdown">Supply charges {fmtD2(plan.supply)} + usage {fmtD2(plan.usage)}{plan.discounts > 0 ? ` - discounts ${fmtD2(plan.discounts)}` : ""} = {fmtD2(plan.annualCost)} inc GST{plan.seasons?.length ? <><br />{plan.seasons.map((season) => `${season.label}: ${season.days} days, ${Math.round(season.usageMj).toLocaleString()} MJ, ${fmtD2(season.usage)} usage`).join(" | ")}</> : ""}{plan.eligibilityConfirmations.length ? <><br />Confirm with retailer: {plan.eligibilityConfirmations.join("; ").slice(0, 320)}</> : ""}{plan.limitations.length ? <><br />Not included: {plan.limitations.join("; ")}</> : ""}{plan.terms ? <><br />Published terms: {plan.terms.slice(0, 320)}</> : ""}</div>
   </article>;
 }
 
-function GasPlanComparison({ plans, onRemove }: { plans: Plan[]; onRemove: (planId: string) => void }) {
+function GasPlanComparison({ plans, onRemove, referencePlan }: { plans: Plan[]; onRemove: (planKey: string) => void; referencePlan: PublishedReferencePlan | null }) {
   const cheapest = Math.min(...plans.map((plan) => plan.annualCost));
-  return <section className="gas-plan-comparison" aria-labelledby="gas-plan-comparison-title"><div className="gas-plan-comparison-heading"><div><h3 id="gas-plan-comparison-title">Compare selected offers</h3><p>{plans.length} of 3 selected. Costs use the same household and seasonal assumptions.</p></div></div><div className="gas-plan-comparison-grid">{plans.map((plan) => <article key={plan.id} className={plan.annualCost === cheapest ? "best" : ""}><div className="gas-plan-comparison-title"><span>{plan.annualCost === cheapest ? "Lowest selected" : plan.type === "STANDING" ? "Standing offer" : "Market offer"}</span><h4>{plan.name}</h4><p>{plan.brand}</p></div><dl><div><dt>Estimated annual cost</dt><dd>{fmt$(plan.annualCost)}</dd></div><div><dt>Estimated monthly cost</dt><dd>{fmt$(plan.annualCost / 12)}</dd></div><div><dt>Supply charge</dt><dd>{plan.supplyChargeDaily.toFixed(1)}c/day</dd></div><div><dt>Usage rates</dt><dd>{plan.rates.slice(0, 3).map((rate) => `${rate.centsPerMj.toFixed(2)}c/MJ ${rate.label}`).join("; ")}</dd></div><div><dt>Seasonal pricing</dt><dd>{plan.seasonal ? "Yes, seasonal rates applied" : "No seasonal periods published"}</dd></div><div><dt>Conditions to check</dt><dd>{plan.eligibilityConfirmations.length ? plan.eligibilityConfirmations.slice(0, 2).join("; ") : plan.feeCount || plan.incentiveCount ? "Published fees or benefits are not included in the estimate" : "No unresolved published conditions"}</dd></div></dl><div className="gas-plan-comparison-actions">{plan.link && <a href={plan.link} target="_blank" rel="noreferrer">View retailer plan</a>}<button type="button" onClick={() => onRemove(plan.id)}>Remove</button></div></article>)}</div></section>;
+  return <section className="gas-plan-comparison" aria-labelledby="gas-plan-comparison-title"><div className="gas-plan-comparison-heading"><div><h3 id="gas-plan-comparison-title">Compare selected offers</h3><p>{plans.length} of 3 selected. Costs use the same household and seasonal assumptions.</p></div></div><div className="gas-plan-comparison-grid">{plans.map((plan) => <article key={gasPlanKey(plan)} className={plan.annualCost === cheapest ? "best" : ""}><div className="gas-plan-comparison-title"><span>{plan.annualCost === cheapest ? "Lowest selected" : plan.type === "STANDING" ? "Standing offer" : "Market offer"}</span><h4>{plan.name}</h4><p>{plan.brand}</p></div>{referencePlan && <PlanPriceDifference referenceCost={referencePlan.annualCost} annualCost={plan.annualCost} isReference={referencePlan.key === gasPlanKey(plan)} />}<dl><div><dt>Estimated annual cost</dt><dd>{fmt$(plan.annualCost)}</dd></div><div><dt>Estimated monthly cost</dt><dd>{fmt$(plan.annualCost / 12)}</dd></div><div><dt>Supply charge</dt><dd>{plan.supplyChargeDaily.toFixed(1)}c/day</dd></div><div><dt>Usage rates</dt><dd>{plan.rates.slice(0, 3).map((rate) => `${rate.centsPerMj.toFixed(2)}c/MJ ${rate.label}`).join("; ")}</dd></div><div><dt>Seasonal pricing</dt><dd>{plan.seasonal ? "Yes, seasonal rates applied" : "No seasonal periods published"}</dd></div><div><dt>Conditions to check</dt><dd>{plan.eligibilityConfirmations.length ? plan.eligibilityConfirmations.slice(0, 2).join("; ") : plan.feeCount || plan.incentiveCount ? "Published fees or benefits are not included in the estimate" : "No unresolved published conditions"}</dd></div></dl><div className="gas-plan-comparison-actions">{plan.link && <a href={plan.link} target="_blank" rel="noreferrer">View retailer plan</a>}<button type="button" onClick={() => onRemove(gasPlanKey(plan))}>Remove</button></div></article>)}</div></section>;
 }
 
 function RateLine({ plan }: { plan: Plan }) {

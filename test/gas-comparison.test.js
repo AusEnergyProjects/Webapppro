@@ -87,7 +87,7 @@ test("edited gas inputs cannot reuse stale plan costs or bypass repricing throug
 });
 
 test("residents can compare up to three gas offers side by side", () => {
-  assert.match(component, /selectedPlanIds/);
+  assert.match(component, /selectedPlanKeys/);
   assert.match(component, /current\.length < 3/);
   assert.match(component, /Compare selected offers/);
   assert.match(component, /Estimated annual cost/);

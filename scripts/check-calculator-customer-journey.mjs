@@ -11,20 +11,34 @@ if (output) fs.mkdirSync(output, { recursive: true });
 const executablePath = [process.env.FORM_QA_BROWSER, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/chromium"].find(value => value && fs.existsSync(value));
 const browser = await chromium.launch({ executablePath, headless: true });
 const electricity = { planId: "synthetic-electricity", name: "Synthetic test plan", brand: "Synthetic Energy", type: "MARKET", distributors: ["CitiPower"], link: "https://example.invalid/plan", contract: { tariffPeriod: [{ startDate: "01-01", endDate: "12-31", dailySupplyCharge: 1, rateBlockUType: "singleRate", singleRate: { rates: [{ unitPrice: 0.25 }] } }], solarFeedInTariff: [{ scheme: "CURRENT", singleTariff: { rates: [{ unitPrice: 0.05 }] } }] } };
-const gas = { id: "synthetic-gas", name: "Synthetic gas plan", brand: "Synthetic Energy", type: "MARKET", distributors: ["Multinet"], annualCost: 1100, supply: 300, usage: 800, discounts: 0, supplyChargeDaily: 82, rates: [{ label: "Usage", centsPerMj: 4 }], conditionalDiscounts: [], eligibility: [], eligibilityConfirmations: [], limitations: [], feeCount: 0, incentiveCount: 0, link: "https://example.invalid/plan" };
+const gas = { id: "synthetic-gas", base: "https://example.invalid/gas", name: "Synthetic gas plan", brand: "Synthetic Energy", type: "MARKET", distributors: ["Multinet"], annualCost: 1100, supply: 300, usage: 800, discounts: 0, supplyChargeDaily: 82, rates: [{ label: "Usage", centsPerMj: 4 }], conditionalDiscounts: [], eligibility: [], eligibilityConfirmations: [], limitations: [], feeCount: 0, incentiveCount: 0, link: "https://example.invalid/plan" };
+const electricityAlternatives = [
+  { ...electricity, planId: "CHEAPER@EME", name: "Cheaper reference alternative", contract: { ...electricity.contract, tariffPeriod: [{ ...electricity.contract.tariffPeriod[0], dailySupplyCharge: 0.5 }] } },
+  { ...electricity, planId: "DEARER@EME", name: "Dearer reference alternative", contract: { ...electricity.contract, tariffPeriod: [{ ...electricity.contract.tariffPeriod[0], dailySupplyCharge: 1.5 }] } },
+  { ...electricity, planId: "AMBIGUOUS@EME", name: "Record one" },
+  { ...electricity, planId: "AMBIGUOUS@VEC", name: "Record two" },
+];
+const gasAlternatives = [
+  { ...gas, id: "CHEAPER@EME", name: "Cheaper reference alternative", annualCost: 1000 },
+  { ...gas, id: "DEARER@EME", name: "Dearer reference alternative", annualCost: 1400 },
+  { ...gas, id: "AMBIGUOUS@EME", name: "Record one" },
+  { ...gas, id: "AMBIGUOUS@VEC", name: "Record two" },
+];
 
 async function setup(width) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
-  const errors = [], state = { requests: 0, writes: 0, release: null };
+  const errors = [], state = { requests: 0, writes: 0, release: null, requestUrls: [] };
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/api/electricity-plans?**", async route => {
     state.requests++;
+    state.requestUrls.push(route.request().url());
     if (state.release) await state.release;
-    await route.fulfill({ json: { plans: [electricity], fetchedAt: "2026-10-09T00:00:00Z" } });
+    await route.fulfill({ json: { plans: [electricity, ...electricityAlternatives], fetchedAt: "2026-10-09T00:00:00Z" } });
   });
   await page.route("**/api/gas-plans?**", async route => {
     state.requests++;
-    await route.fulfill({ json: { plans: [gas], fetchedAt: "2026-10-09T00:00:00Z" } });
+    state.requestUrls.push(route.request().url());
+    await route.fulfill({ json: { plans: [gas, ...gasAlternatives], fetchedAt: "2026-10-09T00:00:00Z" } });
   });
   await page.route("**/api/address-localities?**", route => route.fulfill({ json: { ok: true, postcode: "3000", localities: [{ suburb: "MELBOURNE", state: "VIC" }] } }));
   await page.route("**/api/leads", route => { state.writes++; return route.fulfill({ status: 503, json: { error: "No leads may be sent by synthetic QA." } }); });
@@ -49,6 +63,45 @@ async function checkDialog(page, expected) {
   await dialog.waitFor({ state: "hidden" });
 }
 
+async function checkPlanReference(page, id, cheaperDifference, dearerDifference) {
+  const reference = page.getByRole("region", { name: "Compare with the plan on your bill", exact: true });
+  const input = reference.getByLabel("Your current Plan or Offer ID", { exact: false });
+  await reference.getByText("Published offer matched", { exact: true }).waitFor();
+  await page.getByText("Your selected reference plan", { exact: true }).waitFor();
+  await page.getByText(`${cheaperDifference}/year less than your reference plan`, { exact: true }).waitFor();
+  await page.getByText(`${dearerDifference}/year more than your reference plan`, { exact: true }).waitFor();
+  await reference.getByText(/Check these prices against your latest bill/).waitFor();
+  const filter = page.getByRole("textbox", { name: /^Filter/ });
+  await filter.fill("Cheaper reference alternative");
+  await reference.getByText("Published offer matched", { exact: true }).waitFor();
+  await page.getByText(`${cheaperDifference}/year less than your reference plan`, { exact: true }).waitFor();
+  await filter.fill("");
+  await input.fill("not-an-offer");
+  await reference.getByText(/We could not match this code/).waitFor();
+  assert.equal(await page.getByText(/\/year (less|more) than your reference plan/).count(), 0, "No manufactured savings for an unmatched ID");
+  await input.fill("AMBIGUOUS");
+  const choices = reference.getByRole("combobox");
+  await choices.waitFor();
+  assert.equal(await reference.getByText("Published offer matched", { exact: true }).count(), 0, "Ambiguous code cannot silently select a record");
+  const optionValues = await choices.locator("option").evaluateAll(options => options.map(option => option.value));
+  await choices.selectOption(optionValues[1]);
+  await reference.getByText("Published offer matched", { exact: true }).waitFor();
+  await input.fill("AMBIGUOUS@NOT-A-RECORD");
+  await reference.getByText(/We could not match this code/).waitFor();
+  await input.fill("https://example.invalid/offer");
+  await reference.getByText(/Enter the Plan or Offer ID, rather than a website link/).waitFor();
+  await reference.getByRole("button", { name: "Continue without a plan ID", exact: true }).click();
+  assert.equal(await input.inputValue(), "");
+  assert.equal(await page.getByText(/\/year (less|more) than your reference plan/).count(), 0);
+  await input.fill(id);
+  await reference.getByText("Published offer matched", { exact: true }).waitFor();
+  await reference.scrollIntoViewIfNeeded();
+  await assertFits(page);
+  if (output) await page.screenshot({ path: path.join(output, `plan-reference-${id}-${page.viewportSize().width}.png`) });
+  await reference.getByRole("link", { name: "Compare offers against this plan", exact: true }).click();
+  assert.equal(new URL(page.url()).hash, id === "synthetic-electricity" ? "#electricity-plan-offers" : "#gas-plan-offers");
+}
+
 try {
   for (const width of [1440, 390]) {
     const { page, errors, state } = await setup(width);
@@ -60,6 +113,7 @@ try {
     await form.locator('input[value="bill"][name="usage-evidence"]').check();
     await form.locator('input[value="annual"][name="manual-usage-mode"]').check();
     await form.locator('input[type="number"]').first().fill("6240");
+    await form.getByLabel("Your current Plan or Offer ID", { exact: false }).fill("synthetic-electricity");
     await form.getByRole("button", { name: "Continue", exact: true }).click();
     const back = form.getByRole("button", { name: "Back", exact: true });
     const compare = form.getByRole("button", { name: "Compare electricity plans", exact: true });
@@ -76,6 +130,8 @@ try {
     if (output) await page.screenshot({ path: path.join(output, `electricity-loading-${width}.png`), fullPage: true });
     release(); state.release = null;
     await page.getByRole("heading", { name: "Your electricity plan results", exact: true }).waitFor();
+    await checkPlanReference(page, "synthetic-electricity", "$200.75", "$200.75");
+    assert.ok(state.requestUrls.every(url => !url.includes("synthetic-electricity")), "Plan ID stays local");
     assert.equal(await page.getByText(/Direct Trade project brief/).count(), 0);
     assert.equal(await page.getByLabel(/solar yield|round.trip efficiency/i).count(), 0);
     assert.equal(await page.locator(".native-scenarios details").count(), 0);
@@ -116,6 +172,7 @@ try {
     await form.getByLabel("Postcode", { exact: true }).fill("3000");
     await form.getByRole("button", { name: "Continue", exact: true }).click();
     await form.getByLabel("Gas use (MJ per year)", { exact: false }).fill("58000");
+    await form.getByLabel("Your current Plan or Offer ID", { exact: false }).fill("synthetic-gas");
     await form.getByRole("button", { name: "Continue", exact: true }).click();
     const refinement = page.locator(".gas-questionnaire");
     await refinement.getByRole("checkbox", { name: "Gas ducted central heating", exact: true }).check();
@@ -138,6 +195,8 @@ try {
     await refinement.getByRole("checkbox", { name: "None", exact: true }).check();
     await form.getByRole("button", { name: "Compare gas plans", exact: true }).click();
     await page.getByRole("heading", { name: "Your gas plan results", exact: true }).waitFor();
+    await checkPlanReference(page, "synthetic-gas", "$100.00", "$300.00");
+    assert.ok(state.requestUrls.every(url => !url.includes("synthetic-gas")), "Gas plan ID stays local");
     await page.getByRole("heading", { name: "What could switching to electric save?", exact: true }).waitFor();
     if (output) await page.locator(".gas-savings").screenshot({ path: path.join(output, `gas-electrification-${width}.png`) });
     assert.equal(await page.getByRole("button", { name: "Enquire about reverse cycle heating", exact: true }).count(), 0, "None excludes a gas-heating upgrade");
@@ -156,8 +215,10 @@ try {
     console.log(`Gas ${width}px: quotes, results, editing and enquiries passed.`);
   }
 } catch (error) {
+  console.error(error);
   for (const context of browser.contexts()) for (const page of context.pages()) {
-    console.error((await page.locator("main").innerText()).slice(-9000));
+    console.error(`Failure at ${page.url()}`);
+    if (await page.locator("main").count()) console.error((await page.locator("main").innerText()).slice(-9000));
     if (output) await page.screenshot({ path: path.join(output, "journey-failure.png"), fullPage: true });
   }
   throw error;

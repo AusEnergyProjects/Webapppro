@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
     }));
 
     const distinct = new Map<string, any>();
-    outcomes.filter((outcome) => outcome.status === "passed").forEach((outcome: any) => distinct.set(outcome.result.id, outcome.result));
+    outcomes.filter((outcome) => outcome.status === "passed").forEach((outcome: any) => distinct.set(`${outcome.result.base}|${outcome.result.id}`, outcome.result));
     const plans = [...distinct.values()].sort((a, b) => a.annualCost - b.annualCost);
     const timestamps = plans.map((plan) => Date.parse(plan.lastUpdated)).filter(Number.isFinite).sort((a, b) => a - b);
     const listFailures = lists.filter((item) => !item.available).length;
