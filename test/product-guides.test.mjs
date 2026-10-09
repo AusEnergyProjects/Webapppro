@@ -16,8 +16,7 @@ function compile(relative, dependencies) {
 const slugs = ["solar", "inverters", "batteries", "hot-water", "air-conditioning"];
 const datasets = Object.fromEntries(slugs.map(slug => ["./product-guides/" + slug + ".json", { default: JSON.parse(readFileSync(new URL("../src/lib/product-guides/" + slug + ".json", import.meta.url), "utf8")) }]));
 const guide = compile("../src/lib/product-guides.ts", datasets);
-const css = { default: new Proxy({}, { get: (_, key) => String(key) }) };
-const browser = compile("../src/components/ProductComparisonBrowser.tsx", { react, "react/jsx-runtime": jsx, "./ProductComparison.module.css": css });
+const browser = compile("../src/components/ProductComparisonBrowser.tsx", { react, "react/jsx-runtime": jsx, "./product-comparison.css": {} });
 const dependencies = {
   "react/jsx-runtime": jsx,
   "next/link": { default: ({ children, ...props }) => jsx.jsx("a", { ...props, children }) },
@@ -27,7 +26,6 @@ const dependencies = {
   "./ComparatorChrome": { SiteHeader: () => jsx.jsx("nav", { children: "Navigation" }), SiteFooter: ({ children }) => jsx.jsx("footer", { children }) },
   "./JsonLd": { JsonLd: ({ data }) => jsx.jsx("script", { type: "application/ld+json", dangerouslySetInnerHTML: { __html: JSON.stringify(data) } }) },
   "./ProductComparisonBrowser": browser,
-  "./ProductComparison.module.css": css,
 };
 const page = compile("../src/components/ProductComparisonPage.tsx", dependencies);
 dependencies["@/components/ProductComparisonPage"] = page;

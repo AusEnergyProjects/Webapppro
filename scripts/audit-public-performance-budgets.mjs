@@ -274,6 +274,14 @@ if (tlinkCss.length !== 1) {
   fail(`expected one TLink chrome stylesheet, found ${tlinkCss.length}`);
 }
 const rootCssSource = fs.readFileSync(path.join(clientRoot, globalCss.file), "utf8");
+const productComparisonStyles = requireEntry(manifest, requireNamedEntryKey(manifest, "ProductComparisonBrowser"));
+const productComparisonCss = (productComparisonStyles.css || []).map(normalizeAsset);
+if (productComparisonCss.length !== 1) {
+  fail(`expected one product comparison stylesheet, found ${productComparisonCss.length}`);
+}
+if (rootCssSource.includes(".product-comparison-")) {
+  fail("root stylesheet contains product comparison route styles");
+}
 for (const selector of [
   ".customer-account-page",
   ".trade-portal-shell",
@@ -335,6 +343,11 @@ for (const [route, budgets] of Object.entries(routeBudgets)) {
   }
 }
 for (const [route, graph] of Object.entries(routeGraphs)) {
+  for (const stylesheet of productComparisonCss) {
+    if (graph.files.has(stylesheet)) {
+      fail(`${route} initial graph includes product comparison stylesheet ${stylesheet}`);
+    }
+  }
   for (const stylesheet of protectedCss) {
     if (graph.files.has(stylesheet)) {
       fail(`${route} initial graph includes protected-workspace stylesheet ${stylesheet}`);
