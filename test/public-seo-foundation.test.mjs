@@ -144,7 +144,7 @@ test("crawl controls exclude private surfaces and publish only verified sitemap 
   assert.match(sitemap, /"\/residential-efficiency-scorecard"/);
   assert.match(sitemap, /"\/rental-assessment\/request"/);
   assert.match(sitemap, /lastModifiedByRoute/);
-  assert.match(sitemap, /\["\/assessments", "2026-09-04"\]/);
+  assert.match(sitemap, /\["\/assessments", "2026-10-09"\]/);
   assert.match(sitemap, /\["\/blower-door-thermal-imaging", "2026-09-04"\]/);
   assert.match(sitemap, /\["\/guides\/home-energy-upgrades", "2026-09-04"\]/);
   assert.match(sitemap, /new URL\(route \|\| "\/", `\$\{PUBLIC_SITE\.apexUrl\}\/`\)\.toString\(\)/);

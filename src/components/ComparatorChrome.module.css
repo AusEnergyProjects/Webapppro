@@ -139,11 +139,15 @@
   justify-content: space-between;
   margin: -2px 0 18px;
   padding: 11px 14px;
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  box-shadow: 0 8px 28px rgba(0, 5, 16, .3);
 }
 
 .stepActions > span {
   color: #9fc4c9;
-  font-size: .64rem;
+  font-size: .875rem;
   font-weight: 800;
 }
 
@@ -201,29 +205,33 @@
 
 .working strong {
   display: block;
-  font-size: .86rem;
+  font-size: 1.125rem;
 }
 
 .working p {
   color: #d4ebea;
-  font-size: .7rem;
+  font-size: 1rem;
   margin: 3px 0 0;
 }
 
 .working small {
   color: #abc9cc;
-  font-size: .61rem;
+  font-size: .875rem;
 }
 
-.workingMark {
-  animation: workingPulse 1.2s ease-in-out infinite;
-  background: #6ee7b7;
-  border: 5px solid rgba(110, 231, 183, .2);
-  border-radius: 50%;
-  box-sizing: content-box;
-  flex: 0 0 auto;
-  height: 12px;
-  width: 12px;
+.workingMascot {
+  animation: wattzunDance 1.6s ease-in-out infinite;
+  height: 86px;
+  width: 70px;
+  transform-origin: center bottom;
+}
+
+.workingEyebrow {
+  color: #9bf4d7;
+  display: block;
+  font-size: .875rem;
+  font-weight: 800;
+  margin-bottom: 4px;
 }
 
 .workingTrack {
@@ -252,9 +260,11 @@
   to { transform: translateX(340%); }
 }
 
-@keyframes workingPulse {
-  0%, 100% { opacity: .55; transform: scale(.86); }
-  50% { opacity: 1; transform: scale(1); }
+@keyframes wattzunDance {
+  0%, 100% { transform: rotate(-7deg); }
+  25% { transform: translateY(-7px) rotate(7deg); }
+  50% { transform: rotate(7deg); }
+  75% { transform: translateY(-7px) rotate(-7deg); }
 }
 
 @media (max-width: 720px) {
@@ -322,7 +332,7 @@
     transition: none;
   }
 
-  .workingMark,
+  .workingMascot,
   .workingTrack > span {
     animation: none;
   }

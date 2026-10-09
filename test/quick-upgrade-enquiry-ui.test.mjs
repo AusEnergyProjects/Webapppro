@@ -40,6 +40,9 @@ test("a provider-selected title-case suburb adopts the postcode directory casing
 });
 
 test("quick request makes required and optional sharing explicit", () => {
+  assert.match(dialog, /initialNotes\?: string/);
+  assert.match(dialog, /useState\(initialNotes\.slice\(0, 500\)\)/);
+  assert.match(dialog, /event\.stopPropagation\(\)/);
   assert.match(dialog, /Your name, email and phone are required/);
   assert.match(dialog, /Your selected services, full property address/);
   assert.match(dialog, /Your email is always included\. Your name and phone are included unless you untick their boxes/);

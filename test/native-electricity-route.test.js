@@ -38,7 +38,7 @@ test("native results use the same-origin plan route and strict typed estimator",
   assert.match(component, /annualExportKwh: annualExport/);
   assert.match(component, /Solar, battery, EV and controlled-load eligibility/);
   assert.match(component, /Open calculation audit/);
-  assert.match(component, /Open scenario calculation audit/);
+  assert.match(component, /See how this was calculated/);
   assert.match(component, /role="dialog" aria-modal="true"/);
   assert.match(component, /event\.key === "Escape"/);
   assert.match(component, /auditReturnRef\.current\?\.focus\(\)/);
@@ -114,20 +114,22 @@ test("native plan actions stay grouped and resident-facing audits hide internal 
 });
 
 test("upgrade scenarios distinguish editable quotes from model assumptions", () => {
-  assert.match(component, /Replace the prefilled cost with a written installed quote/);
-  assert.match(component, /Annual solar yield/);
-  assert.match(component, /Battery round-trip efficiency/);
-  assert.match(component, /using first-year bill saving/);
-  assert.match(component, /Indicative scenario, not an installation recommendation/);
-  assert.match(component, /SunSPOT calculator/);
-  assert.match(component, /className="native-direct-trade-link"/);
+  assert.match(component, /Have a quote\? Enter the total you would pay/);
+  assert.doesNotMatch(component, /Annual solar yield|Battery round-trip efficiency|native-scenario-assumptions|native-quote-editor/);
+  assert.match(component, /const batteryEfficiency = BATTERY_ROUND_TRIP_EFFICIENCY/);
+  assert.match(component, /estimated time for bill savings to cover the price/);
+  assert.match(component, /These are estimates, not a site assessment or an installer quote/);
+  assert.match(component, /SunSPOT/);
+  assert.doesNotMatch(component, /native-direct-trade-link|createDirectTradeHandoffUrl|Build a Direct Trade/);
+  assert.match(component, /Enquire about solar \+ storage/);
+  assert.match(component, /initialNotes=/);
   assert.match(component, /QuickUpgradeEnquiryDialog/);
   assert.match(component, /initialServices=\{enquiryServicesForScenario\(enquiryScenario\)\}/);
   assert.match(component, /if \(scenario\.label === "Solar only"\) return \["solar"\]/);
   assert.match(component, /if \(scenario\.label === "Solar \+ battery"\) return \["solar", "battery"\]/);
   assert.doesNotMatch(component, /NativeUpgradeDialog/);
   assert.doesNotMatch(component, /\/account\/projects\/new/);
-  assert.match(styles, /\.native-direct-trade-link \{[^}]*border: 1px solid #159b69;[^}]*display: flex;[^}]*width: 100%;/);
+  assert.match(styles, /\.native-scenario \.native-enquiry-button \{[^}]*min-height: 52px;[^}]*width: 100%;/);
 });
 
 test("meter chart uses a vivid lightweight interactive SVG", () => {

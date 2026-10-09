@@ -23,7 +23,6 @@ import {
 import { Nem12UsageChart } from "@/components/electricity/Nem12UsageChart";
 import {
   BATTERY_ROUND_TRIP_EFFICIENCY,
-  SCENARIO_COST_ASSUMPTIONS,
   defaultBatteryNetCost,
   defaultSolarNetCost,
   genericExportProfile,
@@ -35,7 +34,8 @@ import {
 } from "@/lib/electricity/energy-flow";
 import { allocateNem12Registers, parseNem12, scaleNem12AnnualAllocation } from "@/lib/electricity/nem12";
 import type { HalfHourlyGrid, Nem12Success, RegisterRole } from "@/lib/electricity/nem12-types";
-import { createDirectTradeHandoffUrl } from "@/lib/direct-trade-handoff.mjs";
+import { InstalledQuoteField } from "@/components/InstalledQuoteField";
+import { parseInstalledQuote } from "@/lib/installed-quote";
 import {
   DISTRIBUTOR_INFO,
   cleanNmi,
@@ -265,11 +265,10 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [pricingContext, setPricingContext] = useState<PricingContext | null>(null);
   const [scenarioSolarKw, setScenarioSolarKw] = useState("4");
   const [scenarioBatteryKwh, setScenarioBatteryKwh] = useState("10");
-  const [scenarioSolarYield, setScenarioSolarYield] = useState("1350");
-  const [scenarioBatteryEfficiency, setScenarioBatteryEfficiency] = useState(String(BATTERY_ROUND_TRIP_EFFICIENCY * 100));
   const [scenarioSolarCost, setScenarioSolarCost] = useState(String(defaultSolarNetCost(4)));
   const [scenarioBatteryCost, setScenarioBatteryCost] = useState(String(defaultBatteryNetCost(10)));
   const [scenarioComboCost, setScenarioComboCost] = useState(String(defaultSolarNetCost(4) + defaultBatteryNetCost(10)));
+  const [customQuotes, setCustomQuotes] = useState({ solar: false, battery: false, combo: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState("");
@@ -394,8 +393,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     const bestNow = plans.filter((plan) => plan.tariffKind !== "demand").sort((a, b) => a.annualCost - b.annualCost)[0];
     if (!bestNow) return [];
     const batterySize = Math.max(0, Number(scenarioBatteryKwh));
-    const solarYield = Math.max(0, Number(scenarioSolarYield)) || solarYieldForPostcode(postcode);
-    const batteryEfficiency = Math.min(1, Math.max(0.5, Number(scenarioBatteryEfficiency) / 100 || BATTERY_ROUND_TRIP_EFFICIENCY));
+    const solarYield = solarYieldForPostcode(postcode);
+    const batteryEfficiency = BATTERY_ROUND_TRIP_EFFICIENCY;
     const common = {
       annualControlledKwh: pricingContext.annualControlledKwh,
       controlledProfile: pricingContext.controlledProfile,
@@ -418,7 +417,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       if (solarBest) results.push({
         label: "Solar only", description: `${size} kW solar`, best: solarBest,
         annualSaving: bestNow.annualCost - solarBest.annualCost, annualImportKwh: solar.annualImport,
-        annualExportKwh: solar.annualExport, installedCost: Math.max(0, Number(scenarioSolarCost)),
+        annualExportKwh: solar.annualExport, installedCost: parseInstalledQuote(scenarioSolarCost) ?? 0,
       });
       if (batterySize > 0) {
         const battery = simulateBattery(solar.importProfile, solar.exportProfile, solar.annualImport, solar.annualExport, batterySize, batteryEfficiency);
@@ -431,7 +430,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
           label: "Solar + battery", description: `${size} kW solar + ${batterySize} kWh battery`, best: batteryBest,
           annualSaving: bestNow.annualCost - batteryBest.annualCost, annualImportKwh: battery.annualImport,
           annualExportKwh: battery.annualExport, annualDischargeKwh: battery.annualDischarge,
-          installedCost: Math.max(0, Number(scenarioComboCost)),
+          installedCost: parseInstalledQuote(scenarioComboCost) ?? 0,
         });
       }
     } else if (setupMode === "solar" && pricingContext.annualExportKwh > 0 && batterySize > 0) {
@@ -445,24 +444,40 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         label: "Add a battery", description: `${batterySize} kWh battery`, best: batteryBest,
         annualSaving: bestNow.annualCost - batteryBest.annualCost, annualImportKwh: battery.annualImport,
         annualExportKwh: battery.annualExport, annualDischargeKwh: battery.annualDischarge,
-        installedCost: Math.max(0, Number(scenarioBatteryCost)),
+        installedCost: parseInstalledQuote(scenarioBatteryCost) ?? 0,
       });
     }
     return results;
-  }, [assumeConditional, hasEv, plans, postcode, pricingContext, scenarioBatteryCost, scenarioBatteryEfficiency, scenarioBatteryKwh, scenarioComboCost, scenarioSolarCost, scenarioSolarKw, scenarioSolarYield, setupMode]);
+  }, [assumeConditional, hasEv, plans, postcode, pricingContext, scenarioBatteryCost, scenarioBatteryKwh, scenarioComboCost, scenarioSolarCost, scenarioSolarKw, setupMode]);
 
   function updateScenarioSolarSize(value: string) {
     setScenarioSolarKw(value);
     const solarCost = defaultSolarNetCost(Number(value));
-    setScenarioSolarCost(String(solarCost));
-    setScenarioComboCost(String(solarCost + defaultBatteryNetCost(Number(scenarioBatteryKwh))));
+    if (!customQuotes.solar) setScenarioSolarCost(String(solarCost));
+    if (!customQuotes.combo) setScenarioComboCost(String(solarCost + defaultBatteryNetCost(Number(scenarioBatteryKwh))));
   }
 
   function updateScenarioBatterySize(value: string) {
     setScenarioBatteryKwh(value);
     const batteryCost = defaultBatteryNetCost(Number(value));
-    setScenarioBatteryCost(String(batteryCost));
-    setScenarioComboCost(String(defaultSolarNetCost(Number(scenarioSolarKw)) + batteryCost));
+    if (!customQuotes.battery) setScenarioBatteryCost(String(batteryCost));
+    if (!customQuotes.combo) setScenarioComboCost(String(defaultSolarNetCost(Number(scenarioSolarKw)) + batteryCost));
+  }
+
+  function changeQuote(kind: keyof typeof customQuotes, value: string) {
+    setCustomQuotes((current) => ({ ...current, [kind]: true }));
+    if (kind === "solar") setScenarioSolarCost(value);
+    else if (kind === "battery") setScenarioBatteryCost(value);
+    else setScenarioComboCost(value);
+  }
+
+  function resetQuote(kind: keyof typeof customQuotes) {
+    setCustomQuotes((current) => ({ ...current, [kind]: false }));
+    const solarCost = defaultSolarNetCost(Number(scenarioSolarKw));
+    const batteryCost = defaultBatteryNetCost(Number(scenarioBatteryKwh));
+    if (kind === "solar") setScenarioSolarCost(String(solarCost));
+    else if (kind === "battery") setScenarioBatteryCost(String(batteryCost));
+    else setScenarioComboCost(String(solarCost + batteryCost));
   }
 
   async function readMeterFile(file: File | undefined) {
@@ -710,16 +725,15 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       });
       setExcluded(reasons);
       setPlans(priced.sort((a, b) => a.annualCost - b.annualCost));
-      const suggestedSolar = suggestedSolarSize(totalKwh, postcode);
+      const keepQuotedSizes = Object.values(customQuotes).some(Boolean);
+      const suggestedSolar = keepQuotedSizes ? Number(scenarioSolarKw) : suggestedSolarSize(totalKwh, postcode);
       const previewSolar = simulateSolar(profile, general, suggestedSolar * solarYieldForPostcode(postcode));
-      const suggestedBattery = suggestedBatterySize(previewSolar.importProfile, previewSolar.annualImport, previewSolar.annualExport);
+      const suggestedBattery = keepQuotedSizes ? Number(scenarioBatteryKwh) : suggestedBatterySize(previewSolar.importProfile, previewSolar.annualImport, previewSolar.annualExport);
       setScenarioSolarKw(String(suggestedSolar));
       setScenarioBatteryKwh(String(suggestedBattery));
-      setScenarioSolarYield(String(solarYieldForPostcode(postcode)));
-      setScenarioBatteryEfficiency(String(BATTERY_ROUND_TRIP_EFFICIENCY * 100));
-      setScenarioSolarCost(String(defaultSolarNetCost(suggestedSolar)));
-      setScenarioBatteryCost(String(defaultBatteryNetCost(suggestedBattery)));
-      setScenarioComboCost(String(defaultSolarNetCost(suggestedSolar) + defaultBatteryNetCost(suggestedBattery)));
+      if (!customQuotes.solar) setScenarioSolarCost(String(defaultSolarNetCost(suggestedSolar)));
+      if (!customQuotes.battery) setScenarioBatteryCost(String(defaultBatteryNetCost(suggestedBattery)));
+      if (!customQuotes.combo) setScenarioComboCost(String(defaultSolarNetCost(suggestedSolar) + defaultBatteryNetCost(suggestedBattery)));
       setPricingContext({ candidates, profile, controlledProfile, annualGeneralKwh: general, annualControlledKwh: controlled, annualExportKwh: annualExport, exportProfile, evidenceLabel, registerEvidence, customerType, hasIntervalMeter: Boolean(usingMeter) });
       if (!priced.length) {
         setError("Plans were published, but none met the comparison engine's strict priceability rules for these inputs.");
@@ -941,8 +955,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         {distributors.length > 1 && <div className="native-location-evidence"><Field label="Network distributor" hint={nmiDistributor ? "The NMI range provided a likely match. Use the network name on your bill to correct it if needed." : "This postcode crosses network boundaries. Choose the distributor printed on your electricity bill before comparing again."}><select value={distributor || nmiDistributor || ""} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
       </StepCard>
       <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {Math.round(annualUsageNumber).toLocaleString()} kWh/year | {setupMode === "none" ? "No solar" : setupMode === "solar" ? "Solar" : "Solar and battery"}</strong><small>You can go back without losing any answer or uploaded meter data.</small></div>
-      <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} />
-      <div className="gas-compare-action comparison-primary-action"><span>We will price eligible current plans against the usage information you supplied.</span><button className="btn" type="submit" disabled={loading}>{loading ? "Comparing electricity plans..." : "Compare electricity plans"}</button></div>
+      <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} submitting={loading} submitLabel={loading ? "Comparing electricity plans..." : "Compare electricity plans"} />
       {loading && <ComparisonWorkingState title="Comparing electricity plans" message={analysisMessage} />}
       </>}
       {error && <p ref={errorRef} className="error" role="alert" tabIndex={-1}>{error}</p>}
@@ -955,40 +968,22 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
 
     {activeStep === 4 && plans.length > 0 && <section className="results" aria-live="polite" aria-labelledby="electricity-results-title">
       <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="electricity-results-title">Your electricity plan results</h2><p>Start with the lowest estimated annual cost, check its conditions and calculation audit, then open the retailer&apos;s current plan page before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>
-      <div className="rsummary"><div className="stat"><div className="v">{visible.length}</div><div className="l">strictly priceable native results</div></div><div className="stat"><div className="v">{best ? fmtMoney(best.annualCost) : "n/a"}</div><div className="l">best estimated annual cost</div></div><div className="stat"><div className="v">{median ? fmtMoney(median.annualCost) : "n/a"}</div><div className="l">median visible offer</div></div></div>
+      <div className="rsummary"><div className="stat"><div className="v">{visible.length}</div><div className="l">plans we could compare</div></div><div className="stat"><div className="v">{best ? fmtMoney(best.annualCost) : "n/a"}</div><div className="l">lowest estimated yearly bill</div></div><div className="stat"><div className="v">{median ? fmtMoney(median.annualCost) : "n/a"}</div><div className="l">middle-priced plan</div></div></div>
       {pricingContext && setupMode !== "battery" && <div className="native-scenarios">
-        <h2>{setupMode === "none" ? "Native solar and battery scenarios" : "Native battery scenario"}</h2>
-        <p>{setupMode === "none" ? "Solar is generated half hourly against this household's load pattern. The battery then charges only from remaining solar exports and discharges against later grid imports." : "The battery charges from this household's solar export pattern and discharges against its grid-import pattern. Existing meter imports are not double-shifted."}</p>
-        <p className="native-scenario-instruction"><b>Replace the prefilled cost with a written installed quote.</b> Enter the final amount after every certificate discount and rebate shown by the installer.</p>
-        <div className="grid c3">
-          {setupMode === "none" && <Field label="Scenario solar size" hint="Panel capacity in kW."><input type="number" min="0.1" step="0.1" value={scenarioSolarKw} onChange={(event) => updateScenarioSolarSize(event.target.value)} /></Field>}
-          <Field label="Scenario usable battery size" hint="Usable storage in kWh, not the larger nominal capacity."><input type="number" min="0.1" step="0.5" value={scenarioBatteryKwh} onChange={(event) => updateScenarioBatterySize(event.target.value)} /></Field>
-          {setupMode === "none" ? <Field label="Solar installed quote after discounts" hint="Include panels, inverter, labour, connection work, GST and solar STCs."><input type="number" min="0" step="100" value={scenarioSolarCost} onChange={(event) => setScenarioSolarCost(event.target.value)} /></Field> : <Field label="Battery installed quote after discounts" hint="Include battery, inverter or integration work, labour, GST and the confirmed federal discount."><input type="number" min="0" step="100" value={scenarioBatteryCost} onChange={(event) => setScenarioBatteryCost(event.target.value)} /></Field>}
-          {setupMode === "none" && <Field label="Solar + battery installed quote after discounts" hint="Use the combined written quote, which may differ from adding two standalone prices."><input type="number" min="0" step="100" value={scenarioComboCost} onChange={(event) => setScenarioComboCost(event.target.value)} /></Field>}
-        </div>
-        <details className="native-scenario-assumptions">
-          <summary>Review energy and default cost assumptions</summary>
-          <div className="grid c3">
-            {setupMode === "none" && <Field label="Annual solar yield" hint="kWh generated per kW of panels each year. The default is a broad state estimate."><input type="number" min="500" max="2500" step="10" value={scenarioSolarYield} onChange={(event) => setScenarioSolarYield(event.target.value)} /></Field>}
-            <Field label="Battery round-trip efficiency" hint="Percent of charging energy available after storage losses."><input type="number" min="50" max="100" step="1" value={scenarioBatteryEfficiency} onChange={(event) => setScenarioBatteryEfficiency(event.target.value)} /></Field>
-          </div>
-          <p>Cost model {SCENARIO_COST_ASSUMPTIONS.version} prefills solar at {fmtMoney(SCENARIO_COST_ASSUMPTIONS.solarNetInstalledPerKw)} per kW after solar STCs. Battery cost starts at {fmtMoney(SCENARIO_COST_ASSUMPTIONS.batteryGrossInstalledPerUsableKwh)} per usable kWh before an estimated federal discount. The discount uses the current {SCENARIO_COST_ASSUMPTIONS.batteryStcFactor} STCs per eligible kWh factor, the capacity taper on the first {SCENARIO_COST_ASSUMPTIONS.batterySupportedUsableKwh} usable kWh and the government&apos;s {fmtMoneyExact(SCENARIO_COST_ASSUMPTIONS.assumedStcValue)} clearing-house value. The program also requires an eligible 5 to 100 kWh nominal system. Installer charges and site eligibility vary, so these defaults are not quotes.</p>
-        </details>
+        <div className="native-scenario-heading"><span>Your next energy move</span><h2>{setupMode === "none" ? "Go further with solar" : "Make more of your solar with storage"}</h2><p>Compare the estimated impact below, then ask about the option that suits you. No account needed.</p></div>
         <div className="native-scenario-grid">{upgradeScenarios.map((scenario) => <article className="native-scenario" key={scenario.label}>
-          <span className="badge info">{scenario.label}</span><h3>{fmtMoney(scenario.best.annualCost)}/yr</h3>
-          <p>Cheapest current bill {fmtMoney(scenario.best.annualCost + scenario.annualSaving)} to {fmtMoney(scenario.best.annualCost)} after {scenario.description}.</p>
-          <div><b>{fmtMoney(scenario.annualSaving)}/yr</b><span> estimated bill saving</span></div>
-          <div><b>{scenario.annualSaving > 0 ? payback(scenario.installedCost / scenario.annualSaving) : "No simple payback"}</b><span> using first-year bill saving</span></div>
-          <div><b>{fmtMoney(scenario.installedCost)}</b><span> installed cost input after discounts</span></div>
-          <div><b>{Math.round(scenario.annualImportKwh).toLocaleString()} kWh</b><span> annual grid import</span></div>
-          <div><b>{Math.round(scenario.annualExportKwh).toLocaleString()} kWh</b><span> annual solar export</span></div>
-          {scenario.annualDischargeKwh != null && <div><b>{Math.round(scenario.annualDischargeKwh).toLocaleString()} kWh</b><span> annual battery discharge</span></div>}
-          <div><b>{scenario.best.name}</b><span> best scenario plan, {scenario.best.brand}</span></div>
-          <button type="button" className="audit-button" onClick={(event) => { auditReturnRef.current = event.currentTarget; setAuditPlan(scenario.best); }}>Open scenario calculation audit</button>
-          <button type="button" className="btn native-enquiry-button" onClick={() => setEnquiryScenario(scenario)}>Enquire about this option</button>
-          <a className="native-direct-trade-link" href={createDirectTradeHandoffUrl({ source: scenario.label === "Solar only" ? "electricity-solar" : "electricity-battery", services: scenario.label === "Solar only" ? ["assessment", "solar"] : scenario.label === "Solar + battery" ? ["assessment", "solar", "battery"] : ["assessment", "battery"], priorities: ["lower-running-costs", "solar-storage"], postcode })}>Build a Direct Trade project brief</a>
+          <span className="native-scenario-kicker">{scenario.label === "Solar only" ? "Generate your own energy" : "Keep more energy for later"}</span><h3>{scenario.label === "Solar + battery" ? "Solar + storage" : scenario.label}</h3>
+          <p>{scenario.description}</p>
+          <div className="native-scenario-saving"><b>{scenario.annualSaving > 0 ? `${fmtMoney(scenario.annualSaving)}/yr` : "No bill saving estimated"}</b><span>estimated bill saving against your best current plan</span></div>
+          <div><b>{fmtMoney(scenario.best.annualCost)}/yr</b><span> estimated electricity bill after this upgrade</span></div>
+          <InstalledQuoteField label={scenario.label === "Solar only" ? "Solar installed price ($)" : scenario.label === "Solar + battery" ? "Solar + storage installed price ($)" : "Battery installed price ($)"} hint="Have a quote? Enter the total you would pay, including GST, after discounts. Otherwise keep this starting estimate." value={scenario.label === "Solar only" ? scenarioSolarCost : scenario.label === "Solar + battery" ? scenarioComboCost : scenarioBatteryCost} estimated={!(scenario.label === "Solar only" ? customQuotes.solar : scenario.label === "Solar + battery" ? customQuotes.combo : customQuotes.battery)} onChange={(value) => changeQuote(scenario.label === "Solar only" ? "solar" : scenario.label === "Solar + battery" ? "combo" : "battery", value)} onReset={() => resetQuote(scenario.label === "Solar only" ? "solar" : scenario.label === "Solar + battery" ? "combo" : "battery")} />
+          <div><b>{!(scenario.installedCost > 0) ? "Enter an installed quote to calculate payback" : scenario.annualSaving > 0 ? payback(scenario.installedCost / scenario.annualSaving) : "No bill saving to recover the price"}</b><span> estimated time for bill savings to cover the price</span></div>
+          <button type="button" className="btn native-enquiry-button" onClick={() => setEnquiryScenario(scenario)}>{scenario.label === "Solar only" ? "Enquire about solar" : scenario.label === "Solar + battery" ? "Enquire about solar + storage" : "Enquire about battery storage"}</button>
+          <small className="native-enquiry-reassurance">Your postcode and chosen option carry across. Review before sending.</small>
+          <button type="button" className="audit-button" onClick={(event) => { auditReturnRef.current = event.currentTarget; setAuditPlan(scenario.best); }}>See how this was calculated</button>
         </article>)}</div>
-        <div className="native-scenario-caveat"><b>Indicative scenario, not an installation recommendation.</b> The simple payback holds first-year usage, tariffs and savings constant. It excludes finance costs, maintenance, insurance, component replacement, degradation, warranty limits, VPP income or control, backup reserve and future tariff changes. The energy model does not inspect roof area, orientation, tilt, shading, inverter limits, network export limits, curtailment, switchboard work, battery location or product compatibility. Confirm annual generation, usable and nominal battery capacity, federal and state incentive eligibility, connection approval and the complete installed price through a site assessment and written quotes. For an independent roof-specific cross-check, use the <a href="https://www.sunspot.org.au/" target="_blank" rel="noreferrer">government-supported SunSPOT calculator</a> and the <a href="https://www.energy.gov.au/solar/solar-retailers-and-installation/choose-your-solar-retailer-and-installer" target="_blank" rel="noreferrer">Australian Government quote checklist</a>.</div>
+        <div className="native-system-sizes"><h3>Got different sizes on your quote?</h3><p>No quote yet? Leave these as they are. We chose a starting size for your electricity use and handle the sunshine and storage assumptions for you.</p><div className="grid c2">{setupMode === "none" && <Field label="Solar size on your quote (kW)" hint="Changing this updates both solar options."><input type="number" min="0.1" step="0.1" value={scenarioSolarKw} onChange={(event) => updateScenarioSolarSize(event.target.value)} /></Field>}<Field label="Battery size on your quote (kWh)" hint="Copy the usable capacity from the quote, or keep our starting size."><input type="number" min="0.1" step="0.1" value={scenarioBatteryKwh} onChange={(event) => updateScenarioBatterySize(event.target.value)} /></Field></div><small>Prices you enter stay as entered. Check that your quote covers the size you choose.</small></div>
+        <div className="native-scenario-caveat"><b>These are estimates, not a site assessment or an installer quote.</b> Savings use your electricity pattern and current plan prices. The time to recover the installed price assumes the first year repeats and excludes finance, upkeep, replacement and future price changes. An installer needs to check your roof, equipment, connection and discount eligibility. You can also check your roof with <a href="https://www.sunspot.org.au/" target="_blank" rel="noreferrer">SunSPOT</a> and read the <a href="https://www.energy.gov.au/solar/solar-retailers-and-installation/choose-your-solar-retailer-and-installer" target="_blank" rel="noreferrer">government quote checklist</a>.</div>
       </div>}
       <div className="filters"><label className="toggle"><input type="checkbox" checked={showTou} onChange={(event) => setShowTou(event.target.checked)} /> Time of use</label><label className="toggle"><input type="checkbox" checked={showSingle} onChange={(event) => setShowSingle(event.target.checked)} /> Single rate</label><label className="toggle"><input type="checkbox" checked={showDemand} onChange={(event) => setShowDemand(event.target.checked)} /> Demand</label><label className="toggle"><input type="checkbox" checked={showStanding} onChange={(event) => setShowStanding(event.target.checked)} /> Standing offers</label><input aria-label="Filter native electricity plans" placeholder="Filter retailer or plan" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
       {visible.some((plan) => plan.eligibilityConfirmations.length > 0) && <div className="note"><b>Check eligibility before switching.</b> {visible.filter((plan) => plan.eligibilityConfirmations.length > 0).length} displayed offers have published retailer conditions that this calculator cannot confirm from your inputs. They remain priced, but each is labelled and the condition is shown in its calculation audit.</div>}
@@ -1006,7 +1001,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       <section className="comparison-complete-next" aria-labelledby="electricity-next-title"><div><span>One useful next step</span><h2 id="electricity-next-title">Check whether a mains gas plan is also costing more than it should</h2><p>If the property has mains gas, use the same guided process. LPG bottles and bulk tanks are not included.</p></div><Link className="btn" href="/gas-compare">Compare gas plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
     </section>}
     {auditPlan && <NativeAuditDialog plan={auditPlan} bundle={bundle} onClose={closeAudit} />}
-    {enquiryScenario && <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={enquiryServicesForScenario(enquiryScenario)} onClose={() => setEnquiryScenario(null)} />}
+    {enquiryScenario && <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={enquiryServicesForScenario(enquiryScenario)} initialCustomerSector={customerType === "BUSINESS" ? "business" : "residential"} initialNotes={`I am interested in ${enquiryScenario.description}. Calculator estimate: ${fmtMoney(enquiryScenario.annualSaving)}/year bill saving. Installed price used: ${enquiryScenario.installedCost > 0 ? fmtMoneyExact(enquiryScenario.installedCost) : "not entered"} (${(enquiryScenario.label === "Solar only" ? customQuotes.solar : enquiryScenario.label === "Solar + battery" ? customQuotes.combo : customQuotes.battery) ? "my quote" : "planning estimate"}). Please confirm site suitability and a written quote.`} onClose={() => setEnquiryScenario(null)} />}
   </>;
 }
 

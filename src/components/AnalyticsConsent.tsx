@@ -93,7 +93,7 @@ function analyticsAllowedOnPath(pathname: string) {
 
 function pageDetails(pathname: string) {
   return {
-    page_location: `${window.location.origin}${pathname}`,
+    page_location: window.location.origin + pathname,
     page_path: pathname,
     page_title: document.title,
   };
@@ -101,8 +101,10 @@ function pageDetails(pathname: string) {
 
 function ensureGoogleTagFunction() {
   window.dataLayer ??= [];
-  window.gtag ??= (...args: unknown[]) => {
-    window.dataLayer?.push(args);
+  window.gtag ??= function () {
+    // The Google tag consumes command Arguments objects, as in its official snippet.
+    // eslint-disable-next-line prefer-rest-params -- Google does not consume rest-parameter arrays as commands.
+    window.dataLayer?.push(arguments);
   };
 }
 

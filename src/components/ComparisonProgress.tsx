@@ -1,6 +1,7 @@
 "use client";
 
 import chromeStyles from "./ComparatorChrome.module.css";
+import { WattzunMascot } from "./WattzunMascot";
 
 export type ComparisonJourneyStep = {
   label: string;
@@ -38,6 +39,7 @@ export function ComparisonStepActions({
   onContinue,
   continueLabel = "Continue",
   submitting = false,
+  submitLabel,
 }: {
   step: number;
   total: number;
@@ -45,6 +47,7 @@ export function ComparisonStepActions({
   onContinue?: () => void;
   continueLabel?: string;
   submitting?: boolean;
+  submitLabel?: string;
 }) {
   return (
     <div className={chromeStyles.stepActions}>
@@ -56,6 +59,7 @@ export function ComparisonStepActions({
             {continueLabel}
           </button>
         )}
+        {submitLabel && <button className="btn" type="submit" disabled={submitting}>{submitLabel}</button>}
       </div>
     </div>
   );
@@ -71,11 +75,11 @@ export function ComparisonWorkingState({
   return (
     <section className={chromeStyles.working} role="status" aria-live="polite" aria-busy="true">
       <div>
-        <span className={chromeStyles.workingMark} aria-hidden="true" />
-        <div><strong>{title}</strong><p>{message}</p></div>
+        <WattzunMascot className={chromeStyles.workingMascot} />
+        <div><span className={chromeStyles.workingEyebrow}>Wattzun is on the case</span><strong>{title}</strong><p>{message}</p></div>
       </div>
       <div className={chromeStyles.workingTrack} aria-hidden="true"><span /></div>
-      <small>Please keep this page open. Your answers will stay here.</small>
+      <small>A little happy dance while we check published offers for your home. Your answers stay here.</small>
     </section>
   );
 }

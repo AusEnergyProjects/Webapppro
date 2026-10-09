@@ -52,7 +52,7 @@ test("comparisons show one truthful indeterminate working state while current of
   assert.match(gas, /loading && <ComparisonWorkingState title="Comparing gas plans"/);
   assert.match(chromeStyles, /\.workingTrack > span \{[^}]*animation: workingSlide/);
   assert.match(chromeStyles, /@keyframes workingSlide/);
-  assert.match(chromeStyles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.workingMark,[\s\S]*\.workingTrack > span[\s\S]*animation: none/);
+  assert.match(chromeStyles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.workingMascot,[\s\S]*\.workingTrack > span[\s\S]*animation: none/);
 });
 
 test("home-plan handoffs restore safe starting assumptions and explain the next action", () => {
@@ -67,18 +67,17 @@ test("home-plan handoffs restore safe starting assumptions and explain the next 
   assert.match(gas, /Review the gas-use details[\s\S]*Compare gas plans/);
 });
 
-test("gas comparison requires the seasonal-use answer while keeping appliance refinement optional", () => {
-  const setupStep = gas.indexOf("activeStep === 3");
-  const heatingQuestion = gas.indexOf("Is gas used for home heating?");
-  const primaryAction = gas.indexOf("comparison-primary-action");
-  const optionalRefinement = gas.indexOf("comparison-refinement");
-  assert.ok(setupStep > 0);
-  assert.ok(heatingQuestion > setupStep);
-  assert.ok(optionalRefinement > heatingQuestion);
-  assert.ok(primaryAction > optionalRefinement);
-  assert.match(gas, /if \(!gasHeating\) \{ setError\("Confirm whether gas is used for home heating\."\)/);
-  assert.match(gas, /It is not required to compare plans/);
-  assert.match(gas, /<details className="comparison-refinement">/);
+test("gas appliance questions are in the main journey and savings stay visible in results", () => {
+  const heatingQuestion = gas.indexOf("<GasUpgradeQuestionnaire");
+  const primaryAction = gas.indexOf("submitLabel=");
+  assert.ok(heatingQuestion > 0 && primaryAction > heatingQuestion);
+  assert.match(gas, /if \(!gasHeating\) \{ setError\("Choose your heating system, or None if you do not use heating\."\)/);
+  assert.match(gas, /hidden=\{activeStep !== 3 && activeStep !== 4\}/);
+  assert.match(gas, /questionsVisible=\{activeStep === 3\}/);
+  assert.match(gas, /aria-label="Gas plan comparison" noValidate/);
+  assert.match(gas, /activeStep < 3 && <button type="submit" hidden>Continue/);
+  assert.match(gas, /setGasHeating\(profile === null \? ""/);
+  assert.doesNotMatch(gas, /comparison-refinement|Optional refinement/);
 });
 
 test("electricity comparison uses only the explicitly selected usage evidence", () => {
@@ -125,11 +124,11 @@ test("results can be edited and a cross-network electricity choice stays on the 
   assert.match(electricitySetup, /<select value=\{distributor \|\| nmiDistributor \|\| ""\}/);
 });
 
-test("gas appliance refinement follows the parent heating answer in both directions", () => {
-  assert.match(gasQuestionnaire, /function alignHeatingSelection\(current: string\[\], usageProfile: "heating" \| "steady"\)/);
-  assert.match(gasQuestionnaire, /usageProfile === "heating"[\s\S]*\["gas-ducted", \.\.\.current\.filter/);
-  assert.match(gasQuestionnaire, /current\.filter\(\(value\) => !value\.startsWith\("gas-"\)\)/);
-  assert.match(gasQuestionnaire, /alignHeatingSelection\(heatingSelection, initialUsageProfile\)/);
+test("one gas heating answer controls the seasonal comparison profile", () => {
+  assert.match(gasQuestionnaire, /useState<string\[\]>\(\[\]\)/);
+  assert.match(gasQuestionnaire, /setHeatingSelection\(next\)/);
+  assert.match(gasQuestionnaire, /onUsageProfileChange\(next\.length \? next\.some/);
+  assert.doesNotMatch(gasQuestionnaire, /alignHeatingSelection|initialUsageProfile/);
   assert.match(gasQuestionnaire, /onChange=\{\(\) => changeHeating\(option\.value\)\}/);
   assert.match(gas, /onUsageProfileChange=\{updateUsageProfileFromQuestionnaire\}/);
 });

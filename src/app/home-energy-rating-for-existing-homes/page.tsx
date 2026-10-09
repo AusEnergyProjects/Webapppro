@@ -11,7 +11,7 @@ import {
 const path = "/home-energy-rating-for-existing-homes";
 const title = "Home Energy Rating for Existing Homes | Australian Energy Assessments";
 const price = audPrice(gstInclusiveCents(getAeaService("nathers-existing")!.priceExGstCents));
-const description = `${price} incl. GST Home Energy Rating for existing homes in NSW and Victoria. Accredited assessment, two ratings, estimated energy use and practical upgrade guidance.`;
+const description = `${price} incl. GST. Home energy assessment in NSW and Victoria: an on-site Home Energy Rating, two ratings and practical upgrade guidance.`;
 
 export const metadata = buildAssessmentMetadata({ path, title, description });
 
@@ -80,6 +80,14 @@ const sources: readonly AssessmentServiceSource[] = [
 ];
 
 const faqs: readonly AssessmentServiceFaq[] = [
+  {
+    question: "Is a home energy audit the same as a Home Energy Rating?",
+    answer: "Home energy audit is a broad term, so its output depends on the agreed scope. A Home Energy Rating is the formal existing-home assessment described here: an on-site visit, a Home Energy Rating, a Star Rating, estimated annual energy use and upgrade guidance. Confirm the assessment method and deliverables before booking.",
+  },
+  {
+    question: "What does an existing-home energy efficiency assessment check?",
+    answer: "The assessor records the home as it is now, including its building fabric, orientation, windows, shading, heating, cooling, hot water and relevant fixed systems. The results help identify practical improvement priorities. Actual bills and savings still depend on household use, tariffs, weather and the upgrades completed.",
+  },
   {
     question: "Is an existing-home assessment still called NatHERS?",
     answer: "The official consumer service is Home Energy Rating. People still search for a NatHERS existing home assessment or NatHERS rating for an existing home, but the result for a completed home should use the current Home Energy Rating and Star Rating names.",

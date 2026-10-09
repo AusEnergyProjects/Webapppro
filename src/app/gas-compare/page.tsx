@@ -5,7 +5,7 @@ import { buildPlatformMetadata } from "@/lib/public-site";
 export const metadata = buildPlatformMetadata({
   path: "/gas-compare",
   title: "Compare Gas Plans | Australian Energy Assessments",
-  description: "Compare current gas plans using your annual gas use.",
+  description: "Compare mains gas plans using your postcode and bill usage. Check annual costs and explore efficient electric heating and heat pump hot water.",
 });
 
 export default function GasComparisonPage() {

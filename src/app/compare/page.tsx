@@ -4,8 +4,8 @@ import { buildPlatformMetadata } from "@/lib/public-site";
 
 export const metadata = buildPlatformMetadata({
   path: "/compare",
-  title: "Electricity Plan Comparison | Australian Energy Assessments",
-  description: "Compare published electricity plans using your location, household load pattern and optional locally processed NEM12 interval data.",
+  title: "Compare Electricity Plans, Solar & Batteries | Australian Energy Assessments",
+  description: "Compare electricity plans for your postcode and usage. Explore solar and battery bill savings, personalise installed prices and enquire without an account.",
 });
 
 export default function ElectricityComparisonPage() {

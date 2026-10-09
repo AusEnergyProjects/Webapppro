@@ -1,8 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { UpgradeEnquiryModal } from "./UpgradeEnquiryModal";
-import { createDirectTradeHandoffUrl } from "@/lib/direct-trade-handoff.mjs";
+import { useMemo, useState, type Ref } from "react";
+import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
+import { InstalledQuoteField } from "./InstalledQuoteField";
+import { parseInstalledQuote } from "@/lib/installed-quote";
+
+const QuickUpgradeEnquiryDialog = dynamic(() => import("./QuickUpgradeEnquiryDialog").then((module) => module.QuickUpgradeEnquiryDialog), { ssr: false });
 
 type ApplianceOption = { value: string; label: string };
 
@@ -102,13 +106,6 @@ function toggleValue(current: string[], value: string): string[] {
   return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
 }
 
-function alignHeatingSelection(current: string[], usageProfile: "heating" | "steady"): string[] {
-  const hasGasHeating = current.some((value) => value.startsWith("gas-"));
-  if (usageProfile === "heating") return hasGasHeating ? current : ["gas-ducted", ...current.filter((value) => value !== "none")];
-  const withoutGasHeating = current.filter((value) => !value.startsWith("gas-"));
-  return withoutGasHeating.length ? withoutGasHeating : ["none"];
-}
-
 function dollars(value: number): string {
   return "$" + Math.round(value).toLocaleString();
 }
@@ -122,10 +119,10 @@ function payback(value: number): string {
   return `${years} year${years === 1 ? "" : "s"}${remaining ? ` ${remaining} month${remaining === 1 ? "" : "s"}` : ""}`;
 }
 
-export function GasUpgradeQuestionnaire({ postcode, annualMj, initialUsageProfile = "heating", onUsageProfileChange }: { postcode: string; annualMj: string; initialUsageProfile?: "heating" | "steady"; onUsageProfileChange: (profile: "heating" | "steady") => void }) {
+export function GasUpgradeQuestionnaire({ postcode, annualMj, questionsVisible = true, headingRef, onUsageProfileChange }: { postcode: string; annualMj: string; questionsVisible?: boolean; headingRef?: Ref<HTMLHeadingElement>; onUsageProfileChange: (profile: "heating" | "steady" | null) => void }) {
   const [people, setPeople] = useState("2");
   const [rooms, setRooms] = useState("6");
-  const [heatingSelection, setHeatingSelection] = useState(initialUsageProfile === "heating" ? ["gas-ducted"] : ["none"]);
+  const [heating, setHeatingSelection] = useState<string[]>([]);
   const [winterUse, setWinterUse] = useState("medium");
   const [hotWater, setHotWater] = useState("gas-storage");
   const [hotWaterUse, setHotWaterUse] = useState("typical");
@@ -140,16 +137,16 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, initialUsageProfil
   const [electricityRate, setElectricityRate] = useState("30");
   const [heatingInstall, setHeatingInstall] = useState("5000");
   const [hotWaterInstall, setHotWaterInstall] = useState("3000");
-  const [enquiryTitle, setEnquiryTitle] = useState("");
+  const [enquiryService, setEnquiryService] = useState<"heating-cooling" | "hot-water" | null>(null);
+  const [customHeatingQuote, setCustomHeatingQuote] = useState(false);
+  const [customHotWaterQuote, setCustomHotWaterQuote] = useState(false);
 
-  const heating = useMemo(() => alignHeatingSelection(heatingSelection, initialUsageProfile), [heatingSelection, initialUsageProfile]);
   const hasGasHeating = heating.some((value) => value.startsWith("gas-"));
 
   function changeHeating(value: string) {
     const next = value === "none" ? ["none"] : toggleValue(heating.filter((item) => item !== "none"), value);
-    const aligned = alignHeatingSelection(next, next.some((item) => item.startsWith("gas-")) ? "heating" : "steady");
-    setHeatingSelection(aligned);
-    onUsageProfileChange(aligned.some((item) => item.startsWith("gas-")) ? "heating" : "steady");
+    setHeatingSelection(next);
+    onUsageProfileChange(next.length ? next.some((item) => item.startsWith("gas-")) ? "heating" : "steady" : null);
   }
 
   const estimate = useMemo(() => {
@@ -240,17 +237,21 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, initialUsageProfil
       centralArea,
       roomHeatedArea,
       hotWaterType,
-      heatingPayback: Number(heatingInstall) > 0 ? Number(heatingInstall) / heatingSaving : 0,
-      hotWaterPayback: Number(hotWaterInstall) > 0 ? Number(hotWaterInstall) / hotWaterSaving : 0,
+      heatingPayback: (parseInstalledQuote(heatingInstall) ?? 0) / heatingSaving,
+      hotWaterPayback: (parseInstalledQuote(hotWaterInstall) ?? 0) / hotWaterSaving,
       fullElectricSaving: heatingSaving + hotWaterSaving + cooktopSaving + dryerSaving + (benchmarkGasMj > 0 && !gasSpa ? supplyCharge : 0),
       hasHeating: heatingGasUse > 0,
       hasHotWater: hotWaterGasUse > 0,
     };
   }, [annualMj, people, rooms, heating, winterUse, hotWater, hotWaterUse, gasCooktop, cooktopUse, gasDryer, dryerUse, gasSpa, spaUse, gasSpend, gasRate, electricityRate, heatingInstall, hotWaterInstall]);
 
+  const enquiryQuote = parseInstalledQuote(enquiryService === "hot-water" ? hotWaterInstall : heatingInstall);
+  const enquiryUsesQuote = enquiryService === "hot-water" ? customHotWaterQuote : customHeatingQuote;
+
   return (
-    <section className="card gas-questionnaire">
-      <h2><span className="stepnum">2</span> Your gas appliances and home</h2>
+    <section className={`card gas-questionnaire${questionsVisible ? "" : " results-only"}`}>
+      <div hidden={!questionsVisible}>
+      <h2 ref={headingRef} tabIndex={-1}><span className="stepnum">3</span> Your gas appliances and home</h2>
       <p className="sub">Tell us which appliances actually use gas. Your heating answer automatically sets the seasonal pattern used to compare plans, so you only answer this once.</p>
 
       <div className="gas-household-context"><label className="f">People in your household<span className="field-control"><select value={people} onChange={(event) => setPeople(event.target.value)}>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span><span className="hint">Used only for the hot-water estimate.</span></label><div><b>Seasonal plan profile</b><span>{hasGasHeating ? "Gas heating: more annual MJ is allocated to cooler months." : "No gas heating: annual MJ is allocated steadily across the year."}</span></div></div>
@@ -272,12 +273,13 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, initialUsageProfil
         <label className="f">Gas usage rate (c/MJ)<span className="field-control"><input type="number" min="0" step="0.1" value={gasRate} onChange={(event) => setGasRate(event.target.value)} /></span><span className="hint">Use the first block rate from your bill.</span></label>
         <label className="f">Electricity rate (c/kWh)<span className="field-control"><input type="number" min="0" step="0.1" value={electricityRate} onChange={(event) => setElectricityRate(event.target.value)} /></span><span className="hint">Use your current rate or a heat-pump-friendly estimate.</span></label>
       </div>
+      </div>
 
-      {(estimate.hasHeating || estimate.hasHotWater) && <div className="gas-savings" onClick={(event) => { const target = event.target as HTMLElement; const cta = target.closest(".saving-cta"); if (cta) { event.preventDefault(); setEnquiryTitle(cta.textContent?.trim() || "upgrade"); } }}>
-        <h3>What could getting off gas save?</h3>
+      {(estimate.hasHeating || estimate.hasHotWater) && <div className="gas-savings">
+        <h3>What could switching to electric save?</h3>
         <div className="savings-grid">
-          {estimate.hasHeating && <SavingCard title="Gas heating to reverse cycle" current={estimate.heatingCurrent} after={estimate.heatingAfter} saving={estimate.heatingSaving} install={heatingInstall} setInstall={setHeatingInstall} payback={estimate.heatingPayback} action="Enquire about reverse cycle heating" directTradeHref={createDirectTradeHandoffUrl({ source: "gas-heating", services: ["assessment", "heating-cooling"], priorities: ["lower-running-costs", "improve-comfort", "move-from-gas"], postcode })} />}
-          {estimate.hasHotWater && <SavingCard title="Gas hot water to heat pump" current={estimate.hotWaterCurrent} after={estimate.hotWaterAfter} saving={estimate.hotWaterSaving} install={hotWaterInstall} setInstall={setHotWaterInstall} payback={estimate.hotWaterPayback} action="Enquire about heat pump hot water" directTradeHref={createDirectTradeHandoffUrl({ source: "gas-hot-water", services: ["assessment", "hot-water"], priorities: ["lower-running-costs", "replace-equipment", "move-from-gas"], postcode })} />}
+          {estimate.hasHeating && <SavingCard title="Gas heating to reverse cycle" current={estimate.heatingCurrent} after={estimate.heatingAfter} saving={estimate.heatingSaving} install={heatingInstall} setInstall={(value) => { setCustomHeatingQuote(true); setHeatingInstall(value); }} estimated={!customHeatingQuote} onReset={() => { setCustomHeatingQuote(false); setHeatingInstall("5000"); }} payback={estimate.heatingPayback} action="Enquire about reverse cycle heating" onEnquire={() => setEnquiryService("heating-cooling")} />}
+          {estimate.hasHotWater && <SavingCard title="Gas hot water to heat pump" current={estimate.hotWaterCurrent} after={estimate.hotWaterAfter} saving={estimate.hotWaterSaving} install={hotWaterInstall} setInstall={(value) => { setCustomHotWaterQuote(true); setHotWaterInstall(value); }} estimated={!customHotWaterQuote} onReset={() => { setCustomHotWaterQuote(false); setHotWaterInstall("3000"); }} payback={estimate.hotWaterPayback} action="Enquire about heat pump hot water" onEnquire={() => setEnquiryService("hot-water")} />}
         </div>
         <p className="savings-note"><b>Modelled electrification saving:</b> about {dollars(estimate.fullElectricSaving)}/yr{gasSpa ? ". Pool or spa replacement energy and the gas supply charge are not included because the remaining gas appliance would keep the connection active." : ", including roughly $310/yr from disconnecting gas and dropping the daily supply charge once every gas appliance is removed."}</p>
         <details className="savings-explain"><summary>How we estimate these savings</summary><div>
@@ -288,11 +290,11 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, initialUsageProfil
           <p className="method-links"><a href="https://www.sustainability.vic.gov.au/energy-efficiency-and-reducing-emissions/save-energy-in-the-home/heat-your-home-efficiently/calculate-heating-costs" target="_blank" rel="noreferrer">Heating benchmarks</a><a href="https://www.sustainability.vic.gov.au/annual-energy-costs-of-water-heating-in-2025" target="_blank" rel="noreferrer">Hot-water benchmarks</a><a href="https://www.vic.gov.au/sites/default/files/2025-03/building-electrification-regulatory-impact-statement_3785-%281%29.pdf" target="_blank" rel="noreferrer">Cooking reference</a></p>
         </div></details>
       </div>}
-      {enquiryTitle && <UpgradeEnquiryModal enquiryCode={enquiryTitle.includes("hot water") ? "gas-hot-water" : "gas-heating"} title={enquiryTitle} postcode={postcode} annualMj={annualMj} estimatedSaving={enquiryTitle.includes("hot water") ? estimate.hotWaterSaving : estimate.heatingSaving} installedCost={Number(enquiryTitle.includes("hot water") ? hotWaterInstall : heatingInstall) || 0} onClose={() => setEnquiryTitle("")} />}
+      {enquiryService && createPortal(<QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={[enquiryService]} initialNotes={`I am interested in ${enquiryService === "hot-water" ? "heat pump hot water" : "reverse cycle heating"} to replace gas. Calculator estimate: ${dollars(enquiryService === "hot-water" ? estimate.hotWaterSaving : estimate.heatingSaving)}/year saving. Installed price used: ${enquiryQuote === null ? "not entered" : "$" + enquiryQuote.toFixed(2)} (${enquiryUsesQuote ? "my quote" : "planning estimate"}). Please confirm suitability and a written installed quote.`} onClose={() => setEnquiryService(null)} />, document.body)}
     </section>
   );
 }
 
-function SavingCard({ title, current, after, saving, install, setInstall, payback: paybackValue, action, directTradeHref }: { title: string; current: number; after: number; saving: number; install: string; setInstall: (value: string) => void; payback: number; action: string; directTradeHref: string }) {
-  return <article className="saving-card"><span className="saving-tag">{title}</span><div className="saving-big">{dollars(current)}/yr <span>→</span> {dollars(after)}/yr</div><p>estimated running cost for this use, now vs after switching</p><div className="saving-row"><span>Annual saving</span><b>{dollars(saving)}/yr</b></div><div className="saving-row"><span>Payback</span><b>{payback(paybackValue)}</b></div><label className="saving-install">Install, after rebates ($)<input type="number" min="0" value={install} onChange={(event) => setInstall(event.target.value)} /></label><button className="saving-cta" type="button">{action}</button><a className="saving-direct-trade" href={directTradeHref}>Start a Direct Trade project brief</a></article>;
+function SavingCard({ title, current, after, saving, install, setInstall, estimated, onReset, payback: paybackValue, action, onEnquire }: { title: string; current: number; after: number; saving: number; install: string; setInstall: (value: string) => void; estimated: boolean; onReset: () => void; payback: number; action: string; onEnquire: () => void }) {
+  return <article className="saving-card"><span className="saving-tag">{title}</span><div className="saving-big">{dollars(saving)}/yr</div><p>estimated bill saving each year</p><div className="saving-row"><span>Running cost</span><b>{dollars(current)}/yr → {dollars(after)}/yr</b></div><div className="saving-row"><span>Time to cover the price</span><b>{parseInstalledQuote(install) !== null ? payback(paybackValue) : "Enter an installed quote to calculate payback"}</b></div><InstalledQuoteField label="Installed price after discounts ($)" hint="Have a quote? Enter the total you would pay, including GST, after confirmed rebates. Otherwise keep this estimate." value={install} estimated={estimated} onChange={setInstall} onReset={onReset} /><button className="saving-cta" type="button" onClick={onEnquire}>{action}</button><small>Stay here and review your request before sending.</small></article>;
 }

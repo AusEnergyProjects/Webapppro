@@ -51,6 +51,7 @@ function serviceLabel(id: string, label: string) {
 export function QuickUpgradeEnquiryDialog({
   initialPostcode = "",
   initialServices = [],
+  initialNotes = "",
   initialCustomerSector = "residential",
   councilReference,
   councilBranding,
@@ -59,6 +60,7 @@ export function QuickUpgradeEnquiryDialog({
 }: {
   initialPostcode?: string;
   initialServices?: string[];
+  initialNotes?: string;
   initialCustomerSector?: "residential" | "business";
   councilReference?: string;
   councilBranding?: CouncilPublicBranding;
@@ -94,7 +96,7 @@ export function QuickUpgradeEnquiryDialog({
   const [phone, setPhone] = useState("");
   const [shareName, setShareName] = useState(true);
   const [sharePhone, setSharePhone] = useState(true);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(initialNotes.slice(0, 500));
   const [timing, setTiming] = useState(DEFAULT_ENQUIRY_TIMING);
   const [customerSector, setCustomerSector] = useState<string>(initialCustomerSector);
   const [consentAccepted, setConsentAccepted] = useState(false);
@@ -279,6 +281,8 @@ export function QuickUpgradeEnquiryDialog({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Portals preserve React bubbling; this enquiry must not submit a parent calculator.
+    event.stopPropagation();
     if (!locality || lookupState !== "ready") {
       setSubmitState({ kind: "error", message: "Choose the suburb listed for the property postcode." });
       return;

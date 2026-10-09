@@ -5,8 +5,8 @@ import { buildApexMetadata, PUBLIC_SITE } from "@/lib/public-site";
 
 export const metadata = buildApexMetadata({
   path: "/assessments",
-  title: "Which Home Energy Assessment Do I Need? | Australian Energy Assessments",
-  description: "Compare home energy assessment types for new and existing homes: Australia-wide NatHERS plan assessments, on-site Home Energy Ratings and NSW BASIX support.",
+  title: "Home Energy Assessments & Audits | Australian Energy Assessments",
+  description: "Find the right home energy assessment: existing-home ratings, Australia-wide NatHERS assessments from plans, and clear guidance on home energy audits.",
 });
 
 const pathways = [
@@ -68,7 +68,7 @@ const assessmentHubSchema = {
       name: "Which home energy assessment do I need?",
       description: metadata.description,
       inLanguage: "en-AU",
-      dateModified: "2026-09-03",
+      dateModified: "2026-10-09",
       isPartOf: { "@id": PUBLIC_SITE.websiteId },
       publisher: { "@id": PUBLIC_SITE.organizationId },
       about: assessmentServiceNodes.map((service) => ({ "@id": service["@id"] })),
@@ -105,6 +105,8 @@ export default function AssessmentsPage() {
     <header className="guide-hero assessments-hero"><span>NatHERS, Home Energy Rating and BASIX</span><h1>Choose the right home energy assessment</h1><p>Home energy assessments are not all the same. For a new home, we rate the plans before construction. For a home that is already built, an assessor visits the property and shows how it performs now. We help you choose the right service before you pay or collect documents you do not need.</p></header>
 
     <section className="assessment-two-column" aria-label="Home energy assessment overview"><article><span>The short answer</span><h2>What is a home energy assessment?</h2><p>It is a structured check of a home&apos;s design or current condition. Depending on the job, the result may be a NatHERS certificate for proposed plans, a Home Energy Rating for an existing property or practical advice for a narrower energy question.</p></article><article><span>Where we work</span><h2>Plan-based work is available Australia-wide</h2><p>We can complete new-home NatHERS work from plans anywhere in Australia. Most of our existing-home visits are currently in New South Wales and Victoria, and we confirm availability elsewhere before booking.</p></article></section>
+
+    <section className="assessment-two-column" aria-label="Energy audits and efficiency assessments"><article><span>Know what to ask for</span><h2>Is a home energy audit the same as an assessment?</h2><p>A home energy audit is a broad description of checking how a home uses energy and where it could improve. The agreed scope determines whether you receive practical advice, a formal Home Energy Rating or a specific diagnostic test. Ask which output is included before booking.</p><Link href="/home-energy-rating-for-existing-homes">See the existing-home assessment and its results</Link><Link href="/blower-door-thermal-imaging">Explore air leakage and insulation diagnostics</Link></article><article><span>Choose the right scope</span><h2>What does an energy efficiency assessment cover?</h2><p>For an existing home, the assessment records the building fabric and fixed systems, then provides ratings, estimated energy use and upgrade guidance. New-home NatHERS work models the proposed plans. Commercial energy audits need a separate scope based on the site, its equipment and available energy data.</p><Link href="/nathers-for-new-homes">Explore NatHERS assessments from plans</Link><Link href="/commercial-and-industrial-assessments">Explore commercial energy audits</Link></article></section>
 
     <div className="assessment-asat"><strong>Official guidance checked 1 September 2026</strong><span>Requirements can change by location and project. We explain the likely pathway, but your certifier, council or approval authority confirms what is required.</span></div>
 

@@ -11,7 +11,7 @@ const route = read("../src/app/direct-trade/page.tsx");
 const brief = read("../src/components/DirectTradeProjectBrief.tsx");
 const homepage = read("../src/components/GettingStarted.tsx");
 const homeRequest = read("../src/components/QuickUpgradeEnquiry.tsx");
-const upgradeModal = read("../src/components/UpgradeEnquiryModal.tsx");
+const gasUpgrades = read("../src/components/GasUpgradeQuestionnaire.tsx");
 const customerOpportunityDispatch = read("../src/lib/customer-opportunity-dispatch-server.ts");
 const tradeOpportunitiesRoute = read("../src/app/api/trade-opportunities/route.ts");
 const customerProjectRules = read("../src/lib/customer-projects.mjs");
@@ -36,11 +36,11 @@ test("public project and upgrade entry points do not submit household lead recor
   assert.match(brief, /Review who can receive your details before sending/);
 
 
-  assert.doesNotMatch(upgradeModal, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
-  assert.doesNotMatch(upgradeModal, /type="email"|type="tel"/);
-  assert.match(upgradeModal, /new URLSearchParams/);
-  assert.match(upgradeModal, /href=\{`\/plan\?\$\{params\.toString\(\)\}`\}/);
-  assert.match(upgradeModal, /Opening the planner does not send an enquiry/);
+  assert.doesNotMatch(gasUpgrades, /fetch\("\/api\/leads"|script\.google\.com|mode: "no-cors"/);
+  assert.match(gasUpgrades, /QuickUpgradeEnquiryDialog/);
+  assert.match(gasUpgrades, /initialServices=\{\[enquiryService\]\}/);
+  assert.match(gasUpgrades, /createPortal/);
+  assert.doesNotMatch(gasUpgrades, /UpgradeEnquiryModal|Direct Trade project brief/);
 });
 
 test("customer project records require an authenticated owner and stay out of the lead relay", () => {

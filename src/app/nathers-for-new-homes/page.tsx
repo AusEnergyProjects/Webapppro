@@ -82,6 +82,10 @@ const sources: readonly AssessmentServiceSource[] = [
 
 const faqs: readonly AssessmentServiceFaq[] = [
   {
+    question: "What is a NatHERS assessment?",
+    answer: "A NatHERS assessment models a proposed home's energy performance from its plans and specifications. It assesses thermal performance on a Star Rating scale from 0 to 10 and, where the applicable pathway requires it, fixed energy systems through a Whole of Home rating from 0 to 100+. The assessment uses coordinated design evidence rather than an inspection of the finished home.",
+  },
+  {
     question: "Can a NatHERS new-home certificate demonstrate NCC compliance?",
     answer: "Yes, when the certificate is produced for the correct project and pathway, uses coordinated evidence and meets the requirements adopted for that jurisdiction. The certifier, council or relevant approval authority decides what must be submitted and accepted.",
   },

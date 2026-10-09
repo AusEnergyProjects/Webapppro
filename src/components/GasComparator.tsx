@@ -229,7 +229,7 @@ export function GasComparator() {
     if (supplyType !== "mains") { setError("This comparison covers reticulated mains gas only. LPG cylinder and bulk supply prices require quotes from LPG suppliers."); return; }
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     if (!annualisedUsage.ok) { setError(annualisedUsage.error); return; }
-    if (!gasHeating) { setError("Confirm whether gas is used for home heating."); return; }
+    if (!gasHeating) { setError("Choose your heating system, or None if you do not use heating."); return; }
     setLoading(true); setStatus("Finding current plans for your area");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25_000);
@@ -281,9 +281,9 @@ export function GasComparator() {
   const hasCurrentPricing = Boolean(plans.length && pricedInputKey === comparisonInputKey);
   const journeyStep = activeStep;
 
-  const updateUsageProfileFromQuestionnaire = useCallback((profile: GasUsageProfile) => {
-    setUsageProfile(profile);
-    setGasHeating((current) => current ? profile === "heating" ? "yes" : "no" : current);
+  const updateUsageProfileFromQuestionnaire = useCallback((profile: GasUsageProfile | null) => {
+    if (profile !== null) setUsageProfile(profile);
+    setGasHeating(profile === null ? "" : profile === "heating" ? "yes" : "no");
   }, []);
 
   function toggleSelectedPlan(planId: string) {
@@ -306,7 +306,8 @@ export function GasComparator() {
     <>
       <ComparisonJourney title="Your gas comparison" current={journeyStep} steps={GAS_JOURNEY_STEPS} />
       {handoffStatus && <p className="comparison-handoff-status" role="status"><strong>{handoffStatus.title}</strong>{handoffStatus.message}</p>}
-      <form ref={formRef} id="gas-comparison-form" onSubmit={submitCurrentStep} aria-label="Gas plan comparison">
+      <form ref={formRef} id="gas-comparison-form" onSubmit={submitCurrentStep} aria-label="Gas plan comparison" noValidate>
+        {activeStep < 3 && <button type="submit" hidden>Continue</button>}
         {activeStep === 1 && <>
           <StepCard number="1" title="Where is the property?" headingRef={stepHeadingRef}>
             <p className="sub">Search for the property to fill its postcode automatically, or enter the postcode yourself. Search text is sent only to the address-search service and is never sent to plan providers.</p>
@@ -334,29 +335,23 @@ export function GasComparator() {
           <ComparisonStepActions step={2} total={4} onBack={() => moveToStep(1)} onContinue={continueFromUsage} />
         </>}
 
+        {activeStep === 4 && hasCurrentPricing && !needsDistributor && <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="gas-results-title">Your gas plan results</h2><p>See what switching to electric could save, then compare current gas plans and check the conditions shown on the offer before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>}
+        <div hidden={activeStep !== 3 && activeStep !== 4}><GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} questionsVisible={activeStep === 3} headingRef={activeStep === 3 ? stepHeadingRef : undefined} onUsageProfileChange={updateUsageProfileFromQuestionnaire} /></div>
         {activeStep === 3 && <>
-          <StepCard number="3" title="How is gas used at this property?" headingRef={stepHeadingRef}>
-            <fieldset className="gas-choice-group"><legend>Is gas used for home heating?</legend><div className="gas-choice-grid">
-              <label className={`native-assumption-card${gasHeating === "yes" ? " selected" : ""}`}><input type="radio" name="gas-heating" checked={gasHeating === "yes"} onChange={() => { setGasHeating("yes"); setUsageProfile("heating"); }} /><span><b>Yes</b><small>Use the seasonal gas-heating pattern when allocating annual usage.</small></span></label>
-              <label className={`native-assumption-card${gasHeating === "no" ? " selected" : ""}`}><input type="radio" name="gas-heating" checked={gasHeating === "no"} onChange={() => { setGasHeating("no"); setUsageProfile("steady"); }} /><span><b>No or not sure</b><small>Use a steadier year-round pattern for hot water, cooking and other gas use.</small></span></label>
-            </div></fieldset>
+          <StepCard number="3" title="Check your plan conditions">
             <label className={`native-assumption-card gas-discount-card${includeConditional ? " selected" : ""}`}><input type="checkbox" checked={includeConditional} onChange={(event) => setIncludeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Leave this off unless you expect to meet every condition, such as paying on time or using direct debit.</small></span></label>
             <label className={`native-assumption-card gas-discount-card${hasConcession ? " selected" : ""}`}><input type="checkbox" checked={hasConcession} onChange={(event) => setHasConcession(event.target.checked)} /><span><b>I receive an energy concession</b><small>Plan costs remain before concessions because eligibility and transfer rules vary.</small></span></label>
-            <details className="comparison-refinement"><summary><span>Optional refinement</span><strong>Add gas appliances and household details</strong><small>This can refine the seasonal pattern and show electrification estimates. It is not required to compare plans.</small></summary><div><GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} initialUsageProfile={usageProfile} onUsageProfileChange={updateUsageProfileFromQuestionnaire} /></div></details>
             {pricingInputsChanged && <p className="note" role="status">Your answers changed. Current plans will be checked again before updated costs are shown.</p>}
             {!loading && status && !pricingInputsChanged && <p className="note" role="status">{status}</p>}
             {distributors.length > 1 && <div className="native-location-evidence"><Field label="Gas distributor or network" hint="Choose the network name shown on your gas bill, usually near the meter number, supply address or faults contact."><select value={distributor} disabled={loading} onChange={(event) => chooseDistributor(event.target.value)}><option value="">Choose the network from your bill</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
           </StepCard>
           <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {effectiveAnnualMj.toLocaleString()} MJ/year | {usageProfile === "heating" ? "Gas heating pattern" : "Steady gas-use pattern"}</strong><small>You can go back without losing any answer.</small></div>
-          <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} />
-          {(!needsDistributor || pricingInputsChanged) && <div className="gas-compare-action comparison-primary-action"><span>We will price eligible current plans against the usage information you supplied.</span><button className="btn" type="submit" disabled={loading}>{loading ? "Comparing gas plans..." : "Compare gas plans"}</button></div>}
+          <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} submitting={loading} submitLabel={!needsDistributor || pricingInputsChanged ? loading ? "Comparing gas plans..." : "Compare gas plans" : undefined} />
           {loading && <ComparisonWorkingState title="Comparing gas plans" message={status} />}
         </>}
         {error && <p ref={errorRef} className="error" role="alert" tabIndex={-1}>{error}</p>}
       </form>
-
       {activeStep === 4 && hasCurrentPricing && !needsDistributor && <section className="results" aria-live="polite" aria-labelledby="gas-results-title">
-        <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="gas-results-title">Your gas plan results</h2><p>Start with the lowest estimated annual cost, check the conditions shown on the offer, then open the retailer&apos;s current plan page before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>
         <div className="rsummary">
           <div className="stat"><div className="v">{visiblePlans.length}</div><div className="l">priceable gas offers for {distributor || postcode}</div></div>
           <div className="stat"><div className="v">{best ? fmt$(best.annualCost) : "n/a"}</div><div className="l">best estimated annual cost</div></div>

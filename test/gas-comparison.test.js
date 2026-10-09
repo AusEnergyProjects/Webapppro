@@ -16,10 +16,10 @@ test("gas comparison sends an explicit seasonal profile and excludes conditional
   assert.match(component, /useState<GasUsageProfile>\("steady"\)/);
   assert.match(component, /useState\(false\)/);
   assert.match(component, /usageProfile, includeConditional/);
-  assert.match(component, /onChange=\{\(\) => \{ setGasHeating\("yes"\); setUsageProfile\("heating"\); \}\}/);
+  assert.match(component, /setGasHeating\(profile === null \? "" : profile === "heating" \? "yes" : "no"\)/);
   assert.match(component, /onUsageProfileChange=\{updateUsageProfileFromQuestionnaire\}/);
-  assert.match(questionnaire, /alignHeatingSelection\(heatingSelection, initialUsageProfile\)/);
-  assert.match(questionnaire, /onUsageProfileChange\(aligned\.some\(\(item\) => item\.startsWith\("gas-"\)\) \? "heating" : "steady"\)/);
+  assert.match(questionnaire, /onUsageProfileChange\(next\.length \? next\.some\(\(item\) => item\.startsWith\("gas-"\)\) \? "heating" : "steady" : null\)/);
+  assert.doesNotMatch(component, /name="gas-heating"/);
   assert.doesNotMatch(component, /name="gas-usage-profile"/);
 });
 
@@ -96,13 +96,16 @@ test("residents can compare up to three gas offers side by side", () => {
   assert.match(component, /Comparison full \(3\)/);
 });
 
-test("gas comparison keeps loading feedback at the action and presents Direct Trade as a button", () => {
+test("gas comparison keeps loading feedback and opens the current on-page enquiry", () => {
   assert.match(component, /loading && <ComparisonWorkingState title="Comparing gas plans" message=\{status\} \/>/);
   assert.match(component, /loading \? "Comparing gas plans\.\.\." : "Compare gas plans"/);
   assert.match(progress, /className=\{chromeStyles\.working\} role="status" aria-live="polite" aria-busy="true"/);
-  assert.match(questionnaire, /className="saving-direct-trade"/);
+  assert.doesNotMatch(questionnaire, /saving-direct-trade|createDirectTradeHandoffUrl|UpgradeEnquiryModal/);
+  assert.match(questionnaire, /onClick=\{onEnquire\}/);
+  assert.match(questionnaire, /createPortal\(<QuickUpgradeEnquiryDialog/);
   assert.match(chromeStyles, /\.working \{[\s\S]*margin: 0 0 20px;/);
-  assert.match(styles, /\.saving-direct-trade \{[^}]*border: 1px solid #6ee7b7;[^}]*display: flex;[^}]*width: 100%;/);
+  assert.match(questionnaire, /initialServices=\{\[enquiryService\]\}/);
+  assert.match(component, /questionsVisible=\{activeStep === 3\}/);
 });
 
 test("gas plan service emits privacy-safe operational evidence and a request ID", () => {
