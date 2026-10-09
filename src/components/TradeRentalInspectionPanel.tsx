@@ -163,6 +163,8 @@ type AssessmentResult = {
   permissions?: { canEdit: boolean; canIssue: boolean; canRevokeLink: boolean; isAssignedAssessor: boolean; canManageDeliveryReview: boolean; canCorrectReportFormatting: boolean };
   formattingRevisionPending?: boolean;
   deliveryReview?: { status: "held" | "released"; message: string } | null;
+  deliveryRecipient?: { email: string; name: string } | null;
+  reportDelivery?: { status: "held" | "accepted" | "sending" | "failed" | "reconciliation_required"; reportId: string; message: string; at?: string } | null;
   blockers?: CompletionBlocker[];
   error?: string;
 };
@@ -763,6 +765,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   const [data, setData] = useState<AssessmentResult>({ modules: [], items: [], findings: [], evidence: [], completion: {} });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
+  const [deliveryCheckRequired, setDeliveryCheckRequired] = useState(false);
   const [status, setStatus] = useState("");
   const [activeModuleId, setActiveModuleId] = useState("");
   const [activeSectionKey, setActiveSectionKey] = useState("");
@@ -809,6 +812,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     const result = await response.json().catch(() => ({})) as AssessmentResult;
     if (!response.ok || !result.ok) throw new Error(result.error || "The rental assessment could not be loaded.");
     setData(result);
+    setDeliveryCheckRequired(false);
     setActiveModuleId((current) => current && result.modules?.some((module) => module.id === current)
       ? current : result.modules?.[0]?.id || "");
     return result;
@@ -957,6 +961,47 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     await mutate({ action: "set_report_delivery_review", hold, expectedInspectionRevision: data.inspection?.revision }, "delivery-review",
       hold ? "Report email paused. The assessor can finish and save the PDF for your review."
         : "Report email approved. The assessor's saved Finish request can now send it.");
+  }
+
+  async function emailReport() {
+    if (!latestReport || !data.deliveryRecipient || !data.permissions?.canManageDeliveryReview
+      || busy || deliveryCheckRequired || latestReport.link?.status !== "active"
+      || data.deliveryReview?.status === "held" || data.formattingRevisionPending
+      || (data.reportDelivery?.reportId === latestReport.id && ["accepted", "sending", "reconciliation_required"].includes(data.reportDelivery.status))) return;
+    setBusy("email-report");
+    setDeliveryCheckRequired(true);
+    setStatus("Sending report email...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/trade-rental-inspections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workOrderId, action: "email_report", reportId: latestReport.id,
+          expectedRecipientEmail: data.deliveryRecipient.email }),
+      });
+      const result = await response.json() as AssessmentResult;
+      if (!response.ok || !result.ok) {
+        if (result.reportDelivery) {
+          setData((current) => ({ ...current, reportDelivery: result.reportDelivery }));
+          setDeliveryCheckRequired(false);
+        } else await load();
+        setStatus(result.error || "The report email could not be confirmed. Refresh its delivery status before trying again.");
+        return;
+      }
+      setData(result);
+      setDeliveryCheckRequired(false);
+      setStatus(result.reportDelivery?.message || "The report email was accepted for delivery.");
+      await onChanged?.().catch(() => undefined);
+    } catch {
+      try {
+        const latest = await load();
+        setStatus(latest.reportDelivery?.message || "The send response was interrupted. Delivery status has been checked; retry email if needed.");
+      } catch {
+        setStatus("The send response was interrupted. Refresh email status before trying again.");
+      }
+    } finally {
+      setBusy("");
+    }
   }
 
   async function correctReportFormatting() {
@@ -1215,6 +1260,15 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
         {data.deliveryReview?.status === "held"
           ? <button type="button" disabled={Boolean(busy) || !latestReport || data.formattingRevisionPending} onClick={() => void changeDeliveryReview(false)}>{busy === "delivery-review" ? "Saving..." : "Approve report email"}</button>
           : <button type="button" disabled={Boolean(busy)} onClick={() => void changeDeliveryReview(true)}>{busy === "delivery-review" ? "Saving..." : "Pause email for my review"}</button>}
+      </div>}
+      {data.permissions?.canManageDeliveryReview && latestReport && <div className={styles.reportActions}>
+        {data.reportDelivery?.reportId === latestReport.id && <p role="status">{data.reportDelivery.message}{data.reportDelivery.at && ` ${dateLabel(data.reportDelivery.at)}`}</p>}
+        {data.deliveryRecipient ? <small>Customer email: {data.deliveryRecipient.email}</small> : <small>Add the customer&apos;s email to the job before sending this report.</small>}
+        <button type="button" className={styles.primaryButton} disabled={Boolean(busy) || deliveryCheckRequired || !data.deliveryRecipient
+          || data.deliveryReview?.status === "held" || data.formattingRevisionPending || latestReport.link?.status !== "active"
+          || (data.reportDelivery?.reportId === latestReport.id && ["accepted", "sending", "reconciliation_required"].includes(data.reportDelivery.status))}
+          onClick={() => void emailReport()}>{busy === "email-report" ? "Sending report..." : data.reportDelivery?.reportId === latestReport.id && data.reportDelivery.status === "accepted" ? "Email accepted for delivery" : "Email report to customer"}</button>
+        <button type="button" disabled={Boolean(busy)} onClick={() => void load().catch(() => setStatus("Email status could not be refreshed. Try again when connected."))}>Refresh email status</button>
       </div>}
       {data.permissions?.canCorrectReportFormatting && latestReport && data.deliveryReview?.status === "held" && <div className={styles.reportActions}>
         <button type="button" disabled={Boolean(busy)} onClick={() => void correctReportFormatting()}>{busy === "correct-report-formatting" ? "Preparing corrected PDF..." : "Correct report formatting"}</button>
