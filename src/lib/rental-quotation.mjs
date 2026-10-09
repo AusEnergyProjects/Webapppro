@@ -22,7 +22,7 @@ export const RENTAL_OBSERVATION_NUMBER_FIELDS = Object.freeze({
   areaSquareMetres: "m2", sealLengthMetres: "m", flowLitresPerMinute: "L/min", collectedLitres: "L", flowSeconds: "seconds",
   count: "", workingBurners: "", insulationDepthMm: "mm", hatchWidthMm: "mm", accessWidthMm: "mm",
   cabinetWidthMm: "mm", cabinetHeightMm: "mm", cabinetDepthMm: "mm", joistClearWidthMm: "mm",
-  hotWaterCableRunMetres: "m", airconTotalCableMetres: "m", cooktopCableRunMetres: "m", nonIc4DownlightCount: "",
+  hotWaterCableRunMetres: "m", airconTotalCableMetres: "m", airconSwitchboardToOutdoorMetres: "m", airconOutdoorToIndoorMetres: "m", cooktopCableRunMetres: "m", nonIc4DownlightCount: "",
 });
 // A practical input bound for a clear joist gap, not a compliance threshold.
 const joistClearWidthRange = Object.freeze({ min: 1, max: 5000, step: 1 });
@@ -47,7 +47,7 @@ export function rentalObservationNumberIsValid(value, key = "") {
 }
 export function rentalObservationResponseLabel(key) {
   const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Total insulation area required", sealLengthMetres: "Total draughtproofing length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", joistClearWidthMm: "Clear gap between ceiling joists", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
-  const quotationNames = { hotWaterCableRunMetres: "Hot-water system to switchboard cable run", airconTotalCableMetres: "RCAC to switchboard cable run", cooktopCableRunMetres: "Cooktop to switchboard cable run", cableMeasurementStatus: "Cable length basis", cableRouteBasis: "Cable route and measurement basis", cableLimitationReason: "Cable measurement limitation", nonIc4DownlightCount: "Confirmed non-IC4 downlight count", downlightCountStatus: "Non-IC4 downlight count status", downlightEvidence: "Downlight label / count evidence", downlightCountLimitation: "Downlight count limitation" };
+  const quotationNames = { hotWaterCableRunMetres: "Hot-water system to switchboard cable run", airconTotalCableMetres: "Earlier combined RCAC cable run", airconSwitchboardToOutdoorMetres: "Switchboard to proposed outdoor RCAC unit cable run", airconOutdoorToIndoorMetres: "Proposed outdoor RCAC unit to indoor unit distance", cooktopCableRunMetres: "Cooktop to switchboard cable run", cableMeasurementStatus: "Cable length basis", cableRouteBasis: "Cable route and measurement basis", cableLimitationReason: "Cable measurement limitation", nonIc4DownlightCount: "Confirmed non-IC4 downlight count", downlightCountStatus: "Non-IC4 downlight count status", downlightEvidence: "Downlight label / count evidence", downlightCountLimitation: "Downlight count limitation" };
   for (const mode of ["heating", "cooling"]) {
     const title = mode === "heating" ? "Heating" : "Cooling";
     Object.assign(quotationNames, { [`${mode}GemsStatus`]: `${title} energy-rating status`, [`${mode}EnergyRating`]: `${title} recorded rating or stars`, [`${mode}GemsReference`]: `${title} model / GEMS reference`, [`${mode}RatingZone`]: `${title} rating climate zone`, [`${mode}RatingBasis`]: `${title} rating evidence basis`, [`${mode}RatingLimitation`]: `${title} rating limitation` });
@@ -91,18 +91,26 @@ const identityFields = () => [shortText("model", "Make / model from label (optio
 const limitationFields = (reasonStatuses = ["Other"]) => [selectField("limitationStatus", "Anything you could not check?", RENTAL_OBSERVATION_SELECT_OPTIONS.limitationStatus), shortText("limitationReason", "Brief reason", { showIf: { key: "limitationStatus", values: reasonStatuses } })];
 const roomFields = () => [numberField("roomLengthMetres", "Room length"), numberField("roomWidthMetres", "Room width"), numberField("roomHeightMetres", "Ceiling height")];
 const heatingChecks = ["main_living_heater", "heater_operation", "heater_efficiency", "heating_2027_readiness"];
+const rcacCableKeys = ["cableMeasurementStatus", "airconTotalCableMetres", "airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres", "cableRouteBasis", "cableLimitationReason"];
 const cableLengthKey = (checkKey) => checkKey === "hot_water_2027_readiness" ? "hotWaterCableRunMetres"
   : checkKey === "cooktop_function" ? "cooktopCableRunMetres"
-    : ["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? "airconTotalCableMetres" : "";
+    : checkKey === "heating_2027_readiness" ? "airconSwitchboardToOutdoorMetres"
+      : checkKey === "main_living_heater" ? "airconTotalCableMetres" : "";
 /** @returns {RentalObservationField[]} */
 const cableFields = (checkKey) => {
   const appliance = checkKey === "hot_water_2027_readiness" ? "hot-water system" : checkKey === "cooktop_function" ? "cooktop" : "RCAC";
+  const rcac = ["main_living_heater", "heating_2027_readiness"].includes(checkKey);
+  const earlierHeater = checkKey === "main_living_heater";
   return [
-    selectField("cableMeasurementStatus", `Can you measure or estimate the cable run from the ${appliance} to the switchboard?`, RENTAL_OBSERVATION_SELECT_OPTIONS.cableMeasurementStatus, { help: "Record a safe observation for quoting. An electrician must confirm the route, cable size and circuit before installation." }),
-    { ...numberField(cableLengthKey(checkKey), `How far is the cable run from the ${appliance} to the switchboard?`), requiredForAdverse: false, showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] } },
-    shortText("cableRouteBasis", "Where would the cable run?", { showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] }, help: ["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? "State the proposed switchboard-to-unit route and any indoor/outdoor interconnection, rises and drops included in the total. State excluded or concealed lengths." : "State the proposed switchboard-to-appliance route, rises and drops, and how the length was measured or estimated." }),
+    selectField("cableMeasurementStatus", rcac ? "Are the proposed RCAC distances measured or estimated?" : `Can you measure or estimate the cable run from the ${appliance} to the switchboard?`, RENTAL_OBSERVATION_SELECT_OPTIONS.cableMeasurementStatus, { help: rcac ? "For quoting a future installation, use the proposed unit positions even if no RCAC is installed." : "Record a safe observation for quoting. An electrician must confirm the route, cable size and circuit before installation." }),
+    { ...numberField(cableLengthKey(checkKey), rcac ? earlierHeater ? "Earlier combined RCAC cable run" : "Estimated cable run from the switchboard to the proposed outdoor RCAC unit" : `How far is the cable run from the ${appliance} to the switchboard?`), requiredForAdverse: false, showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] } },
+    ...(!rcac || earlierHeater ? [] : [
+      { ...numberField("airconOutdoorToIndoorMetres", "Estimated distance from the proposed outdoor RCAC unit to the indoor unit"), requiredForAdverse: false, showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] }, help: "Use the proposed connection route, including rises and drops." },
+      { ...numberField("airconTotalCableMetres", "Earlier combined RCAC cable run"), requiredForAdverse: false, legacy: true, showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] } },
+    ]),
+    shortText("cableRouteBasis", "Where would the cable run?", { showIf: { key: "cableMeasurementStatus", values: ["Measured", "Estimated"] }, help: rcac ? "Describe the proposed switchboard-to-outdoor-unit route and the separate outdoor-to-indoor connection route. Include rises and drops in each distance." : "State the proposed switchboard-to-appliance route, rises and drops, and how the length was measured or estimated." }),
     shortText("cableLimitationReason", "Why could the cable length not be determined?", { showIf: { key: "cableMeasurementStatus", values: ["Unable to determine"] } }),
-  ].map((field) => ({ ...field, captureVersion: 4, ...(["main_living_heater", "heating_2027_readiness"].includes(checkKey) ? { shared: true } : {}) }));
+  ].map((field) => ({ ...field, captureVersion: 4, ...(rcac ? { shared: true } : {}), ...(earlierHeater ? { legacy: true } : {}) }));
 };
 const gemsAppliances = { heating: ["Split system", "Ducted", "Other", "Unknown"], cooling: ["Split system", "Ducted", "Evaporative", "Other", "Unknown"] };
 /** @param {'heating'|'cooling'} mode @returns {RentalObservationField[]} */
@@ -200,7 +208,7 @@ export function rentalAssessorFields(assessmentCheck, { templateVersion = 4 } = 
   const fields = rentalObservationFields(assessmentCheck?.key);
   // Earlier active assessments may record quoting measurements without replacing their frozen template or completion contract.
   const lengthKey = cableLengthKey(assessmentCheck?.key);
-  const cableKeys = new Set(lengthKey ? ["cableMeasurementStatus", lengthKey, "cableRouteBasis", "cableLimitationReason"] : []);
+  const cableKeys = new Set(lengthKey ? heatingChecks.includes(assessmentCheck?.key) ? rcacCableKeys : ["cableMeasurementStatus", lengthKey, "cableRouteBasis", "cableLimitationReason"] : []);
   return fields.length ? fields.filter((field) => !field.captureVersion || templateVersion >= field.captureVersion || cableKeys.has(field.key))
     : (assessmentCheck?.responseFields || []).map((field) => ({ ...field, input: "text" }));
 }
@@ -219,7 +227,7 @@ export function rentalSharedObservationResponse({ target, candidates, currentRes
   const location = normalizedLocation(target.locationLabel);
   if (!location && target.instanceKey !== "property") return { response, inheritedKeys, recordedKeys, sourceCheckKey };
   const sharedKeys = rentalObservationFields(target.checkKey).filter((field) => field.shared).map((field) => field.key);
-  const sharedCableKeys = group === "primary_heater" ? ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis", "cableLimitationReason"] : [];
+  const sharedCableKeys = group === "primary_heater" ? rcacCableKeys : [];
   const seenChecks = new Set();
   for (const candidate of [...candidates].reverse()) {
     if (candidate.moduleId !== target.moduleId || candidate.instanceKey !== target.instanceKey
@@ -278,14 +286,17 @@ export function rentalObservationBlockers({ checkKey, outcome, response, finding
   if (enforceQuoteCapture && !["not_assessed", "not_applicable"].includes(outcome)) {
     const lengthKey = cableLengthKey(checkKey);
     const sharedHotWater = checkKey === "hot_water_2027_readiness" && response.hotWaterSupplyType === "Shared building system";
-    const cableNeeded = lengthKey && !sharedHotWater;
+    const cableNeeded = lengthKey && checkKey !== "main_living_heater" && !sharedHotWater;
     if (cableNeeded) {
       const status = response.cableMeasurementStatus;
       if (!RENTAL_OBSERVATION_SELECT_OPTIONS.cableMeasurementStatus.some((option) => option.value === status)) blockers.push("Record whether the cable length was measured, estimated or unable to be determined.");
       else if (status === "Unable to determine") {
         if (!String(response.cableLimitationReason || "").trim()) blockers.push("Explain why the cable length could not be determined.");
       } else {
-        if (!String(response[lengthKey] ?? "").trim()) blockers.push("Record the cable length in metres.");
+        // Preserve the completion contract of saved v4 assessments. The earlier
+        // combined total is never inferred as either newly separated segment.
+        const legacyRcacLength = checkKey === "heating_2027_readiness" && String(response.airconTotalCableMetres ?? "").trim();
+        if (!String(response[lengthKey] ?? "").trim() && !legacyRcacLength) blockers.push("Record the cable length in metres.");
         if (!String(response.cableRouteBasis || "").trim()) blockers.push("State the cable route and measurement or estimate basis.");
       }
     }

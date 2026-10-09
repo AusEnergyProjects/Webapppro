@@ -235,8 +235,11 @@ test("structured assessment measurements print their units in both finding and c
   snapshot.findings[0].details.quotation = { measurements: "4" };
   snapshot.modules[0].sections[0].items[0].response = Object.fromEntries(Object.keys(RENTAL_OBSERVATION_NUMBER_FIELDS).map((key) => [key, "4"]));
   const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  // A row's value is drawn beside its first label line, before a wrapped second
+  // label line. Separate this fixture's known value when inspecting the labels.
+  const text = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]).filter((value) => value !== "4").join(" ");
   for (const key of Object.keys(RENTAL_OBSERVATION_NUMBER_FIELDS)) {
-    assert.equal(content.split(rentalObservationResponseLabel(key)).length - 1, 2, `${key} retains a readable unit even when a legacy free-text value has the same number`);
+    assert.equal(text.split(rentalObservationResponseLabel(key)).length - 1, 2, `${key} retains a readable unit even when its label wraps or a legacy free-text value has the same number`);
   }
 });
 

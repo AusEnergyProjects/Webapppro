@@ -139,28 +139,34 @@ test("web cable branches follow the current status while retired rating answers 
   const h = card("heating_2027_readiness", response);
   let tree = h.render();
   nodes(tree, node => node.type === "button" && text(node) === "Edit equipment details")[0].props.onClick();
-  tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres"));
+  tree = h.render();
+  assert.equal(input(tree, "airconTotalCableMetres"), undefined, "An earlier combined run is retained rather than reused as either proposed segment");
+  for (const key of ["airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres"]) assert.ok(input(tree, key));
   for (const suffix of ["GemsStatus", "EnergyRating", "RatingZone", "RatingBasis", "GemsReference", "RatingLimitation"]) assert.equal(input(tree, `heating${suffix}`), undefined);
   input(tree, "cableMeasurementStatus").props.onChange({ target: { value: "Unable to determine" } });
   tree = h.render();
-  assert.equal(input(tree, "airconTotalCableMetres"), undefined); assert.equal(input(tree, "cableRouteBasis"), undefined);
+  for (const key of ["airconTotalCableMetres", "airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres", "cableRouteBasis"]) assert.equal(input(tree, key), undefined);
   assert.ok(input(tree, "cableLimitationReason"));
   assert.equal(input(tree, "heatingEnergyRating"), undefined); assert.equal(input(tree, "heatingRatingLimitation"), undefined);
   assert.equal(response.airconTotalCableMetres, "18"); assert.equal(response.heatingEnergyRating, "4 stars");
 });
 
-test("a saved heater model does not hide cable questions that have never been answered", () => {
-  const response = { applianceType: "Split system", model: "Existing heater model" };
+test("the main heater check avoids duplicate RCAC prompts and its saved model does not hide replacement distances", () => {
+  const response = { applianceType: "Gas heater", model: "Existing heater model" };
   const h = card("main_living_heater", response);
   let tree = h.render();
   assert.equal(input(tree, "model"), undefined); assert.equal(input(tree, "serialNumber"), undefined, "Existing optional identity blanks retain their previous compact presentation");
+  for (const key of ["cableMeasurementStatus", "airconTotalCableMetres", "airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres", "cableRouteBasis"]) assert.equal(input(tree, key), undefined);
+  const future = card("heating_2027_readiness", response);
+  tree = future.render();
   assert.ok(input(tree, "cableMeasurementStatus"), "A model cannot stand in for a measured or estimated cable basis");
   input(tree, "cableMeasurementStatus").props.onChange({ target: { value: "Estimated" } });
-  tree = h.render(); assert.ok(input(tree, "airconTotalCableMetres")); assert.ok(input(tree, "cableRouteBasis"));
+  tree = future.render();
+  assert.ok(input(tree, "airconSwitchboardToOutdoorMetres")); assert.ok(input(tree, "airconOutdoorToIndoorMetres")); assert.ok(input(tree, "cableRouteBasis"));
   assert.equal(response.cableMeasurementStatus, undefined); assert.equal(response.airconTotalCableMetres, undefined);
 });
 
-test("web reuses actual saved and inherited zero cable measurements without hiding missing capture fields", () => {
+test("web retains an earlier combined zero run without inventing either missing RCAC segment", () => {
   for (const airconTotalCableMetres of [0, "0"]) {
     const response = { applianceType: "Split system", model: "Recorded heater", cableMeasurementStatus: "Measured", airconTotalCableMetres, cableRouteBasis: "Unit beside switchboard" };
     const h = card("main_living_heater", response); const tree = h.render();
@@ -169,10 +175,51 @@ test("web reuses actual saved and inherited zero cable measurements without hidi
     const future = card("heating_2027_readiness", { applianceType: "Split system", model: "Recorded heater" }, { observationCandidates: [{ ...fixtures("main_living_heater", response).item, id: "current-heater" }] });
     const futureTree = future.render();
     for (const key of ["cableMeasurementStatus", "airconTotalCableMetres", "cableRouteBasis"]) assert.equal(input(futureTree, key), undefined);
+    for (const key of ["airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres"]) {
+      assert.ok(input(futureTree, key)); assert.equal(future.body().response[key], "", "An unanswered segment stays blank in the form body");
+    }
     assert.equal(future.body().response.airconTotalCableMetres, airconTotalCableMetres);
   }
-  const partial = card("heating_2027_readiness", { model: "Existing model", cableMeasurementStatus: "Measured", airconTotalCableMetres: "" });
-  const tree = partial.render(); assert.ok(input(tree, "airconTotalCableMetres")); assert.ok(input(tree, "cableRouteBasis"));
+  const partial = card("heating_2027_readiness", { model: "Existing model", cableMeasurementStatus: "Measured", airconSwitchboardToOutdoorMetres: "0", cableRouteBasis: "Outdoor unit beside board" });
+  const tree = partial.render();
+  assert.equal(input(tree, "airconSwitchboardToOutdoorMetres"), undefined);
+  assert.ok(input(tree, "airconOutdoorToIndoorMetres"), "A saved first segment does not hide an uncaptured second segment");
+});
+
+test("web asks each proposed RCAC distance once across heating checks, including gas replacement and no existing heater", () => {
+  for (const applianceType of ["Gas heater", "No heater"]) {
+    const trees = ["main_living_heater", "heater_operation", "heater_efficiency", "heating_2027_readiness"].map(key =>
+      card(key, { applianceType, cableMeasurementStatus: "Estimated" }).render());
+    for (const [key, label] of [
+      ["airconSwitchboardToOutdoorMetres", "Estimated cable run from the switchboard to the proposed outdoor RCAC unit"],
+      ["airconOutdoorToIndoorMetres", "Estimated distance from the proposed outdoor RCAC unit to the indoor unit"],
+    ]) {
+      const controls = trees.flatMap(tree => nodes(tree, node => node.props?.name === key));
+      assert.equal(controls.length, 1, `${applianceType}: ${key}`);
+      assert.equal(controls[0].props.type, "number"); assert.equal(controls[0].props.min, 0);
+      assert.match(text(trees[3]), new RegExp(label));
+      assert.match(text(trees[3]), /\(m\)/);
+    }
+  }
+});
+
+test("web reuses the recorded indoor RCAC segment and retains old totals when saving a corrected segment", () => {
+  const response = { applianceType: "Gas heater", cableMeasurementStatus: "Estimated", airconTotalCableMetres: "22",
+    airconSwitchboardToOutdoorMetres: "14.5", airconOutdoorToIndoorMetres: "7.5", cableRouteBasis: "Proposed outdoor location and indoor wall route" };
+  const h = card("heating_2027_readiness", response);
+  let tree = h.render();
+  for (const key of ["airconTotalCableMetres", "airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres"]) assert.equal(input(tree, key), undefined);
+  assert.equal(h.body().response.airconOutdoorToIndoorMetres, "7.5");
+  nodes(tree, node => node.type === "button" && text(node) === "Edit equipment details")[0].props.onClick();
+  tree = h.render();
+  assert.equal(input(tree, "airconTotalCableMetres"), undefined);
+  input(tree, "airconOutdoorToIndoorMetres").props.onChange({ target: { value: "8.25" } });
+  tree = h.render();
+  const form = nodes(tree, node => node.type === "form")[0];
+  form.props.ref.current.values.set("airconOutdoorToIndoorMetres", "8.25");
+  assert.equal(h.body().response.airconOutdoorToIndoorMetres, "8.25");
+  assert.equal(h.body().response.airconTotalCableMetres, "22");
+  assert.equal(response.airconOutdoorToIndoorMetres, "7.5", "Saved input fixture remains unchanged");
 });
 
 test("web heater and cooling saves preserve old ratings and accept appliances without rating answers", () => {

@@ -191,6 +191,8 @@ const post = (route, value) => route.POST(new Request("https://test.example/api/
 test("quoting capture API persists actual cable, count, heating/cooling rating and shared-supply answers", async () => {
   const cases = [
     ["heating", "heating_2027_readiness", { applianceType: "Split system", cableMeasurementStatus: "Measured", airconTotalCableMetres: 22.5, cableRouteBasis: "Switchboard via roof, 2m drop and indoor/outdoor interconnection", heatingGemsStatus: "Label recorded", heatingEnergyRating: "4.5 stars", heatingRatingZone: "Cold", heatingRatingBasis: "Appliance label", heatingGemsReference: "GEMS model example" }],
+    ["heating", "heating_2027_readiness", { applianceType: "Gas heater", cableMeasurementStatus: "Estimated", airconSwitchboardToOutdoorMetres: 15.2, airconOutdoorToIndoorMetres: 6.4, cableRouteBasis: "Switchboard through roof to proposed outdoor unit; indoor unit on living-room wall" }],
+    ["heating", "heating_2027_readiness", { applianceType: "Unknown", cableMeasurementStatus: "Measured", airconSwitchboardToOutdoorMetres: 0, airconOutdoorToIndoorMetres: 0, airconTotalCableMetres: 22.5, cableRouteBasis: "Separate proposed positions; prior total retained" }],
     ["kitchen", "cooktop_function", { cableMeasurementStatus: "Estimated", cooktopCableRunMetres: 15.75, cableRouteBasis: "Roof route includes 3m wall drop" }],
     ["hot_water", "hot_water_2027_readiness", { hotWaterSupplyType: "Individual unit", cableMeasurementStatus: "Unable to determine", cableLimitationReason: "Switchboard route concealed" }],
     ["lighting", "artificial_lighting", { downlightCountStatus: "Counted", nonIc4DownlightCount: 7, downlightEvidence: "Seven readable non-IC4 labels" }],
@@ -212,6 +214,30 @@ test("quoting capture API persists actual cable, count, heating/cooling rating a
       assert.deepEqual(payload.items.find((item) => item.checkKey === checkKey).response, expected, "Draft responses retain inactive earlier values for history");
     } finally { fixture.sql.close(); }
   }
+});
+
+test("RCAC API validates each proposed segment and never replaces either with the earlier combined total", async () => {
+  for (const key of ["airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres"]) {
+    for (const value of ["-1", "1e3", "1,000", "abc", true, {}, []]) {
+      const fixture = databaseFixture();
+      try {
+        const tables = ["trade_work_orders", "trade_rental_inspections", "trade_rental_inspection_modules", "trade_rental_inspection_items", "trade_rental_inspection_events"];
+        const before = tables.map((table) => fixture.sql.prepare(`SELECT * FROM ${table}`).all());
+        const response = await post(loadRoute(fixture), { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0, sectionKey: "heating", checkKey: "heating_2027_readiness", outcome: "meets", response: { cableMeasurementStatus: "Estimated", airconSwitchboardToOutdoorMetres: "15.2", cableRouteBasis: "Proposed roof route", [key]: value } });
+        assert.equal(response.status, 400, `${key}: ${JSON.stringify(value)}`);
+        assert.deepEqual(tables.map((table) => fixture.sql.prepare(`SELECT * FROM ${table}`).all()), before, "Invalid segment capture writes no changes");
+      } finally { fixture.sql.close(); }
+    }
+  }
+  const fixture = databaseFixture();
+  try {
+    const response = await post(loadRoute(fixture), { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0, sectionKey: "heating", checkKey: "heating_2027_readiness", outcome: "meets", response: { cableMeasurementStatus: "Estimated", airconTotalCableMetres: "22.5", cableRouteBasis: "Earlier combined route" } });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const saved = JSON.parse(fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items WHERE check_key = 'heating_2027_readiness'").get().response_json);
+    assert.equal(saved.airconTotalCableMetres, "22.5");
+    assert.equal(Object.hasOwn(saved, "airconSwitchboardToOutdoorMetres"), false);
+    assert.equal(Object.hasOwn(saved, "airconOutdoorToIndoorMetres"), false);
+  } finally { fixture.sql.close(); }
 });
 
 test("invalid non-IC4 counts and invented capture choices cause no assessment, evidence, event or job writes", async () => {
@@ -313,7 +339,8 @@ test("v4 completion requires quote-ready cable runs for working appliances while
     ["hot_water", "hot_water_2027_readiness", "hotWaterCableRunMetres", { applianceType: "Gas storage", hotWaterSupplyType: "Individual unit" }],
     ["hot_water", "hot_water_2027_readiness", "hotWaterCableRunMetres", { applianceType: "Instant gas", hotWaterSupplyType: "Individual unit" }],
     ["hot_water", "hot_water_2027_readiness", "hotWaterCableRunMetres", { applianceType: "Heat pump", hotWaterSupplyType: "Individual unit" }],
-    ["heating", "main_living_heater", "airconTotalCableMetres", { applianceType: "Gas heater" }],
+    ["heating", "heating_2027_readiness", "airconSwitchboardToOutdoorMetres", { applianceType: "Gas heater" }],
+    ["heating", "heating_2027_readiness", "airconSwitchboardToOutdoorMetres", { applianceType: "Unknown" }],
     ["heating", "heating_2027_readiness", "airconTotalCableMetres", { applianceType: "Split system" }],
   ];
   for (const version of [3, 4]) for (const [sectionKey, checkKey, lengthKey, identity] of cases) {
@@ -345,6 +372,30 @@ test("v4 completion requires quote-ready cable runs for working appliances while
       }
       assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen, "Quoting capture never rewrites the frozen template");
       assert.equal(fixture.sql.prepare("SELECT status FROM trade_rental_inspection_modules").get().status, "complete");
+    } finally { fixture.sql.close(); }
+  }
+});
+
+test("the main-living-heater check completes without a duplicate quote and a first proposed RCAC segment is enough for existing v4 completion", async () => {
+  for (const [checkKey, responseValues] of [
+    ["main_living_heater", { applianceType: "Gas heater" }],
+    ["heating_2027_readiness", { applianceType: "Gas heater", cableMeasurementStatus: "Estimated", airconSwitchboardToOutdoorMetres: "15.2", cableRouteBasis: "Switchboard via roof to proposed outdoor position" }],
+    ["heating_2027_readiness", { applianceType: "Gas heater", cableMeasurementStatus: "Estimated", airconTotalCableMetres: "22.5", cableRouteBasis: "Earlier combined route" }],
+  ]) {
+    const fixture = databaseFixture();
+    try {
+      const template = { key: "minimum_standards", templateVersion: 4, credentialGate: "assigned_assessor", metadataFields: [], sections: [{ key: "heating", title: "Heating observation", checks: [{ key: checkKey, required: true, repeatBy: "property", requiredEvidenceCount: 0, responseFields: [] }] }] };
+      const frozen = JSON.stringify(template);
+      fixture.sql.prepare("UPDATE trade_rental_inspection_modules SET template_snapshot = ?, answers = ?").run(frozen, JSON.stringify({ coverageConfirmed: true, assessorDeclaration: true }));
+      fixture.sql.prepare("UPDATE trade_rental_inspection_items SET section_key = 'heating', check_key = ?, location_label = 'Property', response_json = ?, required_evidence_count = 0").run(checkKey, JSON.stringify(responseValues));
+      fixture.sql.exec(`INSERT INTO trade_crm_job_media (id,work_order_id,firebase_uid,file_name,content_type,size_bytes) VALUES ('appliance-photo','job','owner','appliance.jpg','image/jpeg',32);
+        INSERT INTO trade_rental_evidence_links (id,inspection_id,module_id,item_id,job_media_id,firebase_uid,evidence_type,status) VALUES ('appliance-link','inspection','module','old-item','appliance-photo','owner','photo','active');`);
+      const response = await post(loadRoute(fixture), { action: "complete_module", moduleId: "module", expectedRevision: 1 });
+      assert.equal(response.status, 200, `${checkKey}: ${JSON.stringify(await response.clone().json())}`);
+      assert.equal(fixture.sql.prepare("SELECT status FROM trade_rental_inspection_modules").get().status, "complete");
+      assert.equal(fixture.sql.prepare("SELECT template_snapshot FROM trade_rental_inspection_modules").get().template_snapshot, frozen);
+      const saved = JSON.parse(fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items").get().response_json);
+      assert.deepEqual(saved, responseValues, "Completion neither synthesizes a second segment nor rewrites the old combined total");
     } finally { fixture.sql.close(); }
   }
 });

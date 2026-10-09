@@ -91,6 +91,40 @@ test("cooktop cable quoting preserves recorded zero and explicitly marks absent 
   }
 });
 
+test("RCAC reports distinguish both proposed quote distances and retain an earlier combined total without guessing segments", async () => {
+  const assessmentModule = completedModule();
+  const heating = assessmentModule.sections.find((entry) => entry.key === "heating");
+  const item = heating.items.find((entry) => entry.checkKey === "heating_2027_readiness");
+  heating.items = [item];
+  assessmentModule.sections = [heating];
+  const snapshot = reportWithModule(assessmentModule);
+  for (const response of [
+    { applianceType: "Gas heater", cableMeasurementStatus: "Estimated", airconSwitchboardToOutdoorMetres: 15.2, airconOutdoorToIndoorMetres: 6.4, cableRouteBasis: "Proposed roof route and living-room connection" },
+    { cableMeasurementStatus: "Measured", airconSwitchboardToOutdoorMetres: 0, airconOutdoorToIndoorMetres: 0, cableRouteBasis: "Proposed units beside switchboard" },
+    { cableMeasurementStatus: "Estimated", airconTotalCableMetres: 22.5, cableRouteBasis: "Earlier combined route recorded" },
+    {},
+  ]) {
+    item.response = response;
+    const before = structuredClone(snapshot);
+    const entries = Object.fromEntries(rentalReportObservationEntries(item));
+    for (const key of ["airconSwitchboardToOutdoorMetres", "airconOutdoorToIndoorMetres"]) assert.equal(entries[key], Object.hasOwn(response, key) ? response[key] : "Not recorded", "A combined total cannot supply either new segment");
+    if (Object.hasOwn(response, "airconTotalCableMetres")) assert.equal(entries.airconTotalCableMetres, 22.5);
+    else assert.equal(Object.hasOwn(entries, "airconTotalCableMetres"), false, "An old combined total is not invented for new capture");
+    const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+    const drawn = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]).join(" ");
+    for (const [key, label] of [
+      ["airconSwitchboardToOutdoorMetres", "Switchboard to proposed outdoor RCAC unit cable run (m)"],
+      ["airconOutdoorToIndoorMetres", "Proposed outdoor RCAC unit to indoor unit distance (m)"],
+    ]) assert.ok(drawn.includes(`${label} ${String(entries[key])}`), `${label} has its own actual or explicitly missing value in the rendered PDF`);
+    if (Object.hasOwn(response, "airconTotalCableMetres")) {
+      assert.ok(drawn.includes("Earlier combined RCAC"));
+      assert.ok(drawn.includes("22.5"));
+      assert.ok(drawn.includes("cable run (m)"), "The prior total retains its combined-run label even when the PDF wraps that label");
+    }
+    assert.deepEqual(snapshot, before, "Report presentation does not rewrite historical measurements");
+  }
+});
+
 test("scope copy follows recorded modules and checks instead of the shared inspection enum", () => {
   const full = completedModule();
   const groups = rentalReportSectionGroups(full);

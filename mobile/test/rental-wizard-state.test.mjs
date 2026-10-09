@@ -360,6 +360,102 @@ test('queued read-only answers advance and compact controls use numeric keyboard
   }
 });
 
+function nativeObservationFields(checkKey, response, sharedObservation = { recordedKeys: [] }, templateVersion = 4) {
+  const declaration = source.slice(source.indexOf('  const responseFields ='), source.indexOf('  const detailField ='));
+  const compiled = ts.transpileModule(declaration + '\nreturn responseFields;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const environment = { draft: { outcome: 'meets', response }, active: { key: 'minimum_standards', template: { templateVersion } },
+    check: { key: checkKey }, showerCheck: false, rentalAssessorFields, rentalObservationFieldIsVisible, sharedObservation, editEquipmentKey: '', key: 'draft' };
+  return new Function('environment', 'with(environment){' + compiled + '}')(environment);
+}
+
+function renderNativeObservation(field, value = '', onChange = () => {}) {
+  const control = source.slice(source.indexOf('function RentalObservationInput'), source.indexOf('function findingChoices'));
+  const compiled = ts.transpileModule('export ' + control, { compilerOptions: {
+    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  const element = (type, props) => ({ type, props });
+  const environment = { require: () => ({ jsx: element, jsxs: element }),
+    View: 'view', Text: 'text', TextInput: 'input', FieldSelect: 'select', styles: {}, Platform: { OS: 'ios' } };
+  const render = new Function('environment', 'with(environment){const exports = {};' + compiled + ';return exports.RentalObservationInput;}')(environment);
+  return render({ field, value, editable: true, onChange });
+}
+
+test('native asks both proposed RCAC distances once for gas replacement and a property without a heater', () => {
+  const labels = ['Estimated cable run from the switchboard to the proposed outdoor RCAC unit',
+    'Estimated distance from the proposed outdoor RCAC unit to the indoor unit'];
+  for (const applianceType of ['Gas heater', 'No heater']) {
+    for (const templateVersion of [2, 4]) {
+      const response = { applianceType, cableMeasurementStatus: 'Estimated' };
+      const screens = ['main_living_heater', 'heater_operation', 'heater_efficiency', 'heating_2027_readiness'].map(checkKey => ({
+        checkKey, controls: nativeObservationFields(checkKey, response, undefined, templateVersion).map(field => renderNativeObservation(field)),
+      }));
+      for (const label of labels) {
+        const matching = screens.flatMap(screen => screen.controls.flatMap(tree => renderedNodes(tree,
+          node => node.type === 'input' && node.props.accessibilityLabel === label).map(input => ({ checkKey: screen.checkKey, input, tree }))));
+        assert.equal(matching.length, 1, `${applianceType}, v${templateVersion}: ${label}`);
+        assert.equal(matching[0].checkKey, 'heating_2027_readiness');
+        assert.match(renderedText(matching[0].tree), /\(m\)/);
+        assert.equal(matching[0].input.props.keyboardType, 'numbers-and-punctuation');
+        assert.equal(matching[0].input.props.multiline, false);
+      }
+    }
+  }
+});
+
+test('native keeps legacy combined runs without hiding or inventing either proposed RCAC distance', () => {
+  for (const total of [0, '0', '22']) {
+    const original = { applianceType: 'Gas heater', cableMeasurementStatus: 'Estimated', airconTotalCableMetres: total,
+      cableRouteBasis: 'Earlier combined route' };
+    const shared = rentalSharedObservationResponse({ target: { moduleId: 'module', checkKey: 'heating_2027_readiness', instanceKey: 'property' },
+      candidates: [{ moduleId: 'module', checkKey: 'main_living_heater', instanceKey: 'property', outcome: 'meets', response: original }] });
+    const fields = nativeObservationFields('heating_2027_readiness', shared.response, shared);
+    for (const key of ['airconSwitchboardToOutdoorMetres', 'airconOutdoorToIndoorMetres']) {
+      const field = fields.find(entry => entry.key === key); assert.ok(field, key);
+      assert.equal(Object.hasOwn(shared.response, key), false, 'Never assign a combined total to a segment');
+      assert.equal(renderedNodes(renderNativeObservation(field, shared.response[key]), node => node.type === 'input')[0].props.value, '');
+    }
+    assert.equal(fields.some(field => field.key === 'airconTotalCableMetres'), false);
+    assert.equal(shared.response.airconTotalCableMetres, total);
+    assert.equal(nativeObservationFields('main_living_heater', original).some(field => field.key.startsWith('aircon') || field.key.startsWith('cable')), false);
+    assert.equal(original.airconTotalCableMetres, total);
+  }
+});
+
+test('native reopens the saved indoor RCAC distance and durably preserves both segments and the earlier total', async () => {
+  const response = { applianceType: 'Gas heater', cableMeasurementStatus: 'Estimated', airconTotalCableMetres: '22',
+    airconSwitchboardToOutdoorMetres: '14.5', airconOutdoorToIndoorMetres: '7.5', cableRouteBasis: 'Outside wall then ceiling to indoor unit' };
+  const env = saveEnvironment(); env.active.key = 'minimum_standards'; env.active.template.templateVersion = 4;
+  env.check.key = 'heating_2027_readiness'; env.draft.response = { ...response };
+  const field = nativeObservationFields(env.check.key, env.draft.response).find(entry => entry.key === 'airconOutdoorToIndoorMetres');
+  const control = renderNativeObservation(field, env.draft.response[field.key], value => { env.draft.response[field.key] = value; });
+  const input = renderedNodes(control, node => node.type === 'input')[0];
+  assert.equal(input.props.value, '7.5'); input.props.onChangeText('8,25');
+  env.enqueueRentalSave = async queued => { env.queued = queued; return { id: 'saved' }; }; env.advanceQuestion = () => { env.advanced = true; };
+  await mountedSaveAnswer(env)();
+  assert.equal(env.advanced, true);
+  assert.deepEqual(env.queued.body.response, { ...response, airconOutdoorToIndoorMetres: '8.25' });
+  assert.equal(env.queued.draftSnapshot.response.airconOutdoorToIndoorMetres, '8.25');
+  assert.equal(response.airconOutdoorToIndoorMetres, '7.5', 'Editing must not mutate the saved fixture');
+});
+
+test('native v4 accepts earlier RCAC capture without retroactive segments and validates newly recorded distances', async () => {
+  for (const checkKey of ['main_living_heater', 'heating_2027_readiness']) {
+    const env = saveEnvironment(); env.active.key = 'minimum_standards'; env.active.template.templateVersion = 4; env.check.key = checkKey;
+    env.draft.response = checkKey === 'main_living_heater' ? { applianceType: 'Gas heater' }
+      : { applianceType: 'Gas heater', cableMeasurementStatus: 'Estimated', airconTotalCableMetres: '22', cableRouteBasis: 'Earlier combined route' };
+    env.enqueueRentalSave = async input => { env.queued = input; return { id: 'saved' }; }; env.advanceQuestion = () => { env.advanced = true; };
+    await mountedSaveAnswer(env)(); assert.equal(env.advanced, true, checkKey);
+    for (const key of ['airconSwitchboardToOutdoorMetres', 'airconOutdoorToIndoorMetres']) assert.equal(Object.hasOwn(env.queued.body.response, key), false);
+  }
+  for (const key of ['airconSwitchboardToOutdoorMetres', 'airconOutdoorToIndoorMetres']) {
+    const env = saveEnvironment(); env.active.key = 'minimum_standards'; env.active.template.templateVersion = 4; env.check.key = 'heating_2027_readiness';
+    env.draft.response = { cableMeasurementStatus: 'Estimated', airconTotalCableMetres: '22', cableRouteBasis: 'Earlier combined route', [key]: '4..2' };
+    env.enqueueRentalSave = () => { assert.fail('An invalid new segment must not enter the queue'); };
+    await assert.rejects(mountedSaveAnswer(env), /Enter a zero or positive number for estimated (?:cable run|distance)/);
+    assert.equal(env.advanced, false); assert.equal(env.cacheRef.current.drafts.draft.response[key], '4..2');
+  }
+});
+
 test('invalid measurements stay editable on the phone instead of creating a queue conflict', async () => {
   const env = saveEnvironment(); env.check.key = 'heating_2027_readiness'; env.draft.response.roomLengthMetres = '4..2';
   env.enqueueRentalSave = () => { throw new Error('Invalid observation must not enter queue'); };
