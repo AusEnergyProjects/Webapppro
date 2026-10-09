@@ -251,7 +251,7 @@ function revisionRequestedInvalid(kind: RentalRevisionKind) {
     AND json_extract(report.report_snapshot, '$.report.${correction}.sourceReportNumber') = source.report_number
     AND json_extract(report.report_snapshot, '$.report.${correction}.sourceReportRevision') = source.revision
     AND json_extract(report.report_snapshot, '$.report.${correction}.sourceIssuedAt') = source.issued_at
-    AND ${kind === "formatting" ? formattingFactsPreserved : coolingAccessFactsPreserved}
+    AND ${kind === "formatting" ? formattingFactsPreserved : `(${coolingAccessFactsPreserved})`}
     AND json_remove(json_extract(report.report_snapshot, '$.report'), ${presentationPaths})
       = json_remove(json_extract(source.report_snapshot, '$.report'), ${presentationPaths})
     AND json_type(report.report_snapshot, '$.evidence') = 'array' AND json_type(source.report_snapshot, '$.evidence') = 'array'
@@ -416,6 +416,18 @@ const previousFormattingGuards = new Map([
   abortTrigger({ name: "trade_rental_reports_transition_guard", event: "UPDATE", table: "trade_rental_reports", when: legacyReportTransitionInvalid, message: "rental report transition is invalid" }),
 ].map((definition) => [definition.name, definition.sql]));
 
+// Sites 839 installed this exact answer guard before discovering D1's depth
+// limit of 100. Only its released fingerprint may be replaced by the grouped
+// equivalent; unfamiliar guard SQL remains a hard error.
+const previousRentalGuardHashes = new Map([
+  ["trade_rental_answer_request_guard_insert", "437e583ab4cb92ea2ae49024868a0824e7400a3c16e24cd5d1978eb560fc4faa"],
+]);
+
+async function rentalGuardHash(sql: string) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalTlinkSchemaGuardSql(sql)));
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 const REQUIRED_COLUMNS = {
   trade_work_orders: ["id", "firebase_uid"],
   trade_crm_job_details: ["work_order_id", "firebase_uid", "service_site_id"],
@@ -474,7 +486,10 @@ async function installRentalSchemaGuards(database: D1Database) {
     const current = installed.get(definition.name);
     if (current && canonicalTlinkSchemaGuardSql(current) !== canonicalTlinkSchemaGuardSql(definition.sql)) {
       const previous = previousFormattingGuards.get(definition.name);
-      if (!previous || canonicalTlinkSchemaGuardSql(current) !== canonicalTlinkSchemaGuardSql(previous)) {
+      const previousHash = previousRentalGuardHashes.get(definition.name);
+      const knownPrevious = previous && canonicalTlinkSchemaGuardSql(current) === canonicalTlinkSchemaGuardSql(previous)
+        || previousHash && await rentalGuardHash(current) === previousHash;
+      if (!knownPrevious) {
         throw new Error(`TRADE_RENTAL_SCHEMA_GUARD_MISMATCH:${definition.name}`);
       }
       upgrades.push(database.prepare(`DROP TRIGGER \`${definition.name}\``), database.prepare(definition.sql));

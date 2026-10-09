@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
@@ -767,4 +770,72 @@ test("runtime guard upgrade rolls back failed DDL as a unit and retries without 
   assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE name = 'trade_rental_formatting_request_guard_insert'").get().total, 0);
   await ensureTradeRentalSchemaGuards(d1);
   assert.equal(database.prepare("SELECT COUNT(*) AS total FROM sqlite_schema WHERE type = 'trigger'").get().total, TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS.length);
+});
+
+function sites839AnswerGuardSql() {
+  const current = TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS.find((definition) => definition.name === "trade_rental_answer_request_guard_insert");
+  const previous = current.sql
+    .replace("AND (json_extract(NEW.metadata, '$.field')", "AND json_extract(NEW.metadata, '$.field')")
+    .replace("= json_extract(NEW.metadata, '$.correctedAt'))\n    AND json_remove", "= json_extract(NEW.metadata, '$.correctedAt')\n    AND json_remove");
+  assert.equal(createHash("sha256").update(canonicalTlinkSchemaGuardSql(previous)).digest("hex"),
+    "437e583ab4cb92ea2ae49024868a0824e7400a3c16e24cd5d1978eb560fc4faa");
+  return previous;
+}
+
+test("runtime upgrade recognises only the exact already-installed Sites 839 answer guard", async (t) => {
+  const { database } = await fixture();
+  t.after(() => database.close());
+  const previous = sites839AnswerGuardSql();
+  database.exec("DROP TRIGGER trade_rental_answer_request_guard_insert");
+  database.exec(previous);
+  await ensureTradeRentalSchemaGuards(testD1(database));
+  const expected = TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS.find((definition) => definition.name === "trade_rental_answer_request_guard_insert");
+  assert.equal(canonicalTlinkSchemaGuardSql(database.prepare("SELECT sql FROM sqlite_schema WHERE name = 'trade_rental_answer_request_guard_insert'").get().sql),
+    canonicalTlinkSchemaGuardSql(expected.sql));
+  database.exec("DROP TRIGGER trade_rental_answer_request_guard_insert");
+  const unexpected = previous.replace("FOR EACH ROW WHEN", "FOR EACH ROW WHEN 1 = 0 AND");
+  database.exec(unexpected);
+  await assert.rejects(ensureTradeRentalSchemaGuards(testD1(database)), /TRADE_RENTAL_SCHEMA_GUARD_MISMATCH:trade_rental_answer_request_guard_insert/);
+  assert.equal(canonicalTlinkSchemaGuardSql(database.prepare("SELECT sql FROM sqlite_schema WHERE name = 'trade_rental_answer_request_guard_insert'").get().sql), canonicalTlinkSchemaGuardSql(unexpected));
+});
+
+test("rental correction statements compile with D1's expression depth limit of 100", async (t) => {
+  const { database } = await fixture();
+  t.after(() => database.close());
+  const schema = database.prepare("SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY rowid").all();
+  const probes = [
+    "INSERT INTO trade_rental_reports (id,inspection_id,firebase_uid,report_number,revision,report_snapshot,source_snapshot_sha256,staged_at,created_at,updated_at) SELECT 'x',id,firebase_uid,'RMS-X-R3',3,'{}','',updated_at,updated_at,updated_at FROM trade_rental_inspections WHERE 0",
+    "INSERT INTO trade_rental_inspection_events (id,inspection_id,firebase_uid,event_type,created_at) SELECT 'x',id,firebase_uid,'report_answer_revision_requested',updated_at FROM trade_rental_inspections WHERE 0",
+    "UPDATE trade_rental_reports SET status = 'issued' WHERE 0",
+    "UPDATE trade_rental_inspections SET issued_report_id = 'x', revision = revision + 1 WHERE 0",
+  ];
+  const python = process.env.TLINK_SQLITE_DEPTH_PYTHON || (process.platform === "win32"
+    ? join(homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe") : "python3");
+  const script = String.raw`
+import json, sqlite3, sys
+fixture = json.load(sys.stdin)
+def database(previous):
+    db = sqlite3.connect(':memory:')
+    db.setlimit(sqlite3.SQLITE_LIMIT_EXPR_DEPTH, 100)
+    for entry in fixture['schema']:
+        sql = fixture['previous'] if previous and entry['name'] == 'trade_rental_answer_request_guard_insert' else entry['sql']
+        db.execute(sql)
+    return db
+old = database(True)
+try:
+    old.execute(fixture['probes'][1])
+except sqlite3.OperationalError as error:
+    assert 'Expression tree is too large' in str(error), str(error)
+else:
+    raise AssertionError('The released ungrouped guard did not reproduce the depth failure')
+fixed = database(False)
+for statement in fixture['probes']:
+    fixed.execute(statement)
+print(json.dumps({'limit':fixed.getlimit(sqlite3.SQLITE_LIMIT_EXPR_DEPTH),'compiled':len(fixture['probes'])}))
+`;
+  const run = spawnSync(python, ["-c", script], { input: JSON.stringify({ schema, probes, previous: sites839AnswerGuardSql() }),
+    encoding: "utf8", timeout: 10000 });
+  assert.ifError(run.error);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), { limit: 100, compiled: 4 });
 });
