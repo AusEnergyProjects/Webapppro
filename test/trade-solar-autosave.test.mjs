@@ -33,6 +33,18 @@ function harness(t, handler) {
 }
 const success = (body, revision = body.expectedRevision + 1) => ({ ok: true, status: 200, json: async () => ({ ok: true, design: persisted(body.design, body.id, revision) }) });
 
+test("deleting every panel during the first save persists an empty design before exit", async t => {
+  let resolveFirst;
+  const h = harness(t, (body, count) => count === 1 ? new Promise(resolve => { resolveFirst = () => resolve(success(body)); }) : success(body));
+  const hook = h.render(); hook.update(draft());
+  const saving = hook.ensureSaved(); await flush();
+  hook.update({ ...draft(), panels: [] });
+  resolveFirst(); const result = await saving;
+  assert.equal(h.requests.length, 2); assert.equal(h.requests[1].id, h.requests[0].id);
+  assert.equal(h.requests[1].expectedRevision, 1); assert.deepEqual(h.requests[1].design.panels, []);
+  assert.deepEqual(result.panels, []); assert.equal(h.render().status, "Saved");
+});
+
 test("autosave serialises edits arriving during a save before navigation can finish", async t => {
   let resolveFirst;
   const h = harness(t, (body, count) => count === 1 ? new Promise(resolve => { resolveFirst = () => resolve(success(body)); }) : success(body));

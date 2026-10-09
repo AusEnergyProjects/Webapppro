@@ -52,6 +52,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
   const selected = layout.panels.find((panel) => panel.id === layout.selectedId);
   const groupSelection = layout.selectionMode !== "one";
   const choosing = layout.selectionMode === "choose";
+  const selectedCount = groupSelection ? layout.selectedIds.length : selected ? 1 : 0;
   const summary = useMemo(() => solarEquipmentSummary(layout.panels), [layout.panels]);
   const panelOptions = useMemo(() => [DEFAULT_SOLAR_EQUIPMENT, ...priceBookPanels.filter((item) => item.kind === "panel"), ...SOLAR_STARTER_PANELS.filter((item) => !priceBookPanels.some((savedPanel) => savedPanel.id === item.id))], [priceBookPanels]);
   const busy = disabled || capturing || savedLoading;
@@ -95,7 +96,8 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
     setLinks({ customerId: linkedDesign.customerId, workOrderId: linkedDesign.workOrderId });
   }
   useEffect(() => {
-    if (!layout.panels.length && !persistence.design) return;
+    // An empty started design still needs saving if its first autosave is pending.
+    if (!layout.panels.length && !persistence.design && !title) return;
     const center = map.getCenter()?.toJSON();
     if (!center) return;
     update({ title: title.trim() || context?.title.slice(0, 180) || "Roof design", panels: layout.panels, equipment,
@@ -249,6 +251,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
         <button type="button" aria-pressed={layout.selectionMode === "all"} disabled={busy || !layout.panels.length} onClick={() => controller.current?.setSelectionMode("all")}>All panels</button>
         <button type="button" aria-pressed={choosing || layout.selectionMode === "selection"} disabled={busy || !layout.panels.length} onClick={() => controller.current?.setSelectionMode("choose")}>Choose panels</button>
         {choosing && <button type="button" disabled={busy || !layout.selectedIds.length} onClick={() => controller.current?.setSelectionMode("selection")}>Move/rotate selection</button>}
+        <button type="button" disabled={busy || !selectedCount} onClick={() => controller.current?.removeSelected()}>{selectedCount > 1 ? `Delete ${selectedCount} panels` : "Delete panel"}</button>
         <button type="button" disabled={busy} onClick={onClose}>Done</button>
       </div>
       <p className={styles.hint}>{choosing ? "Drag a box around the panels you want. Tap any panel to add or remove it." : groupSelection ? `${layout.selectedIds.length} panels selected. Drag to move together, or use the gold handle to rotate.` : "Drag a panel into place. Turn the gold handle to rotate. Tap an arrow to add another panel."}</p>
@@ -260,7 +263,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
           <label><span>Rotation (°)</span><input disabled={busy} type="number" step="1" value={angle} onChange={(event) => setAngle(event.target.value)} /></label>
           <label><span>Length tilt (°)</span><input disabled={busy} type="number" min="0" max="85" step="0.5" value={lengthTilt} onChange={(event) => setLengthTilt(event.target.value)} /></label>
           <label><span>Width tilt (°)</span><input disabled={busy} type="number" min="0" max="85" step="0.5" value={widthTilt} onChange={(event) => setWidthTilt(event.target.value)} /></label>
-          <button type="button" disabled={!selected || busy} onClick={applySize}>Apply to panel</button><button type="button" disabled={!selected || busy} onClick={() => controller.current?.removeSelected()}>Remove panel</button>
+          <button type="button" disabled={!selected || busy} onClick={applySize}>Apply to panel</button>
         </>}
       </div><p className={styles.hint}>Generic panels are estimates. The starting 22.5° pitch is an assumption. Changing a named model’s dimensions or watts switches it to a generic panel.</p></details>
     </>}

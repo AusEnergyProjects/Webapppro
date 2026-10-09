@@ -260,7 +260,6 @@ for (const reason of ["pointercancel", "capture", "close", "scope", "zoom", "pan
 test("all-panel mode hides copy controls, protects individual edits and cleans up", (t) => {
   const h = harness(t); h.add(-4, 0); h.copy(1, "right"); h.controller.setSelectionMode("all");
   const before = structuredClone(h.value().panels);
-  h.controller.removeSelected();
   h.controller.updateSelected({ ...DEFAULT_SOLAR_PANEL_SIZE, ...DEFAULT_SOLAR_PANEL_TILT, heading: 90 });
   assert.deepEqual(h.value().panels, before);
   assert.equal(h.face(1).parent.children[1].hidden, true);
@@ -362,10 +361,10 @@ for (const reason of ["pointercancel", "capture", "close", "scope", "zoom", "pan
   if (["capture", "close", "scope", "dispose"].includes(reason)) assert.equal(h.mapElement.style.touchAction, "pan-y");
 });
 
-test("selection edits cannot alter dimensions or delete panels, and add/remove/clear cannot retain stale group members", (t) => {
+test("selection edits cannot alter dimensions or copy panels, and add/remove/clear cannot retain stale group members", (t) => {
   const h = harness(t); h.add(-4, 0); h.add(4, 0); h.controller.setSelectionMode("choose"); h.face(1).emit("click"); h.controller.setSelectionMode("selection");
   const original = structuredClone(h.value().panels);
-  h.controller.removeSelected(); h.controller.updateSelected({ ...DEFAULT_SOLAR_PANEL_SIZE, ...DEFAULT_SOLAR_PANEL_TILT, heading: 90 }); h.copy(1, "right");
+  h.controller.updateSelected({ ...DEFAULT_SOLAR_PANEL_SIZE, ...DEFAULT_SOLAR_PANEL_TILT, heading: 90 }); h.copy(1, "right");
   assert.deepEqual(h.value().panels, original);
   assert.equal(h.face(1).parent.children[1].hidden, true);
   h.controller.setCapturing(true);
@@ -375,6 +374,80 @@ test("selection edits cannot alter dimensions or delete panels, and add/remove/c
   h.controller.removeSelected(); assert.equal(h.value().panels.length, 2);
   h.controller.setSelectionMode("all"); assert.deepEqual(h.value().selectedIds, [1, 2]);
   h.controller.clear(); assert.deepEqual(h.value().selectedIds, []); assert.equal(h.value().panels.length, 0); assert.equal(h.group().hidden, true);
+});
+
+test("removing one selected panel preserves every other panel and publishes the new layout", (t) => {
+  const h = harness(t); h.add(-4, 0, 15); h.add(4, 0, 37); h.add(20, 20, 90);
+  const original = structuredClone(h.value().panels);
+  h.face(2).emit("click"); h.controller.removeSelected();
+  assert.deepEqual(h.value(), { panels: [original[0], original[2]], selectedId: null, selectedIds: [], selectionMode: "one" });
+  assert.equal(h.pane.children[0].children.some((element) => element.dataset.solarPanelId === "2"), false);
+});
+
+for (const mode of ["choose", "selection"]) test(`removing ${mode} panels deletes only the chosen subset and clears stale selection`, (t) => {
+  const h = harness(t); h.add(-4, 0, 15); h.add(4, 0, 37); h.add(20, 20, 90);
+  const original = structuredClone(h.value().panels);
+  h.controller.setSelectionMode("choose"); h.face(1).emit("click"); h.face(3).emit("click");
+  h.controller.setSelectionMode(mode); h.controller.removeSelected();
+  assert.deepEqual(h.value(), { panels: [original[1]], selectedId: null, selectedIds: [], selectionMode: "one" });
+  assert.equal(h.group().hidden, true);
+  h.controller.setSelectionMode("all"); assert.deepEqual(h.value().selectedIds, [2]);
+});
+
+test("removing all panels or the final panel yields an empty layout that can be restored and extended", (t) => {
+  const h = harness(t); h.add(-4, 0); h.add(4, 0); h.controller.setSelectionMode("all");
+  h.controller.removeSelected();
+  const empty = { panels: [], selectedId: null, selectedIds: [], selectionMode: "one" };
+  assert.deepEqual(h.value(), empty); assert.equal(h.group().hidden, true);
+  h.controller.restore(h.value().panels); assert.deepEqual(h.value(), empty);
+  const next = h.add(20, 20); h.controller.removeSelected(); assert.deepEqual(h.value(), empty);
+  assert.equal(next, 1);
+  assert.equal(h.add(40, 40), 2, "deletion does not reuse an identity in the current layout");
+});
+
+test("removing with no panel selected does not delete the last touched panel or change the layout", (t) => {
+  const h = harness(t); h.add(-4, 0); h.add(4, 0); h.controller.setSelectionMode("choose");
+  const before = structuredClone(h.value());
+  h.controller.removeSelected(); assert.deepEqual(h.value(), before);
+  h.controller.restore(before.panels);
+  const restored = structuredClone(h.value());
+  h.controller.removeSelected(); assert.deepEqual(h.value(), restored);
+});
+
+for (const mode of ["one", "all", "choose", "selection"]) test(`removal respects capture and editing locks in ${mode} mode`, (t) => {
+  const h = harness(t); h.add(-4, 0); h.add(4, 0);
+  if (mode === "choose" || mode === "selection") { h.controller.setSelectionMode("choose"); h.face(1).emit("click"); }
+  h.controller.setSelectionMode(mode);
+  const before = structuredClone(h.value());
+  h.controller.setCapturing(true); h.controller.removeSelected(); assert.deepEqual(h.value(), before);
+  h.controller.setCapturing(false); h.controller.setEditing(false); h.controller.removeSelected(); assert.deepEqual(h.value(), before);
+  h.controller.setEditing(true); h.controller.removeSelected();
+  assert.equal(h.value().panels.length, mode === "all" ? 0 : 1);
+});
+
+test("removing selected panels stops an active group drag so later pointer events cannot move survivors", (t) => {
+  const h = harness(t); h.add(-4, 0); h.add(4, 0); h.add(20, 20);
+  h.controller.setSelectionMode("choose"); h.face(1).emit("click"); h.face(2).emit("click"); h.controller.setSelectionMode("selection");
+  const move = h.button("Move selected solar panels");
+  move.emit("pointerdown", { clientX: 0, clientY: 0 }); move.emit("pointermove", { clientX: 5, clientY: 5 });
+  const survivor = structuredClone(h.value().panels[2]);
+  h.controller.removeSelected();
+  assert.equal(move.hasPointerCapture(1), false);
+  move.emit("pointermove", { clientX: 100, clientY: 100 }); move.emit("pointerup");
+  assert.deepEqual(h.value().panels, [survivor]);
+});
+
+test("removing during drag selection uses the currently highlighted panels and cancels the selection box", (t) => {
+  const h = harness(t); h.add(-4, 0); h.add(4, 0); h.add(20, 20);
+  const survivor = structuredClone(h.value().panels[2]);
+  h.controller.setSelectionMode("choose"); h.face(3).emit("click");
+  h.mapElement.emit("pointerdown", { clientX: -5, clientY: -2 }); h.mapElement.emit("pointermove", { clientX: 5, clientY: 2 });
+  assert.deepEqual(h.value().selectedIds, [1, 2]);
+  h.controller.removeSelected();
+  assert.deepEqual(h.value(), { panels: [survivor], selectedId: null, selectedIds: [], selectionMode: "one" });
+  assert.equal(h.selectionBox().hidden, true); assert.equal(h.mapElement.hasPointerCapture(1), false);
+  h.mapElement.emit("pointermove", { clientX: 40, clientY: 50 }); h.mapElement.emit("pointerup");
+  assert.deepEqual(h.value().panels, [survivor]); assert.deepEqual(h.value().selectedIds, []);
 });
 
 test("capture fits every rotated and tilted face before attaching a layout that was off-screen", async (t) => {

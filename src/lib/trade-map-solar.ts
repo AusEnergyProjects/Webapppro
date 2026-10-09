@@ -349,9 +349,12 @@ export function createTradeMapSolarLayout(api: typeof google.maps, map: google.m
     if (source) addPanel(adjacentSolarPanel(source, direction, (from, distance, heading) => api.geometry.spherical.computeOffset(from, distance, heading).toJSON()));
   }
   function removeSelected() {
-    if (selectionMode !== "one" || selectedId === null || capturing) return;
+    if (!editing || capturing) return;
+    const ids = selectionMode === "one" ? selectedId === null ? [] : [selectedId] : [...selectedIds];
+    if (!ids.length) return;
     stopGesture();
-    entries.get(selectedId)?.element.remove(); entries.delete(selectedId); selectedIds.delete(selectedId); selectedId = null; publish();
+    for (const id of ids) { entries.get(id)?.element.remove(); entries.delete(id); }
+    selectedId = null; selectedIds.clear(); selectionMode = "one"; publish();
   }
   function beginCapture(signal: AbortSignal, onInvalid: () => void) {
     if (signal.aborted || disposed) throw new Error("Capture cancelled.");
