@@ -88,7 +88,8 @@ test("Current council profile previews the real, safe customer journey", { skip:
         await preview.waitFor({ state: "visible" });
         await preview.getByText("Preview using Synthetic Coastal Council.", { exact: false }).waitFor();
         assert.equal(await preview.getByRole("link", { name: "Back to council website", exact: false }).getAttribute("href"), "https://www.coastalcouncil.vic.gov.au/energy");
-        assert.match(await preview.getByText("Available in participating postcodes", { exact: false }).innerText(), /3182, 3183/);
+        assert.equal(await preview.getByText("Available in participating postcodes", { exact: false }).count(), 0);
+        assert.doesNotMatch(await preview.innerText(), /\b3182\b|\b3183\b/, "The customer page must not expose the council's postcode roster");
         assert.equal(await preview.locator('[style*="--c-header-start"]').evaluate(element => element.style.getPropertyValue("--c-header-start")), "#00402f");
         const logo = preview.getByRole("img", { name: "Synthetic Coastal Council logo", exact: true });
         const previewLogo = await logo.getAttribute("src");
@@ -107,6 +108,12 @@ test("Current council profile previews the real, safe customer journey", { skip:
         assert.equal(await preview.evaluate(element => element.contains(document.activeElement)), true);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         assert.equal(await preview.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+        const choices = preview.getByRole("group", { name: "Property type", exact: true });
+        assert.equal(await choices.evaluate(element => element.scrollWidth <= element.clientWidth), true, "Property choices must fit the customer preview");
+        for (const choice of await choices.getByRole("button").all()) {
+          const size = await choice.boundingBox();
+          assert.ok(size && size.width >= 44 && size.height >= 44, "Home and business choices remain large enough to tap");
+        }
         await preview.getByRole("button", { name: "My business", exact: false }).click();
         await preview.getByRole("button", { name: "Explore upgrade options", exact: false }).click();
         const enquiry = page.getByRole("dialog", { name: "Get upgrade options without the runaround", exact: true });
