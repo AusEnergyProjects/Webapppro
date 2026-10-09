@@ -1,15 +1,15 @@
 import { notFound } from "next/navigation";
-import { ProductComparisonPage } from "@/components/ProductComparisonPage";
-import { findProductGuideCategory, PRODUCT_GUIDE_CATEGORIES } from "@/lib/product-guides";
 import { buildPlatformMetadata } from "@/lib/public-site";
 
 type ProductGuidePageProps = { params: Promise<{ category: string }> };
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const { PRODUCT_GUIDE_CATEGORIES } = await import("@/lib/product-guides");
   return PRODUCT_GUIDE_CATEGORIES.map(category => ({ category: category.slug }));
 }
 
 export async function generateMetadata({ params }: ProductGuidePageProps) {
+  const { findProductGuideCategory } = await import("@/lib/product-guides");
   const category = findProductGuideCategory((await params).category);
   if (!category) notFound();
   return buildPlatformMetadata({
@@ -20,7 +20,9 @@ export async function generateMetadata({ params }: ProductGuidePageProps) {
 }
 
 export default async function ProductCategoryPage({ params }: ProductGuidePageProps) {
+  const { findProductGuideCategory } = await import("@/lib/product-guides");
   const category = findProductGuideCategory((await params).category);
   if (!category) notFound();
+  const { ProductComparisonPage } = await import("@/components/ProductComparisonPage");
   return <ProductComparisonPage category={category} />;
 }

@@ -131,7 +131,7 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
       assert.ok(Array.isArray(product.cons));
     }
   }
-  const html = renderToStaticMarkup(overview.default());
+  const html = renderToStaticMarkup(await overview.default());
   assert.equal((html.match(/<article /g) || []).length, guide.PRODUCT_GUIDE_CATEGORIES[0].options.length, "entry page goes directly to solar tiles");
   for (const slug of slugs) assert.ok(html.includes('href="/guides/products/' + slug + '"'));
 });
@@ -212,7 +212,7 @@ test("server-rendered controls stay disabled until the client can respond", () =
 });
 
 test("category metadata and allowlist stay correct; public search finds brands", async () => {
-  assert.deepEqual(categoryPage.generateStaticParams().map(p => p.category), slugs);
+  assert.deepEqual((await categoryPage.generateStaticParams()).map(p => p.category), slugs);
   for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
     const metadata = await categoryPage.generateMetadata({ params: Promise.resolve({ category: category.slug }) });
     assert.equal(metadata.alternates.canonical, PUBLIC_SITE.apexUrl + "/guides/products/" + category.slug);

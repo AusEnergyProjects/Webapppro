@@ -73,6 +73,11 @@ const workerDynamicEntries = new Set(
     (entryKey) => serverManifest[entryKey]?.dynamicImports || [],
   ),
 );
+const productGuideEntryKey = "src/lib/product-guides.ts";
+if (!serverManifest[productGuideEntryKey] || eagerWorkerEntries.has(productGuideEntryKey) || !workerDynamicEntries.has(productGuideEntryKey)) {
+  throw new Error("Sites server bundle audit failed: the product catalogue must load on demand, outside the eager Worker graph.");
+}
+entryBytes(productGuideEntryKey);
 // The deployment must load retained council evidence through emitted modules.
 // Dynamic JSON imports with attributes can survive bundling as missing source paths.
 for (const name of ["council-community-baseline", "council-veu-baseline"]) {

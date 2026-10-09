@@ -1,5 +1,3 @@
-import { ProductComparisonPage } from "@/components/ProductComparisonPage";
-import { PRODUCT_GUIDE_CATEGORIES } from "@/lib/product-guides";
 import { buildPlatformMetadata } from "@/lib/public-site";
 
 export const metadata = buildPlatformMetadata({
@@ -8,6 +6,8 @@ export const metadata = buildPlatformMetadata({
   description: "Compare photos, clear pros and cons, visual ratings and sourced specs for panels, inverters, batteries, heat pumps, single or multi-room aircon and EV chargers.",
 });
 
-export default function ProductGuidesPage() {
+export default async function ProductGuidesPage() {
+  const { ProductComparisonPage } = await import("@/components/ProductComparisonPage");
+  const { PRODUCT_GUIDE_CATEGORIES } = await import("@/lib/product-guides");
   return <ProductComparisonPage category={PRODUCT_GUIDE_CATEGORIES[0]} overview />;
 }
