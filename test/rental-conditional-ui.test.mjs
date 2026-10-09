@@ -77,6 +77,29 @@ function card(checkKey, response, extra = {}) {
 }
 const input = (tree, name) => nodes(tree, node => node.props?.name === name)[0];
 
+test("web removal targets the selected captured or uploaded photo and disables concurrent evidence actions", async () => {
+  const calls = [];
+  const evidence = [
+    { id: "captured", itemId: "item", fileName: "camera.jpg", contentType: "image/jpeg", sizeBytes: 1000, capture: null },
+    { id: "uploaded", itemId: "item", fileName: "gallery.png", contentType: "image/png", sizeBytes: 2000, capture: null },
+    { id: "document", itemId: "item", fileName: "report.pdf", contentType: "application/pdf", sizeBytes: 3000, capture: null },
+  ];
+  const h = card("ceiling_2027_readiness", {}, { evidence, onUnlink: async (item, id) => { calls.push([item.id, id]); } });
+  const tree = h.render();
+  const photos = nodes(tree, node => node.type === "button" && text(node) === "Remove photo");
+  assert.equal(photos.length, 2);
+  for (const photo of photos) photo.props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [["item", "captured"], ["item", "uploaded"]]);
+  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Remove file").length, 1);
+  const busyTree = h.render({ ...fixtures("ceiling_2027_readiness"), observationCandidates: [], evidence, busy: "unlink:captured", readOnly: false,
+    onSave() {}, onUpload() {}, onUnlink() {}, onDirtyChange() {}, onObservationChange() {}, onRegisterDraft() {} });
+  const removalButtons = nodes(busyTree, node => node.type === "button" && /^(Remove photo|Remove file|Removing\.\.\.)$/.test(text(node)));
+  assert.equal(removalButtons.length, 3);
+  assert.ok(removalButtons.every(node => node.props.disabled));
+  assert.equal(nodes(card("ceiling_2027_readiness", {}, { evidence, readOnly: true }).render(), node => node.type === "button" && /^(Remove photo|Remove file)$/.test(text(node))).length, 0);
+});
+
 test("web insulation offers separate camera and gallery pickers through the existing evidence upload", async () => {
   const uploads = [];
   const h = card("ceiling_2027_readiness", {}, { onUpload: async (...args) => { uploads.push(args); } });

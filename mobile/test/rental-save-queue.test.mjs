@@ -31,7 +31,7 @@ function fixture() {
   const input = { workOrderId: 'job-1', module: assessmentModule, baseItem, baseFinding: null, draftKey: 'module-1:insulation:ceiling:property', draftSnapshot: { outcome: 'meets', photos: [] },
     body: { action: 'save_item', moduleId: assessmentModule.id, sectionKey: 'insulation', checkKey: 'ceiling', instanceKey: 'property',
       locationLabel: '', outcome: 'meets', response: {}, publicNotes: '', internalNotes: '', sortOrder: 0 }, photos: [], purpose: 'Ceiling insulation' };
-  return { input, result: { ok: true, inspection: { id: 'inspection-1', revision: 1 }, modules: [clone(assessmentModule)], items: [], findings: [], evidence: [] } };
+  return { input, result: { ok: true, permissions: { canEdit: true }, inspection: { id: 'inspection-1', revision: 1 }, modules: [clone(assessmentModule)], items: [], findings: [], evidence: [] } };
 }
 
 function harness(shared = {}) {
@@ -88,6 +88,10 @@ function harness(shared = {}) {
     } else if (body.action === 'link_evidence') {
       assert.equal(body.expectedModuleRevision, result.modules[0].revision);
       result.evidence.push({ id: `evidence-${body.jobMediaId}`, moduleId: result.modules[0].id, itemId: body.itemId, jobMediaId: body.jobMediaId, status: 'active' });
+      advance(result);
+    } else if (body.action === 'unlink_evidence') {
+      assert.equal(body.expectedModuleRevision, result.modules[0].revision);
+      result.evidence.find((entry) => entry.id === body.evidenceId).status = 'superseded';
       advance(result);
     } else if (body.action === 'save_module_answers') {
       assert.equal(body.expectedRevision, result.modules[0].revision);
@@ -462,6 +466,89 @@ function photo() {
   return { uri: 'file:///photo.jpg', width: 3000, height: 2000, capture: { captureObservedAtUtc: '2026-09-09T04:00:00Z' },
     location: { permission: { granted: true }, location: { state: 'captured', observedAtUtc: '2026-09-09T04:00:01Z', accuracyMetres: 10, mocked: false, latitude: -37, longitude: 144 } } };
 }
+
+test('synced photo removal persists offline, unlinks only the chosen file and replays a lost response safely', async () => {
+  const h = harness();
+  h.state.result.evidence = ['wrong', 'keep'].map(id => ({ id, itemId: 'item-1', jobMediaId: 'media-' + id, moduleId: 'module-1', status: 'active' }));
+  const connected = h.defaultRequest;
+  h.state.handler = async () => { throw new Error('Offline'); };
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: h.state.result.modules[0], evidenceId: 'wrong' });
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 1);
+  const restarted = h.restart(); let lost = true;
+  restarted.state.handler = async (...args) => {
+    const result = await connected(...args);
+    if (lost && args[1]?.body && JSON.parse(args[1].body).action === 'unlink_evidence') { lost = false; throw new Error('Response lost'); }
+    return result;
+  };
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 1);
+  await restarted.queue.processRentalSaveQueue('job-1');
+  assert.equal((await restarted.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.result.evidence.find(e => e.id === 'wrong').status, 'superseded');
+  assert.equal(h.state.result.evidence.find(e => e.id === 'keep').status, 'active');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 1);
+  assert.ok(h.state.calls.every(call => call.body?.action !== 'delete_media'));
+});
+
+test('a queued photo removed during upload is never linked again and its answer and other photo finish syncing', async () => {
+  const h = harness(), gate = deferred(), input = fixture().input;
+  input.photos = [photo(), { ...photo(), uri: 'file:///keep.jpg' }]; input.draftSnapshot.photos = clone(input.photos);
+  h.files.set('file:///keep.jpg', { size: 2048, bytes: 'keep' });
+  h.state.handler = async (...args) => {
+    if (args[0] === '/api/trade-field-work' && !h.state.uploadStarted) { h.state.uploadStarted = true; await gate.promise; }
+    return h.defaultRequest(...args);
+  };
+  const source = await h.queue.enqueueRentalSave(input);
+  await until(() => h.state.uploadStarted);
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: input.module, sourceSaveId: source.id, uri: input.photos[0].uri });
+  await h.queue.acknowledgeRentalSave(source.id);
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  const state = await h.queue.getRentalSaveState('job-1');
+  assert.equal(state.pending, 0, JSON.stringify(state.records));
+  const saved = state.records.find(entry => entry.id === source.id);
+  assert.deepEqual(saved.photos.map(p => p.uri), ['file:///keep.jpg']);
+  assert.deepEqual(saved.draftSnapshot.photos.map(p => p.uri), ['file:///keep.jpg']);
+  assert.equal(h.state.result.evidence.filter(e => e.status === 'active').length, 1);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'link_evidence').length, 1);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'save_item').length, 1);
+});
+
+test('photo removal recovers a source blocked by GPS and never uploads the removed image', async () => {
+  const h = harness(), input = fixture().input;
+  input.photos = [{ ...photo(), location: null }]; input.draftSnapshot.photos = clone(input.photos);
+  const source = await h.queue.enqueueRentalSave(input); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1);
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: input.module, sourceSaveId: source.id, uri: input.photos[0].uri });
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.calls.filter(call => call.path === '/api/trade-field-work').length, 0);
+});
+
+test('a failed upload does not prevent the already requested photo removal from draining the queue', async () => {
+  const h = harness(), gate = deferred(), input = fixture().input;
+  input.photos = [photo()]; input.draftSnapshot.photos = clone(input.photos);
+  h.state.handler = async (...args) => {
+    if (args[0] === '/api/trade-field-work') { h.state.uploadStarted = true; await gate.promise; throw new Error('Upload connection lost'); }
+    return h.defaultRequest(...args);
+  };
+  const source = await h.queue.enqueueRentalSave(input); await until(() => h.state.uploadStarted);
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: input.module, sourceSaveId: source.id, uri: input.photos[0].uri });
+  gate.resolve(); await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).pending, 0);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'link_evidence').length, 0);
+});
+
+test('synced removal rejects a stale module revision and a completed assessment', async () => {
+  const h = harness(); h.state.result.evidence = [{ id: 'wrong', moduleId: 'module-1', status: 'active' }];
+  const stale = clone(h.state.result.modules[0]); h.state.result.modules[0].revision++;
+  await h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: stale, evidenceId: 'wrong' });
+  await h.queue.processRentalSaveQueue('job-1');
+  assert.equal((await h.queue.getRentalSaveState('job-1')).conflicts, 1);
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'unlink_evidence').length, 0);
+  h.state.result.modules[0].status = 'complete';
+  await assert.rejects(h.queue.enqueueRentalPhotoRemoval({ workOrderId: 'job-1', module: h.state.result.modules[0], evidenceId: 'wrong' }), /locked/);
+});
 
 test('gallery and camera evidence share durable upload/linking while their source remains truthful', async () => {
   for (const source of ['native_file_upload', undefined]) {

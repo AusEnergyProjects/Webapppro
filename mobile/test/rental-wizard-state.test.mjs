@@ -106,7 +106,7 @@ function saveEnvironment() {
   return {
     active: { id: 'module', revision: 1, template: { templateVersion: 3 } }, item: { revision: 0, instanceKey: 'property', sortOrder: 0 }, storedItem: undefined,
     section: { key: 'bathroom' }, check: { key: 'bathroom', repeatBy: 'property', requiredEvidenceCount: 1, prompt: 'Bathroom condition' },
-    draft, data: { findings: [] }, evidence: [], simpleReview: false, RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationFieldIsVisible,
+    draft, saves: [], data: { findings: [] }, evidence: [], simpleReview: false, RENTAL_ADVERSE_OUTCOMES: new Set(), rentalAssessorFields, rentalObservationNumberIsValid, rentalObservationFieldIsVisible,
     rentalAssessorEvidenceRequirement, rentalObservationBlockers,
     workOrderId: 'job', key: 'draft', cacheRef: { current: { drafts: { draft }, answers: {} } },
     setSaves() {}, setCache() {}, persist: async () => {}, advanced: false,
@@ -456,7 +456,7 @@ test('native insulation exposes camera and gallery controls with the same edit a
   const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
   const env = { check: { key: 'ceiling_2027_readiness' }, photoRequirement: { minimumFiles: 1, minimumPhotos: 1 }, active: { key: 'minimum_standards' },
     presentation: undefined,
-    styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button',
+    styles: {}, editable: true, canRemovePhotos: true, busy: '', evidence: [], visiblePhotos: [], draft: { photos: [] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button',
     capture(fromGallery) { env.called = fromGallery; } };
   const button = label => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button' && renderedText(node) === label)[0];
   assert.equal(button('Take photo').props.disabled, false); assert.equal(button('Upload from gallery').props.disabled, false);
@@ -696,7 +696,7 @@ test('native photo prompts reflect the corrected answer while previously capture
   const photo = { uri: 'saved.jpg', capture: { captureObservedAtUtc: '2026-10-08T00:00:00Z' }, mediaId: 'saved-media' };
   const env = { check, photoRequirement: rentalAssessorEvidenceRequirement(check, 'does_not_meet'), active: { key: 'minimum_standards' },
     presentation: undefined,
-    styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [photo] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button',
+    styles: {}, editable: true, canRemovePhotos: true, busy: '', evidence: [], visiblePhotos: [photo], draft: { photos: [photo] }, View: 'view', Text: 'text', Image: 'image', FieldButton: 'button', removeSavedPhoto() {},
     capture() { assert.fail('Rendering does not capture or delete evidence'); }, refreshPhotoGps() {}, removePhoto() { assert.fail('Changing an answer never deletes a photo'); } };
   let tree = renderedNativeBranch(select, env); assert.match(renderedText(tree), /2.*photos required/); assert.match(renderedText(tree), /overview/);
   env.photoRequirement = rentalAssessorEvidenceRequirement(check, 'meets'); tree = renderedNativeBranch(select, env);
@@ -705,6 +705,35 @@ test('native photo prompts reflect the corrected answer while previously capture
   env.check = currentTemplate.sections.flatMap(section => section.checks).find(entry => entry.key === 'cooling_2027_readiness');
   env.photoRequirement = rentalAssessorEvidenceRequirement(env.check, 'meets');
   assert.match(renderedText(renderedNativeBranch(select, env)), /controller|operating indicator/i);
+});
+
+test('saved native photos have distinct names and guarded removal controls, including while an answer is queued', () => {
+  const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
+  const env = { check: {}, photoRequirement: { minimumFiles: 0, minimumPhotos: 0 }, active: { key: 'minimum_standards' },
+    presentation: undefined, styles: {}, editable: false, canRemovePhotos: true, busy: '', visiblePhotos: [], draft: { photos: [] },
+    evidence: [{ id: 'one', fileName: 'chosen.jpg', caption: 'Ceiling insulation', contentType: 'image/jpeg' },
+      { id: 'two', fileName: 'keep.jpg', caption: 'Ceiling insulation', contentType: 'image/jpeg' }],
+    View: 'view', Text: 'text', Image: 'image', FieldButton: 'button', removeSavedPhoto(id) { env.removed = id; } };
+  const buttons = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button' && renderedText(node) === 'Remove photo');
+  const tree = renderedNativeBranch(select, env);
+  assert.match(renderedText(tree), /chosen\.jpg/); assert.match(renderedText(tree), /keep\.jpg/);
+  assert.equal(buttons().length, 2); assert.equal(buttons()[0].props.disabled, false);
+  buttons()[0].props.onPress(); assert.equal(env.removed, 'one');
+  env.canRemovePhotos = false; assert.ok(buttons().every(button => button.props.disabled));
+  env.canRemovePhotos = true; env.busy = 'remove'; assert.ok(buttons().every(button => button.props.disabled));
+});
+
+test('successful photo-removal tombstones cannot count as evidence or re-enter the Next queue before local cleanup', async () => {
+  const env = saveEnvironment(); env.draft.photos = [{ ...env.draft.photos[0], uri: 'wrong' }];
+  env.saves = [{ status: 'succeeded', photoRemoval: { uri: 'wrong' } }];
+  env.enqueueRentalSave = () => assert.fail('Removed evidence cannot satisfy a required photo');
+  await assert.rejects(mountedSaveAnswer(env)(), /Attach the evidence supporting this result/);
+  env.draft.photos.push({ ...env.draft.photos[0], uri: 'keep' });
+  env.enqueueRentalSave = async input => { env.sent = input; return { id: 'saved' }; }; env.advanceQuestion = () => {};
+  await mountedSaveAnswer(env)();
+  assert.deepEqual(env.sent.photos.map(photo => photo.uri), ['keep']);
+  assert.deepEqual(env.sent.draftSnapshot.photos.map(photo => photo.uri), ['keep']);
+  assert.deepEqual(env.sent.sourceDraftSnapshot.photos.map(photo => photo.uri), ['keep']);
 });
 
 test('native earlier records include retired property switchboard answers but never replace the current check', () => {
@@ -810,7 +839,7 @@ test('native shared hot water uses current response for apartment wording, save 
   assert.equal(current.presentation.prompt, 'Is hot water supplied to this apartment?');
   assert.match(current.photoRequirement.reason, /apartment tap or shower/);
   const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
-  const tree = renderedNativeBranch(select, { check, ...current, active: env.active, styles: {}, editable: true, busy: '', evidence: [], draft: { photos: [] }, View: 'view', Text: 'text', FieldButton: 'button' });
+  const tree = renderedNativeBranch(select, { check, ...current, active: env.active, styles: {}, editable: true, canRemovePhotos: true, busy: '', evidence: [], visiblePhotos: [], draft: { photos: [] }, View: 'view', Text: 'text', FieldButton: 'button' });
   assert.match(renderedText(tree), /apartment tap or shower/); assert.doesNotMatch(renderedText(tree), /complete system data plate/);
   const save = saveEnvironment(); save.active = { id: 'module', revision: 1, key: 'minimum_standards', template }; save.check = check; save.draft.response = response;
   save.enqueueRentalSave = async input => { save.sent = input; return { id: 'saved' }; }; save.advanceQuestion = () => {};
@@ -844,7 +873,7 @@ test('each optional module confirms its own credential and finishes without prom
 });
 
 test('issued report email uses current sharing access after issuance closes canIssue', () => {
-  const declaration = source.slice(source.indexOf('  const canEmailReport ='), source.indexOf('  const evidence ='));
+  const declaration = source.slice(source.indexOf('  const canEmailReport ='), source.indexOf('  const photoRemovals ='));
   const compiled = ts.transpileModule(declaration + '\nreturn canEmailReport;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const evaluate = new Function('data', 'report', 'issueReport', compiled);
   assert.equal(evaluate({ deliveryRecipient: { email: 'client@example.test' }, permissions: { canIssue: false, canRevokeLink: true } }, { id: 'issued' }, true), true);

@@ -65,6 +65,7 @@ export type RentalSaveRecord = Omit<RentalSaveInput, 'photos'> & {
   savedFinding?: RentalAssessmentFinding | null;
   answerSaved?: boolean;
   finish?: { reviewed: RentalAssessmentResult; dependencyIds: string[]; email: boolean; recipientEmail: string; issueReport?: boolean; confirmCredential?: boolean };
+  photoRemoval?: { sourceSaveId?: string; uri?: string; evidenceId?: string };
 };
 export type RentalSaveState = {
   records: RentalSaveRecord[];
@@ -275,6 +276,45 @@ export async function enqueueRentalSave(input: RentalSaveInput): Promise<RentalS
       photos: (snapshot.photos || []).map((photo) => ({ ...photo, clientUploadId: photo.clientUploadId || Crypto.randomUUID(), captureSessionId: photo.captureSessionId || captureSessionId() })) };
     await persist(owner, created);
     return created;
+  });
+  void processRentalSaveQueue(snapshot.workOrderId).catch(() => undefined);
+  return copy(record);
+}
+
+/** Remove only this assessment link. Uploaded originals remain in the job files. */
+export async function enqueueRentalPhotoRemoval(input: { workOrderId: string; module: RentalAssessmentModule;
+  evidenceId?: string; sourceSaveId?: string; uri?: string }) {
+  const snapshot = copy(input);
+  if (!snapshot.module?.id || !snapshot.workOrderId || (!snapshot.evidenceId && (!snapshot.sourceSaveId || !snapshot.uri))) {
+    throw new RentalSaveQueueError('The photo reference is unavailable. Reopen this assessment.', 'RENTAL_SAVE_INVALID');
+  }
+  if (!['draft', 'not_started'].includes(snapshot.module.status)) throw conflict('This assessment is completed or locked. Reopen it before removing a photo.');
+  const owner = await ownerNow();
+  const record = await serial(localGates, jobKey(owner, snapshot.workOrderId), async () => {
+    await checkOwner(owner); assertJobAvailable(owner, snapshot.workOrderId);
+    if (finalizing.has(jobKey(owner, snapshot.workOrderId))) throw pendingError();
+    const records = await recordsFor(owner, snapshot.workOrderId);
+    const prior = records.find((entry) => entry.photoRemoval && entry.status !== 'succeeded'
+      && entry.photoRemoval.evidenceId === snapshot.evidenceId && entry.photoRemoval.sourceSaveId === snapshot.sourceSaveId
+      && entry.photoRemoval.uri === snapshot.uri);
+    if (prior) {
+      if (prior.status === 'conflict') { prior.module = snapshot.module; prior.status = 'queued'; prior.error = ''; prior.errorCode = ''; await persist(owner, prior); }
+      return prior;
+    }
+    if (snapshot.sourceSaveId && !records.some((entry) => entry.id === snapshot.sourceSaveId
+      && entry.module.id === snapshot.module.id && entry.photos.some((photo) => photo.uri === snapshot.uri))) {
+      throw conflict('This photo finished syncing. Reopen its question and remove the saved photo.');
+    }
+    for (const finish of records.filter((entry) => entry.finish && entry.status !== 'succeeded')) {
+      finish.status = 'conflict'; finish.error = 'The assessment evidence changed after Finish was requested. Review it and finish again.';
+      await persist(owner, finish);
+    }
+    const created: RentalSaveRecord = { schemaVersion: 1, id: Crypto.randomUUID(), ownerKey: owner.key,
+      workOrderId: snapshot.workOrderId, module: snapshot.module, body: { action: 'unlink_evidence' },
+      draftKey: `remove-photo:${snapshot.evidenceId || snapshot.sourceSaveId + ':' + snapshot.uri}`, draftSnapshot: null,
+      createdAt: Math.max(Date.now(), ...records.map((entry) => entry.createdAt + 1)), status: 'queued', error: '', photos: [],
+      photoRemoval: { evidenceId: snapshot.evidenceId, sourceSaveId: snapshot.sourceSaveId, uri: snapshot.uri } };
+    await persist(owner, created); return created;
   });
   void processRentalSaveQueue(snapshot.workOrderId).catch(() => undefined);
   return copy(record);
@@ -634,6 +674,43 @@ async function uploadPhoto(owner: LocalDataOwner, record: RentalSaveRecord, phot
   } finally { requests.delete(controller); }
 }
 
+async function removalRequested(owner: LocalDataOwner, record: RentalSaveRecord, photo: PhotoCheckpoint) {
+  return (await recordsFor(owner, record.workOrderId)).some((entry) => entry.status !== 'succeeded'
+    && entry.photoRemoval?.sourceSaveId === record.id && entry.photoRemoval.uri === photo.uri);
+}
+
+function withoutPhoto(snapshot: unknown, uri: string | undefined) {
+  const draft = object(snapshot);
+  return Array.isArray(draft.photos) ? { ...draft, photos: draft.photos.filter((photo) => object(photo).uri !== uri) } : snapshot;
+}
+
+async function processPhotoRemoval(owner: LocalDataOwner, record: RentalSaveRecord, result: RentalAssessmentResult) {
+  const removal = record.photoRemoval!;
+  if (result.permissions?.canEdit !== true) throw new ApiError('Your current Team access does not allow removing assessment photos.', 403, 'RENTAL_EDIT_PERMISSION_REQUIRED');
+  const assessmentModule = currentModule(record, result);
+  const source = removal.sourceSaveId ? (await recordsFor(owner, record.workOrderId)).find((entry) => entry.id === removal.sourceSaveId) : undefined;
+  if (removal.sourceSaveId && !source) throw conflict('The saved photo changed. Reopen its question before removing it.');
+  const photo = source?.photos.find((entry) => entry.uri === removal.uri);
+  const evidence = removal.evidenceId ? result.evidence?.find((entry) => entry.id === removal.evidenceId)
+    : result.evidence?.find((entry) => entry.jobMediaId === photo?.mediaId && entry.itemId === source?.savedItem?.id && entry.status === 'active');
+  if (evidence && evidence.moduleId !== record.module.id) throw conflict('This photo belongs to another assessment.');
+  if (evidence?.status === 'active') {
+    if (removal.evidenceId && assessmentModule.revision !== record.module.revision) throw conflict('This assessment changed before the photo was removed. Review the latest photos and try again.');
+    if (source?.savedItem && result.items?.find((entry) => entry.id === source.savedItem!.id)?.revision !== source.savedItem.revision) throw conflict();
+    result = await request(owner, record.workOrderId, { action: 'unlink_evidence', evidenceId: evidence.id,
+      expectedModuleRevision: assessmentModule.revision });
+  } else if (removal.evidenceId && !evidence) throw conflict('This photo reference changed. Reopen its question.');
+  if (source) {
+    source.photos = source.photos.filter((entry) => entry.uri !== removal.uri);
+    source.draftSnapshot = withoutPhoto(source.draftSnapshot, removal.uri);
+    if (source.sourceDraftSnapshot !== undefined) source.sourceDraftSnapshot = withoutPhoto(source.sourceDraftSnapshot, removal.uri);
+    // The answer remains queued; retry its existing safeguards after the mistaken photo is removed.
+    if (source.status !== 'succeeded') { source.status = 'queued'; source.error = ''; source.errorCode = ''; }
+    await persist(owner, source);
+  }
+  await cacheResult(owner, record.workOrderId, result);
+}
+
 async function processRecord(owner: LocalDataOwner, record: RentalSaveRecord) {
   const confirmed = record.finish ? await cachedResult(owner, record.workOrderId) : null;
   if (confirmed && await finishAlreadyConfirmed(record, confirmed)) {
@@ -644,6 +721,11 @@ async function processRecord(owner: LocalDataOwner, record: RentalSaveRecord) {
   record.status = 'syncing'; record.error = ''; record.errorCode = '';
   await persist(owner, record);
   let result = await request(owner, record.workOrderId);
+  if (record.photoRemoval) {
+    await processPhotoRemoval(owner, record, result);
+    record.status = 'succeeded'; record.error = ''; record.errorCode = '';
+    await persist(owner, record); return;
+  }
   if (record.finish) {
     await processFinish(owner, record, result);
     record.status = 'succeeded'; record.error = '';
@@ -652,7 +734,9 @@ async function processRecord(owner: LocalDataOwner, record: RentalSaveRecord) {
   }
   result = await saveAnswer(owner, record, result);
   for (const photo of record.photos) {
+    if (await removalRequested(owner, record, photo)) continue;
     if (!photo.mediaId) await uploadPhoto(owner, record, photo);
+    if (await removalRequested(owner, record, photo)) continue;
     // Another device may have edited during a slow upload. Obtain a fresh CAS revision and recheck the saved item.
     result = await request(owner, record.workOrderId);
     const assessmentModule = currentModule(record, result);
@@ -692,7 +776,10 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
           : !other.finish && other.module.id === entry.module.id))));
     if (!record) return;
     attempted.add(record.id);
-    try { await processRecord(owner, record); }
+    try {
+      await processRecord(owner, record);
+      if (record.photoRemoval?.sourceSaveId) attempted.delete(record.photoRemoval.sourceSaveId);
+    }
     catch (error) {
       await checkOwner(owner);
       if (deletedJobs.has(jobKey(owner, workOrderId))) return;
@@ -704,7 +791,8 @@ async function processJob(owner: LocalDataOwner, workOrderId: string) {
       if (credentialCode && record.body.action === 'save_item') record.error += ' Check Team qualifications and supporting documents, then Sync to retry. Your answer and photos are retained.';
       await persist(owner, record);
       if (error instanceof ApiError && [401, 403, 426].includes(error.status)) throw error;
-      if (record.status === 'retry' && !(error instanceof RentalPhotoLocationPendingError)) return;
+      if (record.status === 'retry' && !(error instanceof RentalPhotoLocationPendingError)
+        && !(await recordsFor(owner, workOrderId)).some((entry) => entry.photoRemoval?.sourceSaveId === record.id && entry.status !== 'succeeded')) return;
     }
   }
 }
@@ -790,8 +878,11 @@ export async function acknowledgeRentalSave(id: string) {
   const record = (await recordsFor(owner)).find((entry) => entry.id === id);
   if (!record || record.status !== 'succeeded') return;
   if ((await recordsFor(owner, record.workOrderId)).some((entry) => entry.status !== 'succeeded' && entry.finish?.dependencyIds.includes(id))) return;
+  if ((await recordsFor(owner, record.workOrderId)).some((entry) => entry.status !== 'succeeded' && entry.photoRemoval?.sourceSaveId === id)) return;
   await serial(localGates, jobKey(owner, record.workOrderId), async () => {
     await checkOwner(owner);
+    if ((await recordsFor(owner, record.workOrderId)).some((entry) => entry.status !== 'succeeded'
+      && (entry.finish?.dependencyIds.includes(id) || entry.photoRemoval?.sourceSaveId === id))) return;
     await writeRentalSetting(owner, recordKey(record), null);
   });
   emit(record.workOrderId);

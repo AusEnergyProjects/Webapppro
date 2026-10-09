@@ -26,7 +26,7 @@ import { RENTAL_ASSESSMENT_TEMPLATE_VERSION } from '../../../src/lib/trade-renta
 import { RENTAL_ASSESSOR_TITLE, rentalAssessorMetadataField, rentalAssessorOutcomePatch, rentalWindowIsFixed,
   rentalAssessorCheckPresentation, rentalAssessorEvidenceRequirement, rentalAssessorSections,
   RENTAL_SHOWER_CHOICES, rentalShowerChoicePatch, rentalShowerChoiceValue } from '../../../src/lib/rental-assessor-workflow.mjs';
-import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRentalSave, enqueueRentalFinish, getRentalSaveState,
+import { acknowledgeRentalSave, loadRentalResult, discardRentalSave, enqueueRentalSave, enqueueRentalFinish, enqueueRentalPhotoRemoval, getRentalSaveState,
   processRentalSaveQueue, rememberRentalPhotoLocation, requestWhenRentalSynced, subscribeRentalSaves,
   type RentalSaveRecord, type RentalQueuedPhoto } from '@/lib/rental-save-queue';
 
@@ -254,7 +254,15 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         if (!live || ticket !== revision) return;
         setSaves(state.records);
         if (state.result) applyResult(state.result);
+        const removedUris = new Set(state.records.filter((entry) => entry.status === 'succeeded' && entry.photoRemoval?.uri)
+          .map((entry) => entry.photoRemoval!.uri));
+        if (removedUris.size && Object.values(cacheRef.current.drafts).some((draft) => draft.photos.some((photo) => removedUris.has(photo.uri)))) {
+          const nextCache = { ...cacheRef.current, drafts: Object.fromEntries(Object.entries(cacheRef.current.drafts)
+            .map(([draftKey, draft]) => [draftKey, { ...draft, photos: draft.photos.filter((photo) => !removedUris.has(photo.uri)) }])) };
+          cacheRef.current = nextCache; setCache(nextCache); await persist(nextCache);
+        }
         for (const record of state.records.filter((entry) => entry.status === 'succeeded' && !acknowledged.has(entry.id))) {
+          if (state.records.some((entry) => entry.status !== 'succeeded' && entry.photoRemoval?.sourceSaveId === record.id)) continue;
           // Recover an interrupted local clear, without deleting edits made after submission.
           const local = cacheRef.current.drafts[record.draftKey];
           if (local && sameQueuedDraft(local, record, state.result || {})) {
@@ -372,7 +380,16 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       || unfinishedMetadata(entry, cache, saves).length > 0));
   const issueReport = remainingModules.length === 0;
   const canEmailReport = Boolean(data.deliveryRecipient?.email) && (report ? data.permissions?.canRevokeLink === true : issueReport && data.permissions?.canIssue === true);
-  const evidence = item ? data.evidence?.filter((e) => e.itemId === item.id && e.status === 'active') || [] : [];
+  const photoRemovals = saves.filter((entry) => entry.photoRemoval && entry.status !== 'conflict');
+  const removedMedia = new Set(photoRemovals.flatMap((entry) => {
+    const source = saves.find((save) => save.id === entry.photoRemoval?.sourceSaveId);
+    return source?.photos.filter((photo) => photo.uri === entry.photoRemoval?.uri).map((photo) => photo.mediaId) || [];
+  }));
+  const evidence = item ? data.evidence?.filter((e) => e.itemId === item.id && e.status === 'active'
+    && !photoRemovals.some((entry) => entry.photoRemoval?.evidenceId === e.id) && !removedMedia.has(e.jobMediaId)) || [] : [];
+  const visiblePhotos = draft?.photos.filter((photo) => !photoRemovals.some((entry) => entry.photoRemoval?.uri === photo.uri)) || [];
+  const canRemovePhotos = data.permissions?.canEdit === true && Boolean(active && ['draft', 'not_started'].includes(active.status))
+    && !['issued', 'issuing'].includes(data.inspection?.status || '');
   function change(values: Partial<Draft>) {
     timing.activity();
     if (!draft) return;
@@ -510,13 +527,31 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     setCache(next); cacheRef.current = next; await persist(next);
   }
   async function removePhoto(uri: string) {
+    if (!canRemovePhotos || !active) return;
     await perform('remove', async () => {
-      const currentDraft = cacheRef.current.drafts[key];
+      const currentDraft = cacheRef.current.drafts[key] || draft;
       if (!currentDraft) return;
+      const source = [...saves].reverse().find((save) => save.draftKey === key && save.photos.some((photo) => photo.uri === uri));
+      const photo = currentDraft.photos.find((entry) => entry.uri === uri);
+      const linked = photo?.mediaId && evidence.find((entry) => entry.jobMediaId === photo.mediaId);
+      if (source || linked) {
+        await enqueueRentalPhotoRemoval({ workOrderId, module: active,
+          ...(source ? { sourceSaveId: source.id, uri } : { evidenceId: linked ? linked.id : undefined }) });
+        setSaves((await getRentalSaveState(workOrderId)).records);
+      }
       const next = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts, [key]: { ...currentDraft,
         photos: currentDraft.photos.filter((photo) => photo.uri !== uri) } } };
       setCache(next); cacheRef.current = next; await persist(next);
     });
+  }
+  function removeSavedPhoto(evidenceId: string) {
+    if (!canRemovePhotos || !active) return;
+    Alert.alert('Remove photo from this assessment?', 'This removes the selected photo from the assessment. The original stays in the job files.', [
+      { text: 'Keep photo', style: 'cancel' }, { text: 'Remove photo', style: 'destructive', onPress: () => void perform('remove', async () => {
+        await enqueueRentalPhotoRemoval({ workOrderId, module: active, evidenceId });
+        setSaves((await getRentalSaveState(workOrderId)).records);
+      }) },
+    ]);
   }
   async function refreshPhotoGps(index: number) {
     if (!draft) return;
@@ -557,9 +592,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         scopeSummary: draft.scopeSummary.trim(), severity: draft.severity, recommendedAction: draft.scopeSummary.trim(),
         quantityMilli: existingFinding?.quantityMilli || 0, unitLabel: existingFinding?.unitLabel || 'each',
         details: { ...existingFinding?.details, quotation: draft.quotation, immediateAction: draft.immediateAction.trim(), responsiblePeopleNotified: draft.notified } } : undefined };
-    const photoCount = evidence.filter((entry) => entry.contentType.startsWith('image/')).length + draft.photos.length;
+    const photos = draft.photos.filter((photo) => !saves.some((save) => save.status !== 'conflict' && save.photoRemoval?.uri === photo.uri));
+    const photoCount = evidence.filter((entry) => entry.contentType.startsWith('image/')).length + photos.length;
     const requirement = rentalAssessorEvidenceRequirement(check, draft.outcome, draft.response);
-    if (!check.requiredPdfCount && (evidence.length + draft.photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos)) {
+    if (!check.requiredPdfCount && (evidence.length + photos.length < requirement.minimumFiles || photoCount < requirement.minimumPhotos)) {
       throw new Error(requirement.reason);
     }
     const enforceQuoteCapture = Number(active.template.templateVersion || 0) >= 4;
@@ -570,7 +606,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     // Missing GPS is retained for Sync to explain and resolve. It must not trap the assessor on this check.
     // Next waits only for durable device storage. Network delivery belongs to the queue.
     const record = await enqueueRentalSave({ workOrderId, body, module: active, baseItem: storedItem || null,
-      baseFinding: existingFinding || null, draftKey: key, draftSnapshot: draft, sourceDraftSnapshot: cacheRef.current.drafts[key] || draft, photos: draft.photos, purpose: check.prompt });
+      baseFinding: existingFinding || null, draftKey: key, draftSnapshot: { ...draft, photos },
+      sourceDraftSnapshot: { ...(cacheRef.current.drafts[key] || draft), photos }, photos, purpose: check.prompt });
     setSaves((current) => [...current.filter((entry) => entry.id !== record.id), record]);
     const nextCache = { ...cacheRef.current, drafts: { ...cacheRef.current.drafts }, answers: { ...cacheRef.current.answers } };
     delete nextCache.drafts[key];
@@ -870,12 +907,18 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             {photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <><Text style={styles.body}>{photoRequirement.reason}</Text>{presentation?.photoGuidance || check.photoGuidance ? <Text style={styles.small}>{presentation?.photoGuidance || check.photoGuidance}</Text> : null}</> : <Text style={styles.small}>No photo required for this answer. Add one if it helps explain your observation.</Text>}
             <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'camera'} onPress={() => void capture()}>{photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? 'Take photo' : 'Add optional photo'}</FieldButton>
             {active.key === 'minimum_standards' && check.key === 'ceiling_2027_readiness' ? <FieldButton variant="secondary" disabled={!editable || Boolean(busy)} loading={busy === 'gallery'} onPress={() => void capture(true)}>Upload from gallery</FieldButton> : null}
-            {evidence.length || draft.photos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {draft.photos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
-          {draft.photos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
+            {evidence.length || visiblePhotos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {visiblePhotos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
+          {evidence.filter((entry) => entry.contentType.startsWith('image/')).map((entry, index) => <View key={entry.id} style={styles.pendingPhoto}>
+            <Text style={styles.label}>Saved photo {index + 1}</Text>
+            <Text style={styles.small}>{entry.fileName}{entry.capture?.capturedAtUtc ? ' · ' + new Date(entry.capture.capturedAtUtc).toLocaleString() : ''}</Text>
+            {entry.caption ? <Text style={styles.small}>{entry.caption}</Text> : null}
+            <FieldButton variant="quiet" disabled={!canRemovePhotos || Boolean(busy)} onPress={() => removeSavedPhoto(entry.id)}>Remove photo</FieldButton>
+          </View>)}
+          {visiblePhotos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
             <Text style={styles.small}>Photo {index + 1} {p.source === 'native_file_upload' ? 'added from gallery' : 'saved'} {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : p.locationPending ? 'Recording GPS; you can press Next' : 'GPS needs review; you can keep assessing'}</Text>
             {!p.mediaId && (p.location?.location.state !== 'captured' || p.location.location.accuracyMetres === null || p.location.location.accuracyMetres > 100 || p.location.location.mocked) ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void refreshPhotoGps(index)}>Retry GPS</FieldButton> : null}
-            <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void removePhoto(p.uri)}>Remove pending photo</FieldButton>
+            <FieldButton variant="quiet" disabled={!canRemovePhotos || Boolean(busy)} onPress={() => void removePhoto(p.uri)}>Remove pending photo</FieldButton>
           </View>)}</View>
           <Pressable onPress={() => setGuidanceOpen(!guidanceOpen)}><Text style={styles.link}>{guidanceOpen ? 'Hide guidance' : 'Standard and guidance'}</Text></Pressable>
           {guidanceOpen ? <><Text style={styles.body}>{check.help}</Text>{check.effectiveFrom ? <Text style={styles.small}>Applies from {check.effectiveFrom}. {check.trigger}</Text> : null}{check.sourceUrl ? <Pressable onPress={() => void Linking.openURL(check.sourceUrl || '')}><Text style={styles.link}>Official source</Text></Pressable> : null}<RentalTextField label="Optional report note" value={draft.publicNotes} editable={editable && !busy} onChange={(v) => change({ publicNotes: v })} multiline /></> : null}
