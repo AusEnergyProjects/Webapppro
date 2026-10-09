@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EnquiryRepliesNextStep, type EnquiryEmailDeliveryStatus } from "./EnquiryRepliesNextStep";
 import { EnquiryTimingFields, DEFAULT_ENQUIRY_TIMING, type EnquiryTiming } from "./EnquiryTimingFields";
 import {
   AustralianAddressLookup,
@@ -100,6 +101,7 @@ type PublicPlanEnquiryFormProps = {
   planSnapshot: PublicPlanSnapshot;
   planHref: string;
   className?: string;
+  onComparisonStart?: (target: "electricity" | "gas") => void;
 };
 
 type SubmissionStatus =
@@ -315,6 +317,7 @@ export function PublicPlanEnquiryForm({
   planSnapshot,
   planHref,
   className = "",
+  onComparisonStart,
 }: PublicPlanEnquiryFormProps) {
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerLastName, setCustomerLastName] = useState("");
@@ -346,6 +349,8 @@ export function PublicPlanEnquiryForm({
   const [consent, setConsent] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [gatewayOpen, setGatewayOpen] = useState(false);
+  const [enquiryEmailStatus, setEnquiryEmailStatus] = useState<EnquiryEmailDeliveryStatus>("not_queued");
+  const [customerReplyLinkExpected, setCustomerReplyLinkExpected] = useState(false);
   const [gatewayPlanDownloadBusy, setGatewayPlanDownloadBusy] = useState(false);
   const [gatewayPlanDownloadError, setGatewayPlanDownloadError] = useState("");
   const [quoteWithdrawal, setQuoteWithdrawal] = useState<QuoteWithdrawalStatus>({
@@ -367,7 +372,7 @@ export function PublicPlanEnquiryForm({
   const submissionDialogRef = useRef<HTMLDialogElement>(null);
   const submissionPrimaryActionRef = useRef<HTMLButtonElement>(null);
   const gatewayDialogRef = useRef<HTMLDialogElement>(null);
-  const gatewayFirstActionRef = useRef<HTMLAnchorElement>(null);
+  const gatewayFirstActionRef = useRef<HTMLHeadingElement>(null);
   const gatewayReopenRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -509,6 +514,8 @@ export function PublicPlanEnquiryForm({
     setShareAddress(true);
     setSubmitAttempted(false);
     setGatewayOpen(false);
+    setEnquiryEmailStatus("not_queued");
+    setCustomerReplyLinkExpected(false);
     setGatewayPlanDownloadBusy(false);
     setGatewayPlanDownloadError("");
     setQuoteWithdrawal({ kind: "idle", message: "", cleanupPending: 0 });
@@ -1043,6 +1050,7 @@ export function PublicPlanEnquiryForm({
         reference?: string;
         planEmailSent?: boolean;
         planEmailStatus?: "queued" | "sent" | "delivered" | "not_queued";
+        customerReplyLinkExpected?: boolean;
         received?: boolean;
       };
       if (result.filtered) {
@@ -1063,12 +1071,14 @@ export function PublicPlanEnquiryForm({
       }
       const reference = result.reference || "";
       acceptedLeadReference.current = reference;
+      setEnquiryEmailStatus(result.planEmailStatus ?? (result.planEmailSent ? "sent" : "not_queued"));
+      setCustomerReplyLinkExpected(result.customerReplyLinkExpected === true);
       setSharedQuotePackPrepared(preparedQuoteAnswers.length > 0 || quotePhotos.length > 0);
       acceptedLeadSuccessMessage.current = result.planEmailStatus === "queued"
-        ? "Your enquiry is safely queued for matching trades. Your personalised home plan PDF email is also queued and should arrive shortly. This did not create an account."
+        ? "Your enquiry is saved and your confirmation email is queued. No account was created."
         : result.planEmailSent
-          ? "Your enquiry is ready for matching trades and your personalised home plan PDF email has been accepted for delivery. This did not create an account."
-          : "Your enquiry is safely queued for matching trades. You can download your private plan here while its email is prepared. This did not create an account.";
+          ? "Your enquiry is saved and your confirmation email has been accepted for delivery. No account was created."
+          : "Your enquiry is saved. You can download your plan here while its confirmation email is prepared. No account was created.";
       successfulPdfInput.current = {
         ...publicPlanPdfInput,
         preparedAt: preparedAtFromReference(
@@ -1126,6 +1136,7 @@ export function PublicPlanEnquiryForm({
           <h3 className={styles.title} id="public-plan-enquiry-success-title">We have your request</h3>
           <p role="status">{status.message}</p>
           {status.reference && <p className={styles.reference}>Reference {status.reference}</p>}
+          <EnquiryRepliesNextStep email={email} deliveryStatus={enquiryEmailStatus} replyLinkExpected={customerReplyLinkExpected} />
           <div className={styles.successActions}>
             <button
               className={styles.reset}
@@ -1133,7 +1144,7 @@ export function PublicPlanEnquiryForm({
               type="button"
               onClick={() => setGatewayOpen(true)}
             >
-              Choose what to do next
+              How to see replies
             </button>
             <button className={styles.secondaryAction} type="button" onClick={reset}>Send another enquiry</button>
             {(sharedQuotePackPrepared || quoteWithdrawal.cleanupPending > 0) ? (
@@ -1177,7 +1188,7 @@ export function PublicPlanEnquiryForm({
           <div className={styles.gatewayHeader}>
             <div>
               <span className={styles.eyebrow}>Your next step</span>
-              <h3 id="public-plan-next-steps-title">Where would you like to go next?</h3>
+              <h3 id="public-plan-next-steps-title" ref={gatewayFirstActionRef} tabIndex={-1}>What happens next?</h3>
             </div>
             <button
               aria-label="Close next steps"
@@ -1189,14 +1200,16 @@ export function PublicPlanEnquiryForm({
             </button>
           </div>
           <p id="public-plan-next-steps-description">
-            Your enquiry is complete. Continue with another useful tool or open the printable version of your plan.
+            {customerReplyLinkExpected ? "Your enquiry is complete. You can see replies using the private link in your email." : "Your enquiry is complete. Check your confirmation email for your plan and contact details."}
           </p>
+          <EnquiryRepliesNextStep email={email} deliveryStatus={enquiryEmailStatus} replyLinkExpected={customerReplyLinkExpected} />
+          <p>While you wait, these tools are available if you need them.</p>
           <nav aria-label="Continue in the portal" className={styles.gatewayActions}>
-            <Link href="/compare?from=home-plan" ref={gatewayFirstActionRef}>
+            <Link href="/compare?from=home-plan" onClick={() => onComparisonStart?.("electricity")}>
               <strong>Compare electricity plans</strong>
               <span>Check current electricity offers</span>
             </Link>
-            <Link href="/gas-compare?from=home-plan" prefetch={false}>
+            <Link href="/gas-compare?from=home-plan" prefetch={false} onClick={() => onComparisonStart?.("gas")}>
               <strong>Compare gas plans</strong>
               <span>Check gas offers separately</span>
             </Link>

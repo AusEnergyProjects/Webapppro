@@ -15,7 +15,7 @@ export default function BatteryGuidePage() {
       <h2 id="battery-answer">Compare the extra saving with the extra cost</h2>
       <p>Solar creates electricity. A battery moves some of that energy to another time, with losses. It can reduce later grid purchases, but the stored solar no longer earns an export credit.</p>
       <p>Start with solar-only costs and savings, then check what storage adds. Backup power can also matter to you, but it requires the right equipment and wiring.</p>
-      <div className={styles.inlineLinks}><Link href="/compare">Model solar and battery options</Link><Link href="/case-studies#battery-value">See a battery worked example</Link><Link href="/guides/solar">Start with the solar guide</Link></div>
+      <div className={styles.inlineLinks}><Link href="/compare">Model solar and battery options</Link><Link href="/guides/products/batteries">Explore 20 home battery options</Link><Link href="/case-studies#battery-value">See a battery worked example</Link><Link href="/guides/solar">Start with the solar guide</Link></div>
     </section>
 
     <nav className={styles.jumpNav} aria-label="In this battery guide">

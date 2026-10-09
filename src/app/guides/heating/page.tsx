@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GuideShell, GuideSection } from "@/components/GuideShell";
 import { buildPlatformMetadata } from "@/lib/public-site";
 
@@ -9,6 +10,7 @@ export const metadata = buildPlatformMetadata({
 
 export default function HeatingGuidePage() {
   return <GuideShell label="Heating and cooling guide" title="Reduce the load before sizing the system" introduction="Comfort depends on the home, climate, rooms and operating pattern as well as the appliance. Start with draughts, insulation and shading, then compare equipment sized for the spaces you will actually use.">
+    <section className="guide-callout guide-callout-primary"><div><h2>Which systems could suit the rooms you use?</h2><p>Explore 20 split-system options with comfort features, practical limits and climate checks explained.</p></div><Link href="/guides/products/air-conditioning">Explore heating and cooling systems</Link></section>
     <GuideSection eyebrow="Start with the home" title="Lower demand before buying capacity"><div className="guide-principle-grid">
       <article><strong>Seal and insulate</strong><p>Address uncontrolled draughts, curtains, shading and insulation where practical. A lower heating or cooling load can change the size and running pattern you need.</p></article>
       <article><strong>Choose the rooms</strong><p>Record which rooms need conditioning, their floor area, ceiling height, orientation, glazing and how often they are occupied.</p></article>

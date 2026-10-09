@@ -784,6 +784,19 @@ textarea.control {
   gap: 0.65rem;
 }
 
+.repliesNextStep {
+  background: #e8f8f2;
+  border-left: 4px solid #08775b;
+  border-radius: 10px;
+  margin: 0.75rem 0;
+  padding: 1rem;
+  width: 100%;
+}
+
+.repliesNextStep h4 { margin: 0 0 0.7rem; font-size: 1.1rem; color: #123d39; }
+.repliesNextStep p { margin: 0.6rem 0 0; line-height: 1.55; color: #294e49; overflow-wrap: anywhere; }
+.repliesNextStep a { color: #075c49; text-decoration: underline; }
+
 .success p {
   color: #355d62;
   line-height: 1.55;

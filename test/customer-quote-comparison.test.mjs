@@ -7,6 +7,7 @@ import * as equipment from '../src/lib/trade-quote-equipment.ts';
 import * as documents from '../src/lib/trade-quote-product-documents.ts';
 import * as priceDocuments from '../src/lib/trade-price-book-documents.ts';
 import {canonicalGoogleBusinessProfileUrl} from '../src/lib/trade-google-business-profile.mjs';
+import * as documentTotals from '../src/lib/trade-quote-document-totals.mjs';
 
 function load(path,dependencies){const exports={};const source=ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   Function('require','exports',source)(name=>{assert.ok(Object.hasOwn(dependencies,name),name);return dependencies[name];},exports);return exports;}
@@ -19,13 +20,48 @@ const snapshot={schemaVersion:'trade-quote-document-v1',quoteId:'quote',quoteVer
   choices:[{id:'extra',kind:'addon',groupKey:'extras',name:'Extra pipework',summary:'If selected',totalCents:22000,subtotalCents:22000,taxCents:0,items:[]}]};
 const record=()=>({id:'link',status:'active',token_hash:'PRIVATE TOKEN',quote_id:'quote',quote_version_id:'version',work_order_id:'job',crm_customer_id:'customer',
   version_status:'issued',version_number:1,current_version_number:1,expires_at:'2099-01-01T00:00:00Z',valid_until:'2099-01-01',document_snapshot_json:JSON.stringify(snapshot)});
-function comparison(get){return load('../src/lib/customer-quote-comparison-server.ts',{'./customer-quote-hub-server':{hubQuoteRecord:get},'./trade-quote-review-server':review}).hubQuoteComparison;}
+function comparison(get){return load('../src/lib/customer-quote-comparison-server.ts',{'./customer-quote-hub-server':{hubQuoteRecord:get},'./trade-quote-review-server':review,'./trade-quote-document-totals.mjs':documentTotals}).hubQuoteComparison;}
 
 test('comparison projects the bound issued document with options separate from base and no credentials or contact details',async()=>{
   const calls=[];const compare=comparison(async(db,token,id)=>{calls.push({db,token,id});return {link:record()};});const db={};
   const result=await compare(db,'customer-capability','link');assert.equal(calls.length,2);assert.deepEqual(calls[0],{db,token:'customer-capability',id:'link'});
-  assert.equal(result.totalCents,123400);assert.equal(result.choices[0].totalCents,22000);assert.equal(result.scope,snapshot.customerMessage);assert.equal(result.terms,snapshot.terms);
+  assert.equal(result.totalCents,123400);assert.equal(result.quotedTotalCents,123400);assert.equal(result.choices[0].totalCents,22000);assert.equal(result.choices[0].fullTotalCents,null);assert.equal(result.scope,snapshot.customerMessage);assert.equal(result.terms,snapshot.terms);
+  assert.deepEqual(result.equipment,[]);assert.deepEqual(result.choices[0].equipment,[]);assert.deepEqual(result.defaultChoiceNames,[]);
   assert.doesNotMatch(JSON.stringify(result),/PRIVATE|private@|private-business|customer-capability/);assert.equal(result.items[0].description,'Hot water system');
+});
+
+test('common and option equipment comes only from the issued snapshot and excludes internal catalogue identities',async()=>{
+  const panel={id:'panel',kind:'panel',name:'Quoted panel',model:'P-440',manufacturer:'Demo manufacturer',quantity:15,watts:440,widthM:1.1,lengthM:1.8,warrantyYears:25,datasheetUrl:'https://manufacturer.com/panel.pdf',catalogueProductId:'PRIVATE-CATALOGUE',priceBookItemId:'PRIVATE-PRICEBOOK'};
+  const battery={id:'battery',kind:'battery',name:'Quoted battery',manufacturer:'',model:'B-10',quantity:1,capacityKwh:10};
+  const value={...snapshot,equipment:{common:[panel],choices:[{choiceKey:'extra',items:[battery]}]}};
+  const link={...record(),document_snapshot_json:JSON.stringify(value)};
+  const result=await comparison(async()=>({link}))({},'token','link');
+  assert.deepEqual(result.equipment,[{kind:'panel',name:'Quoted panel',model:'P-440',manufacturer:'Demo manufacturer',quantity:15,watts:440,warrantyYears:25,datasheetUrl:'https://manufacturer.com/panel.pdf'}]);
+  assert.deepEqual(result.choices[0].equipment,[{kind:'battery',name:'Quoted battery',manufacturer:'',model:'B-10',quantity:1,capacityKwh:10}]);
+  assert.equal('warrantyYears' in result.choices[0].equipment[0],false);
+  assert.equal('backup' in result.choices[0].equipment[0],false);
+  assert.doesNotMatch(JSON.stringify(result),/PRIVATE|catalogueProductId|priceBookItemId/);
+});
+
+test('full option totals reuse the issued document defaults across required groups and exclude optional extras',async()=>{
+  const choice=(id,kind,groupKey,totalCents,recommended=false)=>({id,kind,groupKey,name:id,summary:'Quoted scope',recommended,totalCents,subtotalCents:totalCents,taxCents:0,items:[]});
+  const value={...snapshot,totalCents:100000,choices:[choice('solar','package','system',500000),choice('solar-battery','package','system',1000000,true),choice('standard','choose_one','controls',20000),choice('advanced','choose_one','controls',30000,true),choice('extra','addon','extras',90000,true)]};
+  const link={...record(),document_snapshot_json:JSON.stringify(value)};
+  const result=await comparison(async()=>({link}))({},'token','link');
+  assert.equal(result.totalCents,100000);
+  assert.equal(result.quotedTotalCents,1130000);
+  assert.deepEqual(result.defaultChoiceNames,['solar-battery','advanced']);
+  assert.deepEqual(result.choices.map(item=>item.fullTotalCents),[630000,1130000,1120000,1130000,null]);
+  assert.deepEqual(result.choices[0].includedChoiceNames,['advanced']);
+  assert.deepEqual(result.choices[2].includedChoiceNames,['solar-battery']);
+  assert.equal(result.choices[4].totalCents,90000);
+});
+
+test('equipment for a foreign option or an invalid model cannot enter the issued comparison',async()=>{
+  for(const equipment of [{common:[],choices:[{choiceKey:'foreign',items:[]}]},{common:[{id:'battery',kind:'battery',name:'Battery',manufacturer:'',model:'',quantity:1}],choices:[]}]){
+    const link={...record(),document_snapshot_json:JSON.stringify({...snapshot,equipment})};
+    await assert.rejects(()=>comparison(async()=>({link}))({},'token','link'),/CUSTOMER_HUB_ACCESS_ENDED/);
+  }
 });
 test('foreign customer, job, quote or version snapshots never enter a comparison',async()=>{
   for(const change of [{quoteId:'foreign'},{quoteVersionId:'foreign'},{work:{id:'foreign'}},{customer:{id:'foreign'}}]){

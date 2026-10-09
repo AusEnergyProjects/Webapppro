@@ -168,6 +168,10 @@
   margin-top: 16px;
 }
 
+.productOptions { overflow-wrap: anywhere; }
+.productOptions h4 { color: #063d36; font-size: 1.1rem; line-height: 1.35; margin: 8px 0; }
+.productOptions p { font-size: .94rem; line-height: 1.65; }
+
 .jumpNav a:focus-visible,
 .nextSteps a:focus-visible,
 .inlineLinks a:focus-visible {

@@ -25,7 +25,7 @@ export default function SolarGuidePage() {
       <h2 id="solar-answer">Start with solar generation and your daily use</h2>
       <p>Panels generate electricity during daylight. Your home uses what it needs at that moment; surplus can go to the grid or an optional battery. A battery stores energy for later and has its own extra cost.</p>
       <p>Compare solar alone first, then check how much more a battery saves. The best fit depends on your usage and roof, rather than the biggest system advertised.</p>
-      <div className={styles.inlineLinks}><Link href="/compare">Compare plans and model solar</Link><Link href="/case-studies#solar-self-use">See a solar worked example</Link><Link href="/guides/batteries">Understand what a battery adds</Link></div>
+      <div className={styles.inlineLinks}><Link href="/compare">Compare plans and model solar</Link><Link href="/guides/products/solar">Explore 20 solar panel options</Link><Link href="/guides/products/inverters">Explore 20 inverter options</Link><Link href="/case-studies#solar-self-use">See a solar worked example</Link><Link href="/guides/batteries">Understand what a battery adds</Link></div>
     </section>
 
     <nav className={styles.jumpNav} aria-label="In this solar guide">

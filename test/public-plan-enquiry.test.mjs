@@ -349,7 +349,7 @@ function requestHandler({
   rateLimit = { allowed: true },
   enqueuePublicPlanDelivery,
   createOpportunityFromLead = async () => ({ id: "opportunity-public-plan-1" }),
-  confirmPublicPlanIntakeOpportunity = async () => ({ opportunityId: "opportunity-public-plan-1" }),
+  confirmPublicPlanIntakeOpportunity = async () => ({ opportunityId: "opportunity-public-plan-1", customerReplyLinkExpected: true }),
 }) {
   return createLeadPostHandler({
     validateLeadPayload,
@@ -409,6 +409,8 @@ test("a valid public plan enquiry commits one durable intake before returning qu
   assert.equal(result.ok, true);
   assert.equal(result.planEmailSent, false);
   assert.equal(result.planEmailStatus, "queued");
+  assert.equal(result.customerReplyLinkExpected, true);
+  assert.doesNotMatch(JSON.stringify(result), /customer-hub\//);
   assert.equal(result.filtered, undefined);
   assert.match(result.reference, /^AEA-/);
   assert.equal(
@@ -419,6 +421,23 @@ test("a valid public plan enquiry commits one durable intake before returning qu
   assert.equal(intake.envelope.directTradeTriage.autoSend, true);
   assert.equal(intake.validatedPayload.planSnapshot.propertyContext.propertyType, "townhouse");
   assert.equal(relayCalls, 0);
+});
+
+test("enquiries without a quote reply page return only its unavailable status, never a private capability", async () => {
+  const handler = requestHandler({
+    enqueuePublicPlanDelivery: async () => ({ id: "intake-public-plan-1", status: "pending" }),
+    confirmPublicPlanIntakeOpportunity: async () => ({ opportunityId: "opportunity-public-plan-1", customerReplyLinkExpected: false }),
+  });
+  const response = await handler(new Request("https://compare.example/api/leads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "https://compare.example" },
+    body: JSON.stringify(validPlanEnquiry({ clientStartedAt: Date.now() })),
+  }));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.customerReplyLinkExpected, false);
+  assert.equal(result.planEmailStatus, "queued");
+  assert.doesNotMatch(JSON.stringify(result), /customer-hub\//);
 });
 
 test("a durable public-plan intake failure is not reported as accepted", async () => {

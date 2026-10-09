@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { updateHomeFeatureSelection } from "@/lib/customer-projects.mjs";
 import { residentialStateFromPostcode } from "@/lib/australian-postcodes.mjs";
 import { HOME_ENERGY_ASSESSMENT_STORAGE_KEY } from "@/lib/home-energy-assessment-storage";
+import { createPlannerComparisonIntent, PLANNER_COMPARISON_INTENT_KEY, type PlannerComparisonTarget } from "@/lib/planner-comparison-handoff";
 import {
   HOME_ENERGY_PLANNER_COMFORT_QUESTION_IDS,
   HOME_ENERGY_PLANNER_CONSTRUCTION_QUESTIONS,
@@ -351,6 +352,16 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
+  function startComparison(target: PlannerComparisonTarget) {
+    const serialized = JSON.stringify(createHomeEnergyPlannerSession(draft, stage));
+    storeAssessment(serialized);
+    const intent = createPlannerComparisonIntent(serialized, target);
+    try {
+      if (intent) window.sessionStorage.setItem(PLANNER_COMPARISON_INTENT_KEY, intent);
+      else window.sessionStorage.removeItem(PLANNER_COMPARISON_INTENT_KEY);
+    } catch { /* Comparison remains available when browser storage is unavailable. */ }
+  }
+
   function setPostcode(value: string) {
     const postcode = value.replace(/\D/g, "").slice(0, 4);
     const inferredState = /^\d{4}$/.test(postcode) ? residentialStateFromPostcode(postcode) : "";
@@ -678,6 +689,7 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
           <section className="planner-result-decision" id="plan-enquiry" aria-label="Get help with this plan">
             {enquiryOpen ? (
               <PublicPlanEnquiryForm
+                onComparisonStart={startComparison}
                 planHref={printablePlanHref}
                 initialPostcode={draft.postcode}
                 suggestedInterests={enquiryInterests}
@@ -769,8 +781,8 @@ export function HomeEnergyPlanner({ initialSelection }: { initialSelection: Home
               <p>Compare current plans, calculate source-verified rebates, or review assistance without mixing electricity and gas pricing.</p>
             </div>
             <div className="planner-quick-wins-grid">
-              <article><small>Recommended next</small><h4>Compare electricity plans</h4><p>Use a bill or interval data when available.</p><Link href="/compare?from=home-plan">Start electricity comparison</Link></article>
-              <article><small>If the home uses gas</small><h4>Compare gas plans</h4><p>Keep gas and electricity pricing separate.</p><Link href="/gas-compare?from=home-plan" prefetch={false}>Start gas comparison</Link></article>
+              <article><small>Recommended next</small><h4>Compare electricity plans</h4><p>Use a bill or interval data when available.</p><Link href="/compare?from=home-plan" onClick={() => startComparison("electricity")}>Start electricity comparison</Link></article>
+              <article><small>If the home uses gas</small><h4>Compare gas plans</h4><p>Keep gas and electricity pricing separate.</p><Link href="/gas-compare?from=home-plan" prefetch={false} onClick={() => startComparison("gas")}>Start gas comparison</Link></article>
               <article><small>Estimate an upgrade</small><h4>Use the rebate calculator</h4><p>Choose an activity and current approved product.</p><Link href="/calculator" prefetch={false}>Open rebate calculator</Link></article>
               <article><small>Understand assistance</small><h4>Review rebates and support</h4><p>Check current pathways before accepting a quote.</p><Link href="/rebates" prefetch={false}>View rebates and assistance</Link></article>
             </div>

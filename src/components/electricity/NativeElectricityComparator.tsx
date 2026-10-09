@@ -5,6 +5,7 @@
 import { DragEvent, FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { buildComparisonToolLink } from "@/lib/comparison-navigation";
 import {
   Field,
   StepCard,
@@ -157,7 +158,7 @@ function ChoiceCards<T extends string>({ name, legend, hint, value, options, dis
   name: string;
   legend: string;
   hint?: string;
-  value: T;
+  value: T | undefined;
   options: ChoiceOption<T>[];
   disabled?: boolean;
   onChange: (value: T) => void;
@@ -258,6 +259,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const [hasControlledLoad, setHasControlledLoad] = useState(false);
   const [controlledKwh, setControlledKwh] = useState("");
   const [setupMode, setSetupMode] = useState<SetupMode>("none");
+  const [plannerSetupNeedsConfirmation, setPlannerSetupNeedsConfirmation] = useState(false);
   const [solarKw, setSolarKw] = useState("");
   const [batteryKwh, setBatteryKwh] = useState("10");
   const [exportKwh, setExportKwh] = useState("");
@@ -305,6 +307,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const auditReturnRef = useRef<HTMLButtonElement | null>(null);
   const comparisonInputKeyRef = useRef("");
+  const comparisonEditedRef = useRef(false);
   const nmiDistributor = useMemo(() => distributorFromNmi(nmi), [nmi]);
   const guidanceDistributor = distributor || meterGuideDistributor || nmiDistributor || "";
   const distributorInfo = guidanceDistributor ? DISTRIBUTOR_INFO[guidanceDistributor] : null;
@@ -339,6 +342,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     hasControlledLoad,
     controlledKwh: controlledKwh.trim(),
     setupMode,
+    plannerSetupNeedsConfirmation,
     solarKw: solarKw.trim(),
     batteryKwh: batteryKwh.trim(),
     exportKwh: exportKwh.trim(),
@@ -346,12 +350,13 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     assumeConditional,
     distributor,
     meterGuideDistributor,
-  }), [assumeConditional, batteryKwh, billEnd, billStart, controlledKwh, customerType, distributor, exportKwh, hasControlledLoad, hasEv, manualUsageKwh, manualUsageMode, meterGuideDistributor, meterRevision, nmi, postcode, profileKind, registerRoles, setupMode, solarKw, usageEvidence, usageOverride]);
+  }), [assumeConditional, batteryKwh, billEnd, billStart, controlledKwh, customerType, distributor, exportKwh, hasControlledLoad, hasEv, manualUsageKwh, manualUsageMode, meterGuideDistributor, meterRevision, nmi, plannerSetupNeedsConfirmation, postcode, profileKind, registerRoles, setupMode, solarKw, usageEvidence, usageOverride]);
   useLayoutEffect(() => {
     comparisonInputKeyRef.current = comparisonInputKey;
   }, [comparisonInputKey]);
 
   useEffect(() => {
+    let cancelled = false;
     pageStartedAt.current = Date.now();
     const restored = parseNativeComparisonQuery(window.location.search);
     const query = new URLSearchParams(window.location.search);
@@ -376,11 +381,24 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     setAssumeConditional(Boolean(restored.assumeConditional));
     if (restored.meterReupload) setMeterStatus("This saved comparison used interval data. Re-upload the NEM12 file locally, then run the comparison; the file and NMI were not stored in the link.");
     if (fromHomePlan) {
-      setHandoffStatus({ title: "Continuing from your home plan", message: "Your starting point is ready. Review the prefilled answers, add the best usage evidence you have, then select Compare electricity plans." });
+      setHandoffStatus({ title: "Continuing from your home plan", message: "Add your bill or smart-meter usage, then review your current setup before comparing." });
+      void import("@/lib/planner-comparison-handoff").then(({ readPlannerComparisonHandoff }) => {
+        if (cancelled || comparisonEditedRef.current) return;
+        const handoff = readPlannerComparisonHandoff(window.location.search, "electricity", { local: window.localStorage, tab: window.sessionStorage });
+        if (!handoff) return;
+        if (!restored.postcode) setPostcode(handoff.postcode);
+        if (!restored.batteryKwh) setBatteryKwh("");
+        if (!restored.setupMode) {
+          if (handoff.electricitySetup) setSetupMode(handoff.electricitySetup);
+          setPlannerSetupNeedsConfirmation(!handoff.electricitySetup);
+        }
+        setHandoffStatus({ title: "Continuing from your home plan", message: "Your postcode and known solar setup are carried over. Review the prefilled answers, add your bill or smart-meter usage, and confirm any equipment details still needed before selecting Compare electricity plans." });
+      }).catch(() => { /* The comparison works independently when the local handoff is unavailable. */ });
     } else if (restored.postcode || restored.annualKwh || restored.setupMode || restored.hasEv || restored.hasControlledLoad) {
       setHandoffStatus({ title: "Continuing your saved comparison", message: "Review the restored answers, add the best usage evidence you have, then select Compare electricity plans." });
     }
     /* eslint-enable react-hooks/set-state-in-effect */
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -641,6 +659,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
   async function compare() {
     const requestedInputKey = comparisonInputKey;
     setError(""); setPlans([]); setPricingContext(null); setShown(12);
+    if (plannerSetupNeedsConfirmation) { setError("Choose your current solar and battery setup."); return; }
     if (!/^\d{4}$/.test(postcode)) { setError("Enter a valid 4 digit postcode."); return; }
     const cleanedNmi = cleanNmi(nmi);
     if (cleanedNmi && (cleanedNmi.length < 10 || cleanedNmi.length > 11)) { setError("An NMI must contain 10 characters, plus an optional checksum character."); return; }
@@ -870,7 +889,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
     {preview && <div className="native-preview"><b>Internal regression route</b><span>The live electricity comparer is available at <Link href="/compare">/compare</Link>.</span></div>}
     <ComparisonJourney title="Your electricity comparison" current={journeyStep} steps={ELECTRICITY_JOURNEY_STEPS} />
     {handoffStatus && <p className="comparison-handoff-status" role="status"><strong>{handoffStatus.title}</strong>{handoffStatus.message}</p>}
-    <form ref={formRef} onSubmit={submitCurrentStep} aria-label="Electricity plan comparison">
+    <form ref={formRef} onChangeCapture={() => { comparisonEditedRef.current = true; }} onSubmit={submitCurrentStep} aria-label="Electricity plan comparison">
       {activeStep === 1 && <>
       <StepCard number="1" title="Where is the property?" headingRef={stepHeadingRef}>
         <p className="sub">Search for the property to fill its postcode automatically, or enter the postcode yourself. Search text is sent only to the address-search service and is never sent to plan providers.</p>
@@ -972,8 +991,8 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
       {activeStep === 3 && <>
       <StepCard number="3" title="What is already installed?" headingRef={stepHeadingRef}>
         <p className="sub">Confirm solar, battery and plan conditions so unsuitable offers are not treated as a match.</p>
-        <ChoiceCards name="current-energy-setup" legend="Current solar and battery setup" value={setupMode} options={SETUP_OPTIONS} onChange={setSetupMode} />
-        {setupMode !== "none" && <div className="grid c3 native-existing-system-fields">
+        <ChoiceCards name="current-energy-setup" legend="Current solar and battery setup" value={plannerSetupNeedsConfirmation ? undefined : setupMode} options={SETUP_OPTIONS} onChange={(value) => { setPlannerSetupNeedsConfirmation(false); setSetupMode(value); }} />
+        {!plannerSetupNeedsConfirmation && setupMode !== "none" && <div className="grid c3 native-existing-system-fields">
           <Field label="Existing solar system size" hint="kW. If exports are not supplied, this and the postcode estimate them."><input type="number" min="0.1" step="0.1" value={solarKw} onChange={(event) => setSolarKw(event.target.value)} placeholder="e.g. 6.6" /></Field>
           {setupMode === "battery" && <Field label="Existing usable battery size" hint="kWh. Uploaded imports are not shifted again."><input type="number" min="0.1" step="0.1" value={batteryKwh} onChange={(event) => setBatteryKwh(event.target.value)} /></Field>}
           <Field label="Annual solar export" hint={usingMeter && usingMeter.annualExport > 0 ? "Read from the active meter file." : "kWh exported to the grid. Leave blank to estimate."}><input type="number" min="0" value={exportKwh} readOnly={Boolean(usingMeter && usingMeter.annualExport > 0)} onChange={(event) => setExportKwh(event.target.value)} placeholder="Estimate from system size" /></Field>
@@ -986,7 +1005,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         {!usingMeter && hasControlledLoad && <div className="native-controlled-usage"><Field label="Controlled-load usage per year" hint="Enter only the separately listed controlled-load kWh from your bill. It must be less than your total grid usage."><input type="number" min="1" value={controlledKwh} onChange={(event) => setControlledKwh(event.target.value)} placeholder="e.g. 1200" /></Field></div>}
         {distributors.length > 1 && <div className="native-location-evidence"><Field label="Network distributor" hint={nmiDistributor ? "The NMI range provided a likely match. Use the network name on your bill to correct it if needed." : "This postcode crosses network boundaries. Choose the distributor printed on your electricity bill before comparing again."}><select value={distributor || nmiDistributor || ""} onChange={(event) => setDistributor(event.target.value)}><option value="">Choose distributor</option>{distributors.map((name) => <option key={name}>{name}</option>)}</select></Field></div>}
       </StepCard>
-      <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {Math.round(annualUsageNumber).toLocaleString()} kWh/year | {setupMode === "none" ? "No solar" : setupMode === "solar" ? "Solar" : "Solar and battery"}</strong><small>You can go back without losing any answer or uploaded meter data.</small></div>
+      <div className={chromeStyles.reviewSummary}><span>Ready to compare</span><strong>{postcode} | {Math.round(annualUsageNumber).toLocaleString()} kWh/year | {plannerSetupNeedsConfirmation ? "Confirm solar and battery setup" : setupMode === "none" ? "No solar" : setupMode === "solar" ? "Solar" : "Solar and battery"}</strong><small>You can go back without losing any answer or uploaded meter data.</small></div>
       <ComparisonStepActions step={3} total={4} onBack={() => moveToStep(2)} submitting={loading} submitLabel={loading ? "Comparing electricity plans..." : "Compare electricity plans"} />
       {loading && <ComparisonWorkingState title="Comparing electricity plans" message={analysisMessage} />}
       </>}
@@ -1032,7 +1051,7 @@ export function NativeElectricityComparator({ preview = false }: { preview?: boo
         <section className="native-followup-card"><h2>Save this comparison privately</h2><p>The link contains only comparison assumptions. It never contains an NMI, meter intervals, filename, annual-adjustment reason or contact details.</p><button type="button" className="btn ghost" onClick={() => void copyPrivateLink()}>Copy private-safe link</button>{shareStatus && <p className="native-action-status" role="status">{shareStatus}</p>}{sharedUrl && <Field label="Private-safe link"><input readOnly value={sharedUrl} onFocus={(event) => event.currentTarget.select()} /></Field>}</section>
         <form className="native-followup-card" onSubmit={sendTopPlans}><h2>Email my top three</h2><p>Receive the three cheapest currently visible plans and a reminder to compare again every six months.</p><div className="grid c2"><Field label="Name"><input required autoComplete="name" value={leadName} onChange={(event) => setLeadName(event.target.value)} /></Field><Field label="Email"><input required type="email" autoComplete="email" value={leadEmail} onChange={(event) => setLeadEmail(event.target.value)} /></Field></div><label className="native-honeypot" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={leadWebsite} onChange={(event) => setLeadWebsite(event.target.value)} /></label><label className="toggle native-consent"><input type="checkbox" checked={leadConsent} onChange={(event) => setLeadConsent(event.target.checked)} /> I agree that Australian Energy Assessments may email these results and a comparison reminder every 6 months. I can unsubscribe at any time.</label><button className="btn" disabled={leadSending}>{leadSending ? "Sending..." : "Send my top three"}</button>{leadStatus && <p className="native-action-status" role="status">{leadStatus}</p>}<details className="native-privacy-details"><summary>How my details are used</summary><p>Your name and email are sent only when you submit this form, and only for results and comparison reminders. No phone number is collected. Meter files, NMI values and interval data stay in your browser and are not included. Use your free account for upgrade projects.</p></details></form>
       </div>
-      <section className="comparison-complete-next" aria-labelledby="electricity-next-title"><div><span>One useful next step</span><h2 id="electricity-next-title">Check whether a mains gas plan is also costing more than it should</h2><p>If the property has mains gas, use the same guided process. LPG bottles and bulk tanks are not included.</p></div><Link className="btn" href="/gas-compare">Compare gas plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
+      <section className="comparison-complete-next" aria-labelledby="electricity-next-title"><div><span>One useful next step</span><h2 id="electricity-next-title">Check whether a mains gas plan is also costing more than it should</h2><p>If the property has mains gas, use the same guided process. LPG bottles and bulk tanks are not included.</p></div><Link className="btn" href={buildComparisonToolLink("gas", postcode)}>Compare gas plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
     </section>}
     {auditPlan && <NativeAuditDialog plan={auditPlan} bundle={bundle} onClose={closeAudit} />}
     {enquiryScenario && <QuickUpgradeEnquiryDialog initialPostcode={postcode} initialServices={enquiryServicesForScenario(enquiryScenario)} initialCustomerSector={customerType === "BUSINESS" ? "business" : "residential"} initialNotes={`I am interested in ${enquiryScenario.description}. Calculator estimate: ${fmtMoney(enquiryScenario.annualSaving)}/year bill saving. Installed price used: ${enquiryScenario.installedCost > 0 ? fmtMoneyExact(enquiryScenario.installedCost) : "not entered"} (${(enquiryScenario.label === "Solar only" ? customQuotes.solar : enquiryScenario.label === "Solar + battery" ? customQuotes.combo : customQuotes.battery) ? "my quote" : "planning estimate"}). Please confirm site suitability and a written quote.`} onClose={() => setEnquiryScenario(null)} />}

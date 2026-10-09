@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { InstalledQuoteField } from "./InstalledQuoteField";
 import { parseInstalledQuote } from "@/lib/installed-quote";
+import { gasApplianceAllocationStatus } from "@/lib/gas-appliance-allocation";
+import type { PlannerGasEquipment } from "@/lib/planner-comparison-handoff";
 
 const QuickUpgradeEnquiryDialog = dynamic(() => import("./QuickUpgradeEnquiryDialog").then((module) => module.QuickUpgradeEnquiryDialog), { ssr: false });
 
 type ApplianceOption = { value: string; label: string };
 
 const heatingOptions: ApplianceOption[] = [
+  { value: "gas-unspecified", label: "Gas heating, type not confirmed" },
   { value: "gas-ducted", label: "Gas ducted central heating" },
   { value: "gas-slab", label: "Gas slab heating" },
   { value: "gas-room", label: "Individual gas room heater" },
@@ -119,7 +122,7 @@ function payback(value: number): string {
   return `${years} year${years === 1 ? "" : "s"}${remaining ? ` ${remaining} month${remaining === 1 ? "" : "s"}` : ""}`;
 }
 
-export function GasUpgradeQuestionnaire({ postcode, annualMj, questionsVisible = true, headingRef, onUsageProfileChange }: { postcode: string; annualMj: string; questionsVisible?: boolean; headingRef?: Ref<HTMLHeadingElement>; onUsageProfileChange: (profile: "heating" | "steady" | null) => void }) {
+export function GasUpgradeQuestionnaire({ postcode, annualMj, initialEquipment, questionsVisible = true, headingRef, onUsageProfileChange }: { postcode: string; annualMj: string; initialEquipment?: PlannerGasEquipment; questionsVisible?: boolean; headingRef?: Ref<HTMLHeadingElement>; onUsageProfileChange: (profile: "heating" | "steady" | null) => void }) {
   const [people, setPeople] = useState("2");
   const [rooms, setRooms] = useState("6");
   const [heating, setHeatingSelection] = useState<string[]>([]);
@@ -140,11 +143,28 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, questionsVisible =
   const [enquiryService, setEnquiryService] = useState<"heating-cooling" | "hot-water" | null>(null);
   const [customHeatingQuote, setCustomHeatingQuote] = useState(false);
   const [customHotWaterQuote, setCustomHotWaterQuote] = useState(false);
+  const equipmentAppliedRef = useRef(false);
+  const equipmentEditedRef = useRef(false);
+
+  useEffect(() => {
+    if (!initialEquipment || equipmentAppliedRef.current || equipmentEditedRef.current) return;
+    equipmentAppliedRef.current = true;
+    // Validated planner facts initialize the mounted questionnaire once; quotes stay intact.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setHeatingSelection(initialEquipment.heating);
+    setHotWater(initialEquipment.hotWater);
+    setPeople(initialEquipment.people);
+    if (initialEquipment.gasCooking !== undefined) setGasCooktop(initialEquipment.gasCooking);
+    onUsageProfileChange(initialEquipment.heating.length ? initialEquipment.heating.some((item) => item.startsWith("gas-")) ? "heating" : "steady" : null);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [initialEquipment, onUsageProfileChange]);
 
   const hasGasHeating = heating.some((value) => value.startsWith("gas-"));
+  const allocation = gasApplianceAllocationStatus({ heating, hotWater, people });
 
   function changeHeating(value: string) {
-    const next = value === "none" ? ["none"] : toggleValue(heating.filter((item) => item !== "none"), value);
+    const compatible = heating.filter((item) => item !== "none" && (value === "gas-unspecified" ? item === value || !item.startsWith("gas-") : !value.startsWith("gas-") || item !== "gas-unspecified"));
+    const next = value === "none" ? ["none"] : toggleValue(compatible, value);
     setHeatingSelection(next);
     onUsageProfileChange(next.length ? next.some((item) => item.startsWith("gas-")) ? "heating" : "steady" : null);
   }
@@ -181,7 +201,7 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, questionsVisible =
     const hotWaterType = hotWater || "other";
     const hotWaterFactors: Record<string, number> = { low: .75, typical: 1, high: 1.25 };
     const hotWaterFactor = hotWaterFactors[hotWaterUse] ?? 1;
-    const hotWaterBenchmark: EnergyProfile = HOT_WATER_GAS_MJ[hotWaterType] ? {
+    const hotWaterBenchmark: EnergyProfile = HOT_WATER_GAS_MJ[hotWaterType] && Number(people) > 0 ? {
       gasMj: byHousehold(HOT_WATER_GAS_MJ[hotWaterType], householdSize) * hotWaterFactor,
       replacementKwh: byHousehold(HEAT_PUMP_KWH, householdSize) * hotWaterFactor,
     } : { gasMj: 0, replacementKwh: 0 };
@@ -194,7 +214,7 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, questionsVisible =
     const benchmarkGasMj = heatingBenchmark.gasMj + hotWaterBenchmark.gasMj + cooktopBenchmarkMj + dryerBenchmarkMj + spaBenchmarkMj;
     const enteredUse = Number(annualMj);
     const use = enteredUse > 0 ? enteredUse : Math.max(12000, benchmarkGasMj);
-    const billScale = benchmarkGasMj > 0 ? use / benchmarkGasMj : 0;
+    const billScale = allocation.ready && benchmarkGasMj > 0 ? use / benchmarkGasMj : 0;
     const heatingGasUse = heatingBenchmark.gasMj * billScale;
     const hotWaterGasUse = hotWaterBenchmark.gasMj * billScale;
     const cooktopGasUse = cooktopBenchmarkMj * billScale;
@@ -243,18 +263,19 @@ export function GasUpgradeQuestionnaire({ postcode, annualMj, questionsVisible =
       hasHeating: heatingGasUse > 0,
       hasHotWater: hotWaterGasUse > 0,
     };
-  }, [annualMj, people, rooms, heating, winterUse, hotWater, hotWaterUse, gasCooktop, cooktopUse, gasDryer, dryerUse, gasSpa, spaUse, gasSpend, gasRate, electricityRate, heatingInstall, hotWaterInstall]);
+  }, [allocation.ready, annualMj, people, rooms, heating, winterUse, hotWater, hotWaterUse, gasCooktop, cooktopUse, gasDryer, dryerUse, gasSpa, spaUse, gasSpend, gasRate, electricityRate, heatingInstall, hotWaterInstall]);
 
   const enquiryQuote = parseInstalledQuote(enquiryService === "hot-water" ? hotWaterInstall : heatingInstall);
   const enquiryUsesQuote = enquiryService === "hot-water" ? customHotWaterQuote : customHeatingQuote;
 
   return (
-    <section className={`card gas-questionnaire${questionsVisible ? "" : " results-only"}`}>
+    <section className={`card gas-questionnaire${questionsVisible ? "" : " results-only"}`} onChangeCapture={() => { equipmentEditedRef.current = true; }}>
+      <h2 ref={headingRef} tabIndex={-1} hidden={!questionsVisible}><span className="stepnum">3</span> Your gas appliances and home</h2>
+      {!allocation.ready && <p className="note" role="status">Confirm {allocation.missing.join(", ")} before estimating appliance upgrade savings. These details set how your annual gas use is shared between appliances. Gas plans still use the bill usage you enter.</p>}
       <div hidden={!questionsVisible}>
-      <h2 ref={headingRef} tabIndex={-1}><span className="stepnum">3</span> Your gas appliances and home</h2>
       <p className="sub">Tell us which appliances actually use gas. Your heating answer automatically sets the seasonal pattern used to compare plans, so you only answer this once.</p>
 
-      <div className="gas-household-context"><label className="f">People in your household<span className="field-control"><select value={people} onChange={(event) => setPeople(event.target.value)}>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span><span className="hint">Used only for the hot-water estimate.</span></label><div><b>Seasonal plan profile</b><span>{hasGasHeating ? "Gas heating: more annual MJ is allocated to cooler months." : "No gas heating: annual MJ is allocated steadily across the year."}</span></div></div>
+      <div className="gas-household-context"><label className="f">People in your household<span className="field-control"><select value={people} onChange={(event) => setPeople(event.target.value)}><option value="">Choose the number of people</option>{Array.from({ length: 8 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span><span className="hint">Used only for the hot-water estimate.</span></label><div><b>Seasonal plan profile</b><span>{hasGasHeating ? "Gas heating: more annual MJ is allocated to cooler months." : heating.length ? "No gas heating: annual MJ is allocated steadily across the year." : "Choose a heating system or None to confirm the gas-use pattern."}</span></div></div>
 
       <div className="gas-appliance-grid">
         <section className="gas-appliance-card gas-appliance-card-wide" aria-labelledby="gas-heating-title"><div className="gas-appliance-heading"><span>1</span><div><h3 id="gas-heating-title">Home heating</h3><p>Select every heating system used in the home.</p></div></div><div className="gas-appliance-content gas-appliance-split"><fieldset className="question-group"><legend>Heating systems</legend><div className="option-list">{heatingOptions.map((option) => <label className="option-item" key={option.value}><input type="checkbox" checked={heating.includes(option.value)} onChange={() => changeHeating(option.value)} />{option.label}</label>)}</div></fieldset><div className="gas-appliance-variables"><label className="f">Rooms in your home<span className="field-control"><select value={rooms} onChange={(event) => setRooms(event.target.value)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}</select></span><span className="hint">Used to approximate the heated area.</span></label>{hasGasHeating && <label className="f">Gas-heating use in winter<span className="field-control"><select value={winterUse} onChange={(event) => setWinterUse(event.target.value)}>{winterUseOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}</div></div></section>

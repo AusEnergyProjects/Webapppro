@@ -1,0 +1,342 @@
+[
+  {
+    "id": "daikin-alira-x",
+    "name": "Daikin Alira X",
+    "group": "Room comfort and smart controls",
+    "fit": "A frequently used bedroom or living room where airflow direction and phone control matter.",
+    "why": "Built-in Wi-Fi and adjustable airflow help you manage comfort around where people sit.",
+    "check": "Select the heating-and-cooling version if you need a heater. Ask for the exact model's climate label, rather than a star rating for the whole range.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/alira-x",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "daikin-cora",
+    "name": "Daikin Cora",
+    "group": "Everyday room heating and cooling",
+    "fit": "Someone wanting room heating and cooling with simple temperature control.",
+    "why": "Half-degree temperature adjustment and airflow that can travel along the ceiling provide useful everyday control.",
+    "check": "Phone control is an optional extra. Confirm it is included if the quote promises app access.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/cora",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "daikin-lite",
+    "name": "Daikin Lite",
+    "group": "Everyday room heating and cooling",
+    "fit": "A household that wants a straightforward remote and timer without paying for every added feature.",
+    "why": "A backlit remote, on/off timer and half-degree temperature settings keep day-to-day use simple.",
+    "check": "Choose by the quoted model's heating and cooling label. The maker's best star and noise figures apply to particular sizes.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/lite-systems",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "daikin-xl",
+    "name": "Daikin XL / XL Premium",
+    "group": "Larger open rooms",
+    "fit": "A large open living area that needs more output than a small bedroom unit.",
+    "why": "The range includes larger wall-mounted systems designed to move air across open spaces.",
+    "check": "An open room still needs a sizing assessment. A large unit in the lounge will not reliably heat closed bedrooms; XL and XL Premium have different specifications.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/xl-series",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "daikin-floor-standing",
+    "name": "Daikin Floor Standing",
+    "group": "Low wall installation",
+    "fit": "A room with limited high wall space, particularly where winter heating is the priority.",
+    "why": "Low-level airflow and heating modes put warmth near the floor, with filters easier to reach.",
+    "check": "Furniture must leave the outlets clear. Have the installer check the position and the exact model's winter output.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/floor-standing",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mitsubishi-electric-ap",
+    "name": "Mitsubishi Electric MSZ-AP",
+    "group": "Everyday room heating and cooling",
+    "fit": "A bedroom, study or living room used on a regular schedule.",
+    "why": "Night mode reduces light and beeps, while a weekly timer follows your routine. Current VGKD2 models include Wi-Fi.",
+    "check": "Older AP versions can require a separate Wi-Fi adapter. Low noise figures apply to a specific size and operating mode.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mitsubishi-electric-gs",
+    "name": "Mitsubishi Electric MSZ-GS",
+    "group": "Everyday room heating and cooling",
+    "fit": "Someone who values easy cleaning and a straightforward heating-and-cooling system.",
+    "why": "The accessible vane and guards make it easier to reach the inside for cleaning.",
+    "check": "Wi-Fi and advanced filters are optional. Get those accessories listed in the quote if you want them.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mitsubishielectric.com.au/product/msz-gs25-80vfd-split-system-air-conditioner/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mitsubishi-electric-ef",
+    "name": "Mitsubishi Electric MSZ-EF",
+    "group": "Room comfort and smart controls",
+    "fit": "A room where the indoor unit's appearance matters as well as comfort.",
+    "why": "A slim design, several finishes and a weekly timer offer more choice for the room's look and routine.",
+    "check": "Appearance does not establish lower running costs. Compare the exact indoor/outdoor pair and confirm its built-in Wi-Fi version.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mitsubishi-electric-ln",
+    "name": "Mitsubishi Electric MSZ-LN",
+    "group": "Room comfort and smart controls",
+    "fit": "Someone bothered by draughts who wants more control over where the air goes.",
+    "why": "Separately moving airflow flaps and a room sensor can direct air towards or away from occupied areas.",
+    "check": "Extra sensors do not replace correct sizing or filter cleaning. Compare the climate label before paying more for comfort features.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mitsubishielectric.com.au/product/msz-ln25-35-50-60v-b-r-a1/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mitsubishi-electric-kw",
+    "name": "Mitsubishi Electric MFZ-KW",
+    "group": "Low wall installation",
+    "fit": "A room where a low wall unit makes more sense than a high wall unit.",
+    "why": "Multiple airflow outlets, heating controls and a weekly timer make it a useful floor-console option.",
+    "check": "Allow clear airflow and maintenance access. Confirm which KW version and Wi-Fi equipment the quote includes.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mitsubishielectric.com.au/product/mfz-kw-vg-floor-console-air-conditioner/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mhi-avanti",
+    "name": "Mitsubishi Heavy Industries Avanti",
+    "group": "Everyday room heating and cooling",
+    "fit": "A small or medium room where you want practical timers and airflow controls.",
+    "why": "LED brightness adjustment, quiet operation settings and adjustable airflow support everyday room use.",
+    "check": "The range includes cooling-only and heating-and-cooling versions. Built-in Wi-Fi belongs to WF1 versions; check the full model code.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mhiaa.com.au/document/avanti-bronte-series-wf1-range-intro-flyer/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mhi-avanti-plus",
+    "name": "Mitsubishi Heavy Industries Avanti Plus",
+    "group": "Room comfort and smart controls",
+    "fit": "A regularly used room where automatic control and reduced operation while empty are useful.",
+    "why": "A motion sensor can adjust operation when the room is unoccupied; current WF models add built-in phone control.",
+    "check": "Check sensor settings for people sitting still or sleeping. Earlier versions can need an optional Wi-Fi adapter.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "mhi-bronte",
+    "name": "Mitsubishi Heavy Industries Bronte",
+    "group": "Larger open rooms",
+    "fit": "A medium or large open room needing longer-reaching airflow.",
+    "why": "The larger wall-mounted range and adjustable airflow give installers options for open living areas.",
+    "check": "Long airflow does not guarantee comfort around corners or behind closed doors. Confirm the heating-and-cooling version and Wi-Fi suffix.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.mhiaa.com.au/document/avanti-bronte-series-wf1-range-intro-flyer/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "general-lifestyle-next",
+    "name": "GENERAL Lifestyle Next",
+    "group": "Room comfort and smart controls",
+    "fit": "Someone who wants heating and cooling that can follow their schedule through an app.",
+    "why": "The supplied Wi-Fi adaptor supports scheduling and location-based controls through the maker's app.",
+    "check": "App features need the compatible adaptor, account and connection. Confirm the model and where it can be purchased; GENERAL was formerly Fujitsu General.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted/lifestyle-next-range",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "general-comfort",
+    "name": "GENERAL Comfort",
+    "group": "Everyday room heating and cooling",
+    "fit": "A household looking for a straightforward wall-mounted heating-and-cooling option.",
+    "why": "The current Australian range offers inverter models for different room sizes, with ordinary remote control.",
+    "check": "Comfort Cooling is a separate cooling-only range. Ask for the exact heating-and-cooling pair, climate rating and any optional phone-control cost.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "general-floor-console",
+    "name": "GENERAL Floor Console",
+    "group": "Low wall installation",
+    "fit": "Someone with little high wall space who wants heating and cooling from a low-level unit.",
+    "why": "The Australian model page identifies a matched heating-and-cooling pair and separate ratings for hot, average and cold climates.",
+    "check": "The quoted pair must suit your room and climate. Keep furniture clear of its outlets; the model number matters more than the family name.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.generalairstage.com.au/product/set-agtg09kvca",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "panasonic-hz",
+    "name": "Panasonic HZ (YKR)",
+    "group": "Room comfort and smart controls",
+    "fit": "A room where cooling comfort, humidity control and remote scheduling matter.",
+    "why": "Built-in Wi-Fi, adjustable airflow and a humidity sensor provide more control over comfort.",
+    "check": "The humidity feature works within the system's cooling controls. It is not whole-home ventilation, and air-cleaning marketing is not proof of a health benefit.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/ultra-premium-reverse-cycle-inverter-hz-series-ykr.html",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "panasonic-z",
+    "name": "Panasonic Z (AKR)",
+    "group": "Room comfort and smart controls",
+    "fit": "Someone wanting heating and cooling with built-in phone control and directed airflow.",
+    "why": "Comfort Cloud control and two airflow flaps let you schedule operation and adjust how air travels through the room.",
+    "check": "Z, RZ and HZ are different ranges. Get the exact indoor/outdoor pair and compare its climate label; do not assume every HZ feature is included.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/rac/z-akr/cu-cs-z35akrw.html",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "lg-dualcool-ai-standard",
+    "name": "LG DUALCOOL AI Air Standard",
+    "group": "Room comfort and smart controls",
+    "fit": "Someone who wants app control, scheduled operation and adjustable airflow in one room.",
+    "why": "Dual airflow vanes and ThinQ controls provide options for directing air and managing operation.",
+    "check": "Some automatic features require the app and connection. Energy targets shown by an app are not a guaranteed bill saving; confirm the exact AU pair.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as09s0s/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "samsung-geo-windfree",
+    "name": "Samsung AI Smart GEO WindFree",
+    "group": "Room comfort and smart controls",
+    "fit": "Someone who dislikes a direct cold draught once the room has cooled.",
+    "why": "WindFree mode spreads air through small openings, while built-in SmartThings control supports scheduling.",
+    "check": "It still needs ordinary airflow to bring the room to temperature. Some automatic modes need Wi-Fi and a Samsung account, with their own temperature limits.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Manufacturer Australian product information",
+        "url": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/",
+        "kind": "Manufacturer information",
+        "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ]
+  }
+]

@@ -4,6 +4,22 @@ import fs from "node:fs";
 import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import * as enquiryTiming from "../src/lib/enquiry-timing.mjs";
+import { SOLAR_EQUIPMENT_LABELS } from "../src/lib/trade-solar-equipment.ts";
+
+const comparisonCard = {};
+const cardSource = ts.transpileModule(fs.readFileSync(new URL("../src/components/CustomerQuoteComparisonCard.tsx", import.meta.url), "utf8"), { compilerOptions: {
+  target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
+} }).outputText;
+const pureJsx = { ...jsx,
+  jsx: (type, props, key) => typeof type === "function" ? type(props) : jsx.jsx(type, props, key),
+  jsxs: (type, props, key) => typeof type === "function" ? type(props) : jsx.jsxs(type, props, key),
+};
+Function("require", "exports", cardSource)(name => {
+  if (name === "react/jsx-runtime") return pureJsx;
+  if (name === "@/lib/trade-solar-equipment") return { SOLAR_EQUIPMENT_LABELS };
+  if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
+  throw new Error(`Unexpected comparison card dependency: ${name}`);
+}, comparisonCard);
 
 const source = fs.readFileSync(new URL("../src/components/CustomerQuoteHub.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: {
@@ -70,10 +86,14 @@ function harness(t, api, token = "private-hub-token", search = "", beforeEffects
   Function("require", "exports", "fetch", "window", `${compiled}\nexports.HubWorkspace=HubWorkspace;`)(name => {
     if (name === "@/lib/enquiry-timing.mjs") return enquiryTiming;
     if (name === "react") return hooks;
-    if (name === "react/jsx-runtime") return jsx;
+    if (name === "react/jsx-runtime") return { ...jsx,
+      jsx: (type, props, key) => type === comparisonCard.CustomerQuoteComparisonCard ? type(props) : jsx.jsx(type, props, key),
+      jsxs: (type, props, key) => type === comparisonCard.CustomerQuoteComparisonCard ? type(props) : jsx.jsxs(type, props, key),
+    };
     if (name === "@/lib/customer-photo-upload") return { prepareCustomerPhotoUpload: async file => file };
     if (name === "./QuoteLinkReview") return { QuoteLinkReview: "QuoteLinkReview", QuoteDecisionReceiptView: "QuoteDecisionReceiptView" };
     if (name === "./CustomerHubFilePreview") return { CustomerHubFilePreview: "CustomerHubFilePreview" };
+    if (name === "./CustomerQuoteComparisonCard") return comparisonCard;
     if (name.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => key }) };
     throw new Error(`Unexpected hub UI dependency: ${name}`);
   }, loaded, async (path, init = {}) => { requests.push({ path, init }); return api(path, init); }, {
@@ -238,14 +258,14 @@ test('unknown question links do not focus another conversation or leak inaccessi
 test('comparison is limited to three quotes sharing a service and uses the issued summary',async t=>{
   const hub={...data,quotes:[...data.quotes,...[2,3,4].map(n=>({...data.quotes[0],id:'quote-'+n,business:'Business '+n})),{...data.quotes[0],id:'quote-ac',services:['air-conditioning']}]};
   let revoked=false;
-  const h=harness(t,async(path)=>{if(revoked)return response({ok:false,error:'Link withdrawn'},404);if(path.includes('?summary=1'))return response({ok:true,comparison:{id:path.split('/').at(-1).split('?')[0],totalCents:100000,scope:'Install supplied system',terms:'Excludes switchboard upgrade',validUntil:'2099-01-01',items:[],choices:[{name:'Extra circuit',kind:'addon',groupKey:'',summary:'If selected',totalCents:20000}]}});return ok(hub);});
+  const h=harness(t,async(path)=>{if(revoked)return response({ok:false,error:'Link withdrawn'},404);if(path.includes('?summary=1'))return response({ok:true,comparison:{id:path.split('/').at(-1).split('?')[0],totalCents:100000,quotedTotalCents:100000,defaultChoiceNames:[],equipment:[],scope:'Install supplied system',terms:'Excludes switchboard upgrade',validUntil:'2099-01-01',items:[],choices:[{id:'circuit',name:'Extra circuit',kind:'addon',groupKey:'',summary:'If selected',totalCents:20000,fullTotalCents:null,includedChoiceNames:[],equipment:[],items:[]}]}});return ok(hub);});
   let tree=await h.settle();navigate(tree,'Quotes');tree=h.render();
   const checks=()=>nodes(tree,node=>node.type==='input'&&node.props.type==='checkbox');
   checks()[0].props.onChange({target:{checked:true}});tree=h.render();assert.equal(checks()[4].props.disabled,true);
   checks()[1].props.onChange({target:{checked:true}});tree=h.render();checks()[2].props.onChange({target:{checked:true}});tree=h.render();assert.equal(checks()[3].props.disabled,true);
   button(tree,'Compare selected quotes').props.onClick();tree=await h.settle();
   assert.equal(h.requests.filter(item=>item.path.includes('?summary=1')).length,3);
-  assert.match(text(tree),/Install supplied system/);assert.match(text(tree),/Excludes switchboard upgrade/);assert.match(text(tree),/Base quote/);assert.match(text(tree),/Optional extra/);
+  assert.match(text(tree),/Install supplied system/);assert.match(text(tree),/Excludes switchboard upgrade/);assert.match(text(tree),/Quoted total before optional extras/);assert.match(text(tree),/Optional extra/);
   revoked=true;h.listeners.get('focus')();tree=await h.settle();assert.doesNotMatch(text(tree),/Install supplied system|Extra circuit/);
 });
 

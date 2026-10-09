@@ -335,6 +335,7 @@ export function createLeadPostHandler({
         }
         const intakeId = String(intake?.id || "").trim();
         const customerEmailStatus = String(intake?.status || "pending");
+        let customerReplyLinkExpected = false;
         if (!intakeId) throw new Error("PUBLIC_PLAN_INTAKE_UNAVAILABLE");
         if (
           typeof createOpportunityFromLead !== "function"
@@ -344,11 +345,12 @@ export function createLeadPostHandler({
           const createdOpportunity = await createOpportunityFromLead(payload);
           const opportunityId = String(createdOpportunity?.id || "").trim();
           if (!opportunityId) throw new Error("PUBLIC_PLAN_OPPORTUNITY_UNAVAILABLE");
-          await confirmPublicPlanIntakeOpportunity({
+          const confirmed = await confirmPublicPlanIntakeOpportunity({
             intakeId,
             opportunityId,
             expectedQuotePreparation: Boolean(result.value?.quotePreparation),
           });
+          customerReplyLinkExpected = confirmed?.customerReplyLinkExpected === true;
         } catch (error) {
           await recordLeadIncident(
             "platform.lead_marketplace_preparation_failed",
@@ -388,6 +390,7 @@ export function createLeadPostHandler({
           ok: true,
           reference: payload.reference,
           planEmailSent: ["sent", "delivered"].includes(customerEmailStatus),
+          customerReplyLinkExpected,
           planEmailStatus: ["sent", "delivered"].includes(customerEmailStatus)
             ? customerEmailStatus
             : "queued",

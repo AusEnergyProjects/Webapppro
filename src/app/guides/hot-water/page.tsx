@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GuideShell, GuideSection } from "@/components/GuideShell";
 import { buildPlatformMetadata } from "@/lib/public-site";
 
@@ -9,6 +10,7 @@ export const metadata = buildPlatformMetadata({
 
 export default function HotWaterGuidePage() {
   return <GuideShell label="Hot water guide" title="Match capacity and timing to household demand" introduction="A suitable hot water system must cover the household's peak demand, climate and available energy supply. Compare the full installed scope and likely operating schedule, not the tank price alone.">
+    <section className="guide-callout guide-callout-primary"><div><h2>Which heat pumps could suit your household?</h2><p>Explore 20 options with everyday strengths, winter and installation checks, and clear links to product information.</p></div><Link href="/guides/products/hot-water">Explore hot-water systems</Link></section>
     <GuideSection eyebrow="Prepare the evidence" title="Document demand and site constraints"><div className="guide-principle-grid">
       <article><strong>Household demand</strong><p>Record resident numbers, shower patterns, bath use, appliance connections and likely changes. Ask for the model&apos;s rated hot water delivery, not only its tank volume.</p></article>
       <article><strong>Energy and timing</strong><p>Identify rooftop solar, controlled-load wiring, tariff windows and when hot water is normally used. A timer may improve solar self-use only if recovery and storage remain adequate.</p></article>

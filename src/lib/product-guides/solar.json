@@ -1,0 +1,426 @@
+[
+  {
+    "id": "rec-alpha-pure-rx",
+    "name": "REC Alpha Pure-RX",
+    "group": "Making the most of roof space",
+    "fit": "You want more output from a limited roof area and a design suited to your inverter.",
+    "why": "Its cell design has a relatively small rated power drop as the panels heat up.",
+    "check": "The installer needs to check electrical compatibility. Ask whether the installer registration required for the proposed REC warranty is included.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "REC Alpha Pure-RX Australian datasheet",
+        "url": "https://www.recgroup.com/sites/default/files/2024-08/Web_DS_Alpha_Pure-RX_EN%20AU.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Rev 4, 5 August 2024"
+      }
+    ]
+  },
+  {
+    "id": "winaico-ncx48-aw",
+    "name": "Winaico NCX48",
+    "group": "Everyday roof comparisons",
+    "fit": "You want a compact panel with glass on both sides.",
+    "why": "Its current Australian sheet combines a compact footprint with 465 to 470 W of rated output.",
+    "check": "Each panel weighs 25 kg. Roof support and fixings matter; light reaching the rear does not create a guaranteed extra saving.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Winaico WST-NCX48-AW Australian datasheet",
+        "url": "https://www.winaico.com.au/wp-content/uploads/2026/08/WINAICO_WST-470NCX48-AW_AUS_0726.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AUS.0726"
+      },
+      {
+        "title": "Winaico Australian product page",
+        "url": "https://www.winaico.com.au/wst-465ncx48-aw",
+        "kind": "manufacturer_specification",
+        "revision": "Undated page checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "tindo-walara-g4p",
+    "name": "Tindo Walara G4P",
+    "group": "Australian manufacturing",
+    "fit": "You value Australian-made panels and your roof can fit a longer panel.",
+    "why": "The manufacturer identifies this 475 W model as made in South Australia.",
+    "check": "At 1.91 metres long, it needs a suitable layout. Check the written product and installation cover alongside where it is made.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Tindo Walara 475G4P-BL datasheet",
+        "url": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "V03, 15 August 2025"
+      },
+      {
+        "title": "Tindo Australian panel range",
+        "url": "https://tindosolar.com.au/our-product/tindo-panels/",
+        "kind": "manufacturer_specification",
+        "revision": "Undated page checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "aiko-neostar-2p54",
+    "name": "AIKO Neostar 2P54",
+    "group": "Making the most of roof space",
+    "fit": "You want a clean-looking panel and more rated output for its area.",
+    "why": "Electrical contacts sit behind the cells, leaving the front clear. Its Australian page documents high output per panel area.",
+    "check": "The exact model, roof shade and inverter design determine the result. A manufacturer's partial-shade claim is not a generation forecast for your home.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "AIKO Australian Neostar 2P54 mono-glass product page",
+        "url": "https://aikosolar.com/au/products/neostar-2p54-mono-glass/",
+        "kind": "manufacturer_specification",
+        "revision": "Undated current product page"
+      },
+      {
+        "title": "AIKO Neostar 2P54 datasheet link",
+        "url": "https://aikosolar.com/wp-content/uploads/2025/07/Neostar-2P54-Mono-Glass-450-485W.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "July 2025 URL; fetch timed out, specifications above taken from AU page"
+      }
+    ]
+  },
+  {
+    "id": "trina-vertex-s-plus-neg9r28",
+    "name": "Trina Vertex S+",
+    "group": "Everyday roof comparisons",
+    "fit": "You want a compact panel for a residential roof layout.",
+    "why": "The Australian range documents glass on both sides and up to 460 W in a standard residential footprint.",
+    "check": "Match the full NEG9R.28 model and power class to the current sheet. Older versions and the full-black model have different specifications.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Trina Australian Vertex S+ NEG9R.28 page",
+        "url": "https://www.trinasolar.com/au/NEG9R.28/",
+        "kind": "manufacturer_specification",
+        "revision": "Undated current product page"
+      }
+    ]
+  },
+  {
+    "id": "jinko-tiger-neo-54hl4r-bdv",
+    "name": "Jinko Tiger Neo 54HL4R-BDV",
+    "group": "Everyday roof comparisons",
+    "fit": "You are comparing a compact panel that can also use light from behind.",
+    "why": "The Australian sheet describes glass on both sides in a 22 kg panel.",
+    "check": "Rear-side gains depend on the roof and mounting. This reviewed sheet is an older locally published version; confirm the exact current quote, since newer Tiger Neo models differ.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Jinko Australian 54HL4R-BDV datasheet",
+        "url": "https://jinkosolar.com.au/wp-content/uploads/2023/01/JKM430-450N-54HL4R-BDV-F1C1.1-EN-for-AU-CEC.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "F1C1.1; copyright 2022"
+      },
+      {
+        "title": "Jinko Australian datasheet index",
+        "url": "https://jinkosolar.com.au/download_categories/datasheets/",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "longi-x10-54hvb",
+    "name": "LONGi Hi-MO X10 premium black",
+    "group": "Making the most of roof space",
+    "fit": "You are considering a dark panel with high rated output for its roof area.",
+    "why": "The exact manufacturer's sheet documents 475 to 495 W with contacts behind the cells.",
+    "check": "The reviewed exact-model sheet is global. Australian supply and the local warranty for LR7-54HVB still need confirmation; other Hi-MO X10 models are different.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "LONGi LR7-54HVB manufacturer datasheet",
+        "url": "https://static.longi.com/LR_7_54_HVB_475_495_M_30_30_and_15_Frame_BGV_02_20250820_EN_1_39b1ccce57.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "BGV02, 20 August 2025"
+      },
+      {
+        "title": "LONGi Australian module range",
+        "url": "https://www.longi.com/au/products/modules/",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "risen-rsm96-bndg",
+    "name": "Risen RSM96 BNDG",
+    "group": "Everyday roof comparisons",
+    "fit": "You want a compact residential panel and an installer who checks its electrical fit.",
+    "why": "Its Australian/New Zealand sheet documents 475 W in a compact footprint.",
+    "check": "It draws more current than some older panels. The installer needs to check inverter inputs and connections; rear-side light gains depend on the installation.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Risen 2026 AU/NZ RSM96-11-475BNDG datasheet",
+        "url": "https://risenenergy.com.au/downloads/datasheets/RSM96-11-475BNDG-datasheet-2026H1-EN.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "H1-1-2026 AU and NZ"
+      },
+      {
+        "title": "Risen Australian product page",
+        "url": "https://risenenergy.com.au/solar/rsm96-11-475bndg/",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "astronergy-astro-n7s",
+    "name": "Astronergy ASTRO N7s",
+    "group": "Everyday roof comparisons",
+    "fit": "You want a compact panel and a clear answer about its weight and construction.",
+    "why": "The Australian sheet documents 455 to 475 W and two glass-thickness options.",
+    "check": "The glass option changes panel weight. The quote should identify the supplied version; newer 3.0 and all-black ranges are different.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Astronergy Australian ASTRO N7s datasheet",
+        "url": "https://astronergy.com.au/wp-content/uploads/2025/11/455-475_%C2%B15WASTRO-N7s_CHSM48RNDGF-BH_1762x1134x30_AU_20250916-V2.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU 16 September 2025; filename V2/PDF title V1"
+      },
+      {
+        "title": "Astronergy Australian download index",
+        "url": "https://astronergy.com.au/download-product/",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "dmegc-g12rt-g48hbb",
+    "name": "DMEGC Infinity RT",
+    "group": "Everyday roof comparisons",
+    "fit": "You want dark panels with glass on both sides.",
+    "why": "Its current Australian download sheet documents 455 to 475 W in a compact footprint.",
+    "check": "This exact model generates from the front only. Double glass does not mean double-sided generation; a lighter variant has different specifications.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "DMEGC Australian-index G48HBB datasheet",
+        "url": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "9 December 2025; AU index upload May 2026"
+      },
+      {
+        "title": "DMEGC Australian download index",
+        "url": "https://www.dmegcsolar.com/download/index-cec-australia.html",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "suntech-black-pro-nfb",
+    "name": "Suntech Ultra T Black Pro",
+    "group": "Everyday roof comparisons",
+    "fit": "You want an all-black panel with a clear front-side output comparison.",
+    "why": "The Australian sheet documents up to 465 W with glass on both sides.",
+    "check": "This model generates from the front only. Its weight and electrical current need a suitable roof, fixings and inverter.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Suntech Australian Black Pro monofacial datasheet",
+        "url": "https://www.suntech-power.com/download/au/STP445-465S-H48-Nfb%2B(Black%20Pro%20Monofacial)_AU.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AU_A0, copyright 2026"
+      },
+      {
+        "title": "Suntech download centre",
+        "url": "https://www.suntech-power.com/downloads/",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "hyundai-heteromax-hit",
+    "name": "Hyundai HeteroMax HiT",
+    "group": "Making the most of roof space",
+    "fit": "A shorter panel helps your roof layout and you want to understand hot-weather performance.",
+    "why": "Its published cell design has a relatively small rated power drop as it gets hotter.",
+    "check": "The reviewed Australian-hosted sheet is older. Confirm the exact currently offered model and local warranty; the brand name alone does not identify this panel.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Hyundai Australian HeteroMax HiT datasheet",
+        "url": "https://www.hyundaisolar.com.au/wp-content/uploads/2025/01/Data-Sheet-Hyundai-440W-HiT-HxxxOF-BF-Solar-Panel-1.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "14 June 2023; uploaded January 2025"
+      }
+    ]
+  },
+  {
+    "id": "das-dh96te-black-pro",
+    "name": "DAS Solar DH96TE Black Pro",
+    "group": "Everyday roof comparisons",
+    "fit": "You want compact black panels and care about output in hot conditions.",
+    "why": "The manufacturer documents a relatively small rated power drop as the cells heat up.",
+    "check": "Confirm the full model, connections and mounting design. A laboratory heat specification does not guarantee yearly output on a shaded roof.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "DAS Australian DH96TE Black Pro download entry",
+        "url": "https://www.das-solar.com/au/site/download?catalog=63",
+        "kind": "manufacturer_specification",
+        "revision": "29 July 2025"
+      },
+      {
+        "title": "DAS manufacturer DH96TE Black Pro datasheet",
+        "url": "https://yidao.cdn.shwebspace.com/uploads/688866c7/DAS-DH96TE-EN-460-475%26ef%26bc%2688Black%20Pro%26ef%26bc%2689.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Linked from AU manufacturer index; 29 July 2025"
+      }
+    ]
+  },
+  {
+    "id": "canadian-top-hiku6-48td",
+    "name": "Canadian Solar TOPHiKu6",
+    "group": "Making the most of roof space",
+    "fit": "You want high rated output in a residential panel footprint.",
+    "why": "The current Australian sheet documents up to 485 W.",
+    "check": "The download-page label and updated sheet show different power ranges. Match the exact CS6.2-48TD model to the current sheet and account for its 24.6 kg weight.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Canadian Solar TOPHiKu6 Australian datasheet",
+        "url": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "October 2025 V1.5C1_AU"
+      },
+      {
+        "title": "Canadian Solar Australian download centre",
+        "url": "https://www.csisolar.com/au/downloads/",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "phono-helios-plus",
+    "name": "Phono Helios+",
+    "group": "Making the most of roof space",
+    "fit": "You want to compare how panel output changes in hotter conditions.",
+    "why": "The Australian Helios+ sheet documents a relatively small rated power drop as the cells heat up.",
+    "check": "Helios and Helios+ are different. Match the full model to the quote; a transparent rear does not guarantee extra energy from your roof.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Phono Australian Helios+ Clear datasheet",
+        "url": "https://phonosolar.com.au/wp-content/uploads/2024/11/Phono-Solar-Helios-Clear-v1.4.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "v1.4; November 2024 URL"
+      }
+    ]
+  },
+  {
+    "id": "ja-deep-blue4-jam54d41-lb",
+    "name": "JA Solar DeepBlue 4.0 Pro",
+    "group": "Everyday roof comparisons",
+    "fit": "You want a compact panel that can use front and rear light.",
+    "why": "The reviewed Australian manufacturer sheet documents a 22 kg panel with glass on both sides.",
+    "check": "The reviewed document is manufacturer-authored and publicly hosted by a distributor. Confirm current availability and the exact JAM54D41-LB version; other suffixes differ.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "JA manufacturer-authored Australian JAM54D41-LB sheet, publicly hosted by OSW",
+        "url": "https://downloads.osw.energy/au/downloads/2109/docs/JA%20DS-%20JAS-JAM54D41-440-LB-30%20.pdf",
+        "kind": "manufacturer_document_distributor_host",
+        "revision": "Reviewed 430-455 W AU sheet; revision not visible on reviewed specification page"
+      },
+      {
+        "title": "JA manufacturer-hosted Australian sheet link",
+        "url": "https://www.jasolar.com/uploadfile/fujian/2025/0121/80eb7fe2dfd40b0.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "Indexed AUS-EN-20250109A; direct fetch 403"
+      }
+    ]
+  },
+  {
+    "id": "rec-alpha-pro-m",
+    "name": "REC Alpha Pro M",
+    "group": "Specialist large or lighter roof layouts",
+    "fit": "You have a large, structurally suitable home roof or shed with plenty of clear space.",
+    "why": "Its Australian sheet documents 600 to 640 W per large panel and a relatively small rated power drop in heat.",
+    "check": "Each panel is about 2.18 by 1.31 metres and 32.5 kg. Its size, electrical demands and fixings can rule it out for an ordinary home roof.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "REC Alpha Pro M Australian manufacturer datasheet",
+        "url": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "IEC AU CEC 10.2025 V4.9"
+      }
+    ]
+  },
+  {
+    "id": "tongwei-tnc2-48hd",
+    "name": "Tongwei TNC 2.0",
+    "group": "Everyday roof comparisons",
+    "fit": "You want a compact array and your installer checks the newer panel's electrical demands.",
+    "why": "The current Australian specification table documents 470 to 480 W.",
+    "check": "The document's older title shows a different range. Use the current 48HD specification table and check inverter compatibility.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Tongwei Australian TWMNH-48HD datasheet",
+        "url": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AUS-Ver.20260501"
+      },
+      {
+        "title": "Tongwei Australian download centre",
+        "url": "https://au.tongwei.cn/download.html",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "winaico-wbc-bdx54",
+    "name": "Winaico WBC",
+    "group": "Making the most of roof space",
+    "fit": "You want an all-black front with the electrical contacts behind the cells.",
+    "why": "The Australian sheet documents 485 W without front metal strips across the cells.",
+    "check": "Its size differs from Winaico's NCX48 range. Any rear-side gain depends on mounting, and insurance or warranty marketing needs an applicable written policy.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Winaico Australian WBC back-contact datasheet",
+        "url": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "AUS.0126"
+      },
+      {
+        "title": "Winaico Australian WBC product page",
+        "url": "https://www.winaico.com.au/8330-2",
+        "kind": "manufacturer_specification",
+        "revision": "Checked 10 October 2026"
+      }
+    ]
+  },
+  {
+    "id": "longi-guardian-light",
+    "name": "LONGi Hi-MO X10 Guardian Light",
+    "group": "Specialist large or lighter roof layouts",
+    "fit": "Panel weight is a real roof-design constraint and a longer panel can fit.",
+    "why": "The Australian product page documents a 16.3 kg lightweight panel.",
+    "check": "At 1.99 metres long, it still needs checks for roof capacity, wind, fixings and approved mounting. Lightweight does not automatically remove the need for reinforcement.",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "LONGi Australian Guardian Light model page",
+        "url": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/",
+        "kind": "manufacturer_specification",
+        "revision": "Undated current product page"
+      }
+    ]
+  }
+]

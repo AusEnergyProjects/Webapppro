@@ -4,6 +4,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { buildComparisonToolLink } from "@/lib/comparison-navigation";
 import {
   Field,
   StepCard,
@@ -21,6 +22,7 @@ import {
 } from "./AustralianAddressLookup";
 import { GasUpgradeQuestionnaire } from "./GasUpgradeQuestionnaire";
 import type { GasUsageProfile } from "@/lib/gas-tariff-engine";
+import type { PlannerGasEquipment } from "@/lib/planner-comparison-handoff";
 import { annualiseGasUsage, type GasUsageInputMode } from "@/lib/gas-usage-input";
 import { resolvePublishedPlanReference, type PublishedReferencePlan } from "@/lib/published-plan-reference";
 import { CurrentPlanInput, CurrentPlanComparison, PlanPriceDifference } from "./CurrentPlanComparison";
@@ -106,7 +108,8 @@ export function GasComparator() {
   const [activeStep, setActiveStep] = useState(1);
   const [addressQuery, setAddressQuery] = useState("");
   const [postcode, setPostcode] = useState("");
-  const [supplyType, setSupplyType] = useState<"mains" | "lpg">("mains");
+  const [supplyType, setSupplyType] = useState<"mains" | "lpg" | "">("mains");
+  const [plannerEquipment, setPlannerEquipment] = useState<PlannerGasEquipment | undefined>();
   const [usageMode, setUsageMode] = useState<GasUsageInputMode>("annual");
   const [usageMj, setUsageMj] = useState("");
   const [billStart, setBillStart] = useState("");
@@ -135,6 +138,7 @@ export function GasComparator() {
   const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const resultsHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const comparisonInputKeyRef = useRef("");
+  const comparisonEditedRef = useRef(false);
   const annualisedUsage = useMemo(() => annualiseGasUsage({
     usageMj: Number(usageMj), mode: usageMode, profile: usageProfile, billStart, billEnd,
   }), [billEnd, billStart, usageMj, usageMode, usageProfile]);
@@ -154,6 +158,7 @@ export function GasComparator() {
   comparisonInputKeyRef.current = comparisonInputKey;
 
   useEffect(() => {
+    let cancelled = false;
     const query = new URLSearchParams(window.location.search);
     const restoredPostcode = query.get("pc") || query.get("postcode") || "";
     const restoredAnnualMj = query.get("mj") || query.get("annualMj") || "";
@@ -163,11 +168,21 @@ export function GasComparator() {
     if (/^\d{4}$/.test(restoredPostcode)) setPostcode(restoredPostcode);
     if (Number(restoredAnnualMj) > 0) { setUsageMj(String(Math.round(Number(restoredAnnualMj)))); setUsageMode("annual"); }
     if (fromHomePlan) {
-      setHandoffStatus({ title: "Continuing from your home plan", message: "Your starting point is ready. Review the gas-use details, then select Compare gas plans." });
+      setHandoffStatus({ title: "Continuing from your home plan", message: "Add the gas usage from your bill, then review the equipment details before comparing." });
+      void import("@/lib/planner-comparison-handoff").then(({ readPlannerComparisonHandoff }) => {
+        if (cancelled || comparisonEditedRef.current) return;
+        const handoff = readPlannerComparisonHandoff(window.location.search, "gas", { local: window.localStorage, tab: window.sessionStorage });
+        if (!handoff) return;
+        if (!/^\d{4}$/.test(restoredPostcode)) setPostcode(handoff.postcode);
+        setSupplyType(handoff.gasSupply ?? "");
+        setPlannerEquipment(handoff.gasEquipment);
+        setHandoffStatus({ title: "Continuing from your home plan", message: "Your postcode and known gas equipment are carried over. Review the gas-use details, add your bill usage, and confirm any details still needed before selecting Compare gas plans." });
+      }).catch(() => { /* The comparison works independently when the local handoff is unavailable. */ });
     } else if (/^\d{4}$/.test(restoredPostcode) || Number(restoredAnnualMj) > 0) {
       setHandoffStatus({ title: "Continuing your saved comparison", message: "Review the restored gas-use details, then select Compare gas plans." });
     }
     /* eslint-enable react-hooks/set-state-in-effect */
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -200,6 +215,7 @@ export function GasComparator() {
 
   function continueFromProperty() {
     setError("");
+    if (!supplyType) { setError("Choose the gas supply type shown on your bill."); return; }
     if (supplyType !== "mains") {
       setError("This comparison covers reticulated mains gas only. LPG prices need a supplier quote.");
       return;
@@ -335,7 +351,7 @@ export function GasComparator() {
     <>
       <ComparisonJourney title="Your gas comparison" current={journeyStep} steps={GAS_JOURNEY_STEPS} />
       {handoffStatus && <p className="comparison-handoff-status" role="status"><strong>{handoffStatus.title}</strong>{handoffStatus.message}</p>}
-      <form ref={formRef} id="gas-comparison-form" onSubmit={submitCurrentStep} aria-label="Gas plan comparison" noValidate>
+      <form ref={formRef} id="gas-comparison-form" onChangeCapture={() => { comparisonEditedRef.current = true; }} onSubmit={submitCurrentStep} aria-label="Gas plan comparison" noValidate>
         {activeStep < 3 && <button type="submit" hidden>Continue</button>}
         {activeStep === 1 && <>
           <StepCard number="1" title="Where is the property?" headingRef={stepHeadingRef}>
@@ -366,7 +382,7 @@ export function GasComparator() {
         </>}
 
         {activeStep === 4 && hasCurrentPricing && !needsDistributor && <div className="comparison-results-heading"><span>Step 4 of 4</span><h2 ref={resultsHeadingRef} tabIndex={-1} id="gas-results-title">Your gas plan results</h2><p>See what switching to electric could save, then compare current gas plans and check the conditions shown on the offer before switching.</p><button className="btn ghost" type="button" onClick={() => moveToStep(3)}>Edit answers</button></div>}
-        <div hidden={activeStep !== 3 && activeStep !== 4}><GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} questionsVisible={activeStep === 3} headingRef={activeStep === 3 ? stepHeadingRef : undefined} onUsageProfileChange={updateUsageProfileFromQuestionnaire} /></div>
+        <div hidden={activeStep !== 3 && activeStep !== 4}><GasUpgradeQuestionnaire postcode={postcode} annualMj={annualisedUsage.ok ? String(effectiveAnnualMj) : ""} initialEquipment={plannerEquipment} questionsVisible={activeStep === 3} headingRef={activeStep === 3 ? stepHeadingRef : undefined} onUsageProfileChange={updateUsageProfileFromQuestionnaire} /></div>
         {activeStep === 3 && <>
           <StepCard number="3" title="Check your plan conditions">
             <label className={`native-assumption-card gas-discount-card${includeConditional ? " selected" : ""}`}><input type="checkbox" checked={includeConditional} onChange={(event) => setIncludeConditional(event.target.checked)} /><span><b>Include conditional discounts</b><small>Leave this off unless you expect to meet every condition, such as paying on time or using direct debit.</small></span></label>
@@ -406,7 +422,7 @@ export function GasComparator() {
         <div className="note"><b>How these estimates work.</b> Annual cost equals published daily supply charges plus usage charges, less only the conditional discounts selected above, based on {effectiveAnnualMj.toLocaleString()} MJ per year. {usageMode === "bill" ? "The entered bill was annualised from its exact dates before pricing. " : ""}The {usageProfile === "heating" ? "gas heating" : "steady year-round"} profile allocates usage across each seasonal tariff period. Concessions are not deducted. Results include only offers that passed strict calendar coverage and rate validation. Confirm rates, eligibility and conditions with the retailer before switching.</div>
         {bundle && <div className="note"><b>Gas tariff evidence.</b> Retrieved current CDR records {bundle.fetchedAt ? new Date(bundle.fetchedAt).toLocaleString() : "this session"}. {bundle.source?.detailPlansSucceeded || bundle.plans.length} of {bundle.source?.candidatePlans || bundle.plans.length} locally relevant plan details passed strict validation from {bundle.source?.listSourcesSucceeded ?? "the available"} of {bundle.source?.retailersDiscovered ?? "the discovered"} sources. {bundle.source?.oldestPlanUpdatedAt && bundle.source?.newestPlanUpdatedAt ? `Included retailer records were last updated between ${new Date(bundle.source.oldestPlanUpdatedAt).toLocaleDateString()} and ${new Date(bundle.source.newestPlanUpdatedAt).toLocaleDateString()}. ` : ""}{bundle.source?.plansMissingLastUpdated ? `${bundle.source.plansMissingLastUpdated} included records did not publish a usable update time. ` : ""}{bundle.source?.partial ? "Some sources or plan details were unavailable or rejected, so this is not a complete-market result." : "All discovered sources and local candidates completed successfully."}</div>}
         {bundle?.source?.retailerCoverage && <details className="note"><summary>Retailer source coverage</summary><ul>{bundle.source.retailerCoverage.filter((coverage) => !coverage.listAvailable || coverage.candidatePlans > 0).map((coverage) => <li key={coverage.retailer}><b>{coverage.retailer}:</b> {coverage.listAvailable ? `${coverage.detailsPassed} of ${coverage.candidatePlans} local plan details passed` : "plan list unavailable"}{coverage.detailsRejected ? `; ${coverage.detailsRejected} rejected by gas tariff validation` : ""}{coverage.detailsUnavailable ? `; ${coverage.detailsUnavailable} unavailable` : ""}</li>)}</ul></details>}
-        <section className="comparison-complete-next" aria-labelledby="gas-next-title"><div><span>One useful next step</span><h2 id="gas-next-title">Now check the electricity plan</h2><p>Electricity often represents the larger household bill. Smart-meter data gives the most accurate match, but a recent bill also works.</p></div><Link className="btn" href="/compare">Compare electricity plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
+        <section className="comparison-complete-next" aria-labelledby="gas-next-title"><div><span>One useful next step</span><h2 id="gas-next-title">Now check the electricity plan</h2><p>Electricity often represents the larger household bill. Smart-meter data gives the most accurate match, but a recent bill also works.</p></div><Link className="btn" href={buildComparisonToolLink("electricity", postcode)}>Compare electricity plans</Link><Link className="comparison-secondary-link" href="/plan" prefetch={false}>Return to my home energy plan</Link></section>
       </section>}
     </>
   );

@@ -10,9 +10,9 @@ export function customerHubEmailCta(url) {
     throw new Error("CUSTOMER_HUB_EMAIL_URL_INVALID");
   }
   const label = "Open my quotes & questions";
-  const explanation = "As businesses send quotes or ask questions, they will appear in your private customer hub. Compare quotes, answer questions and share photos or documents, all in one place.";
+  const explanation = "As businesses send quotes or ask questions, they will appear on your private page for this request. Read quotes, answer questions and share photos or documents, all in one place. No account or extra form is needed.";
   return {
-    text: `\n\nYOUR QUOTES AND QUESTIONS, TOGETHER\n${explanation}\n\n${label}:\n${url}\n\nUse this same hub for every update about this request. Keep your link private.`,
+    text: `\n\nYOUR QUOTES AND QUESTIONS, TOGETHER\n${explanation}\n\n${label}:\n${url}\n\nUse this same link for every update about this request. Keep your link private.`,
     html: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td style="padding:24px 20px;background:#e7f7f1;border:1px solid #b9dfd2;border-radius:12px;font-family:Arial,Helvetica,sans-serif"><h2 style="margin:0 0 12px;color:#123d39;font-size:24px;line-height:31px">Your quotes and questions, together</h2><p style="margin:0 0 20px;color:#294e49;font-size:16px;line-height:25px">${explanation}</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" bgcolor="#08775b" style="border-radius:8px"><a href="${escapeHtml(url)}" style="display:block;padding:18px 16px;border:1px solid #08775b;border-radius:8px;background:#08775b;color:#ffffff;text-align:center;text-decoration:none;font-size:19px;line-height:27px;font-weight:bold">${escapeHtml(label)} &rarr;</a></td></tr></table><p style="margin:14px 0 0;color:#3f625b;font-size:14px;line-height:22px">Click above whenever you receive an update about this request. Keep your link private.</p></td></tr></table>`,
   };
 }

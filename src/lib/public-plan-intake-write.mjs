@@ -116,6 +116,7 @@ export async function confirmPublicPlanIntakeOpportunityWrite(database, input) {
   const verified = await database.prepare(`SELECT intake.id,
       CASE WHEN opportunity.id IS NULL THEN 0 ELSE 1 END opportunity_exists,
       CASE WHEN contact.id IS NULL THEN 0 ELSE 1 END contact_exists,
+      CASE WHEN opportunity.status = 'open' THEN 1 ELSE 0 END customer_reply_link_expected,
       CASE WHEN preparation.id IS NULL THEN 0 ELSE 1 END preparation_exists
     FROM public_plan_lead_intakes intake
     LEFT JOIN trade_opportunities opportunity ON opportunity.id = ?
@@ -174,5 +175,5 @@ export async function confirmPublicPlanIntakeOpportunityWrite(database, input) {
   if (String(stored?.opportunity_id || "") !== input.opportunityId) {
     throw new Error("PUBLIC_PLAN_OPPORTUNITY_REFERENCE_MISMATCH");
   }
-  return { opportunityId: input.opportunityId };
+  return { opportunityId: input.opportunityId, customerReplyLinkExpected: Number(verified.customer_reply_link_expected) === 1 };
 }

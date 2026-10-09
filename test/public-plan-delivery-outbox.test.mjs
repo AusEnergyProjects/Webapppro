@@ -486,7 +486,7 @@ test("intake opportunity confirmation requires the active contact and selected q
     expectedQuotePreparation: true,
     now: value.now,
     ...consent,
-  }), { opportunityId: "opportunity-1" });
+  }), { opportunityId: "opportunity-1", customerReplyLinkExpected: true });
   assert.equal(database.prepare("SELECT opportunity_id FROM public_plan_lead_intakes").get().opportunity_id, "opportunity-1");
   const confirm = () => confirmPublicPlanIntakeOpportunityWrite(db, {
     intakeId: value.intakeId, opportunityId: "opportunity-1", expectedQuotePreparation: true,
@@ -501,7 +501,7 @@ test("intake opportunity confirmation requires the active contact and selected q
   ]) {
     database.exec("UPDATE public_plan_lead_intakes SET opportunity_id = ''");
     database.prepare("UPDATE trade_opportunities SET status = ?, service_categories = ?").run(status, services);
-    if (allowed) assert.deepEqual(await confirm(), { opportunityId: "opportunity-1" });
+    if (allowed) assert.deepEqual(await confirm(), { opportunityId: "opportunity-1", customerReplyLinkExpected: false });
     else await assert.rejects(confirm, /PUBLIC_PLAN_OPPORTUNITY_INTAKE_INCOMPLETE/);
     assert.equal(database.prepare("SELECT opportunity_id FROM public_plan_lead_intakes").get().opportunity_id,
       allowed ? "opportunity-1" : "", `${status}: ${services}`);
@@ -523,7 +523,7 @@ test("intake opportunity confirmation requires the active contact and selected q
     database.exec(restore);
     assert.equal(database.prepare("SELECT opportunity_id FROM public_plan_lead_intakes").get().opportunity_id, "");
   }
-  assert.deepEqual(await confirm(), { opportunityId: "opportunity-1" });
+  assert.deepEqual(await confirm(), { opportunityId: "opportunity-1", customerReplyLinkExpected: false });
 });
 
 test("delivered PDF and intake cleanup retry until the private objects are verifiably absent", async () => {

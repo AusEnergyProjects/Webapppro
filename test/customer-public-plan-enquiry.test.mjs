@@ -203,7 +203,7 @@ test("the retry key binds the exact address tuple and keeps plan state separate"
   assert.doesNotMatch(submittedPayload, /resolvedAddressState/);
 });
 
-test("successful submission opens an accessible four-way next-step gateway", () => {
+test("successful submission explains emailed replies before optional tools in an accessible gateway", () => {
   assert.match(enquiryForm, /<dialog/);
   assert.match(enquiryForm, /aria-labelledby="public-plan-next-steps-title"/);
   assert.match(enquiryForm, /dialog\.showModal\(\)/);
@@ -223,6 +223,10 @@ test("successful submission opens an accessible four-way next-step gateway", () 
   assert.match(enquiryForm, /Download the same PDF prepared for your email/);
   assert.doesNotMatch(enquiryForm, /new URLSearchParams\(\{[^}]*customerFirstName/);
   assert.equal(enquiryForm.match(/className=\{styles\.gatewayActions\}/g)?.length, 1);
+  assert.equal(enquiryForm.match(/<EnquiryRepliesNextStep email=\{email\} deliveryStatus=\{enquiryEmailStatus\}/g)?.length, 2);
+  assert.match(enquiryForm, /ref=\{gatewayFirstActionRef\} tabIndex=\{-1\}/);
+  assert.match(enquiryForm, /onComparisonStart\?\.\("electricity"\)/);
+  assert.match(enquiryForm, /onComparisonStart\?\.\("gas"\)/);
   assert.doesNotMatch(enquiryForm, /[\u2013\u2014]/);
 });
 
