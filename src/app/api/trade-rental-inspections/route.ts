@@ -49,7 +49,7 @@ import {
   revokeRentalReportLink,
 } from "@/lib/trade-rental-report-server";
 
-import { emailRentalAssessmentReport, rentalReportDeliveryRecipient, rentalReportDeliveryState } from "@/lib/trade-rental-report-email-server";
+import { emailRentalAssessmentReport, rentalReportDeliveryRecipient, rentalReportDeliveryState, rentalReportDeliveryReview, setRentalReportDeliveryReview } from "@/lib/trade-rental-report-email-server";
 
 export const runtime = "edge";
 
@@ -214,6 +214,9 @@ function inspectionError(error: unknown) {
   if (code === "RENTAL_MODULE_CREDENTIAL_REQUIRED") return adminJson({ ok: false, code, error: "The assigned assessor needs a current matching credential and supporting team document before this module can be completed." }, 409);
   if (code === "RENTAL_MODULE_CREDENTIAL_CHANGED") return adminJson({ ok: false, error: "The saved credential changed or expired. Reopen and complete the module again before issuing." }, 409);
   if (code === "REPORT_PERMISSION_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow issued reports." }, 403);
+  if (code === "REPORT_DELIVERY_OWNER_REQUIRED") return adminJson({ ok: false, error: "Only the business owner can pause or approve the report email." }, 403);
+  if (code === "REPORT_DELIVERY_ALREADY_SENDING") return adminJson({ ok: false, error: "The report email has already started or was sent. It cannot be paused now." }, 409);
+  if (code === "REPORT_DELIVERY_REVIEW_CHANGED") return adminJson({ ok: false, error: "The report email review changed. Refresh the assessment before trying again." }, 409);
   if (code === "RENTAL_INSPECTION_LOCKED") return adminJson({ ok: false, error: "This issued assessment is locked and remains in the report history. Start a replacement assessment job if a correction is required." }, 409);
   if (code === "RENTAL_MODULE_NOT_FOUND" || code === "RENTAL_ITEM_NOT_FOUND") return adminJson({ ok: false, error: "The assessment item could not be found." }, 404);
   if (code === "RENTAL_ASSESSMENT_SCOPE_INVALID") return adminJson({ ok: false, error: "Choose a valid rental assessment scope." }, 400);
@@ -457,7 +460,9 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     reports,
     deliveryRecipient: context.access.canRunReports ? await rentalReportDeliveryRecipient(context.access.ownerUid, context.workOrderId) : null,
     reportDelivery: context.access.canRunReports ? await rentalReportDeliveryState(context.access.ownerUid, inspectionId) : null,
+    deliveryReview: context.access.canRunReports ? await rentalReportDeliveryReview(context.access.ownerUid, inspectionId) : null,
     permissions: {
+      canManageDeliveryReview: context.access.isOwner && context.access.canRunReports,
       canEdit: context.access.canManageFieldEvidence && !TERMINAL_INSPECTION_STATUSES.has(String(context.inspection.status)),
       canIssue: context.access.memberId === String(context.inspection.assessor_member_id || "")
         && context.access.memberId === String(context.job.assignee_member_id || "")
@@ -1146,6 +1151,13 @@ export async function POST(request: Request) {
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     let context = await contextFor(access, workOrderId);
     const action = cleanAdminText(body.action, 40);
+    if (action === "set_report_delivery_review") {
+      if (!access.isOwner || !access.canRunReports) throw new Error("REPORT_DELIVERY_OWNER_REQUIRED");
+      if (typeof body.hold !== "boolean") return adminJson({ ok: false, error: "Choose whether to pause or approve the report email." }, 400);
+      if (body.expectedInspectionRevision !== integer(context.inspection.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
+      await setRentalReportDeliveryReview({ access, workOrderId, inspectionId: String(context.inspection.id), hold: body.hold });
+      return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)) });
+    }
     if (action === "revoke_report_link") {
       const revokedLink = await revokeRentalReportLink({ access, workOrderId,
         linkId: cleanAdminText(body.linkId, 180) });

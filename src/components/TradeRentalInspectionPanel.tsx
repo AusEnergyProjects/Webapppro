@@ -160,7 +160,8 @@ type AssessmentResult = {
     internalPdfUrl: string;
     link: null | { id: string; status: string; expiresAt: string; viewCount: number; downloadCount: number; shareUrl: string; pdfUrl: string } }>;
   issuedReport?: { reportId: string; reportNumber: string; issuedAt: string; expiresAt: string; shareUrl: string; pdfUrl: string };
-  permissions?: { canEdit: boolean; canIssue: boolean; canRevokeLink: boolean; isAssignedAssessor: boolean };
+  permissions?: { canEdit: boolean; canIssue: boolean; canRevokeLink: boolean; isAssignedAssessor: boolean; canManageDeliveryReview: boolean };
+  deliveryReview?: { status: "held" | "released"; message: string } | null;
   blockers?: CompletionBlocker[];
   error?: string;
 };
@@ -951,6 +952,12 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     timing.markCompleted();
   }
 
+  async function changeDeliveryReview(hold: boolean) {
+    await mutate({ action: "set_report_delivery_review", hold, expectedInspectionRevision: data.inspection?.revision }, "delivery-review",
+      hold ? "Report email paused. The assessor can finish and save the PDF for your review."
+        : "Report email approved. The assessor's saved Finish request can now send it.");
+  }
+
   async function copyReportLink() {
     const shareUrl = latestReport?.link?.shareUrl;
     if (!shareUrl) return;
@@ -1187,6 +1194,12 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
 
     <section className={styles.issueCard}>
       <header><div><span>Final assessor issue</span><h4>{latestReport ? latestReport.reportNumber : "Issue the complete rental report"}</h4></div><strong>{latestReport ? "Issued" : allModulesComplete ? "Ready" : "Waiting"}</strong></header>
+      {data.deliveryReview?.status === "held" && <p role="status">Email paused for owner review. The completed PDF can be saved and opened before it is emailed.</p>}
+      {data.permissions?.canManageDeliveryReview && <div className={styles.reportActions}>
+        {data.deliveryReview?.status === "held"
+          ? <button type="button" disabled={Boolean(busy) || !latestReport} onClick={() => void changeDeliveryReview(false)}>{busy === "delivery-review" ? "Saving..." : "Approve report email"}</button>
+          : <button type="button" disabled={Boolean(busy)} onClick={() => void changeDeliveryReview(true)}>{busy === "delivery-review" ? "Saving..." : "Pause email for my review"}</button>}
+      </div>}
       {latestReport?.link?.status === "active" && latestReport.link.shareUrl ? <>
         <p>The immutable PDF and quick-view report contain all issued details and evidence, except internal notes. The no-account link expires {dateLabel(latestReport.link.expiresAt)}.</p>
         <div className={styles.shareRow}><input aria-label="Secure rental report link" readOnly value={latestReport.link.shareUrl} /><button type="button" onClick={() => void copyReportLink()}>Copy link</button><a href={latestReport.link.shareUrl} target="_blank" rel="noreferrer">Open report</a></div>

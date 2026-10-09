@@ -175,7 +175,8 @@ function loadRoute(fixture, permissions = {}, reportApi = {}, runtime = {}) {
     "@/lib/trade-rental-credentials": credentials,
     "@/lib/trade-rental-schema-guards": { ensureTradeRentalSchemaGuards: async () => {} },
     "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: (request) => request.json() },
-    "@/lib/trade-rental-report-email-server": { rentalReportDeliveryRecipient: async () => null, rentalReportDeliveryState: async () => null },
+    "@/lib/trade-rental-report-email-server": { rentalReportDeliveryRecipient: async () => null, rentalReportDeliveryState: async () => null,
+      rentalReportDeliveryReview: async () => null, ...runtime.emailApi },
     "@/lib/trade-rental-report-server": { ownerRentalReportPresentation: async () => [], ...reportApi },
   };
   new Function("require", "module", "exports", compiled)((id) => {
@@ -1302,5 +1303,157 @@ test('protected issuance rejection retains the existing transient503 and never r
     assert.equal((await response.json()).code, 'RENTAL_REPORT_ISSUING');
     assert.equal(reconciliationCalls, 0);
     assert.equal(f.sql.prepare('SELECT status FROM trade_rental_reports').get().status, 'staged');
+  } finally { f.sql.close(); }
+});
+
+test('delivery review permission is limited to the owner with report permission and returns the current hold', async () => {
+  for (const permissions of [{ isOwner: true, memberId: 'owner-member' }, { isOwner: true, canRunReports: false }, { isOwner: false }]) {
+    const f = databaseFixture();
+    try {
+      const review = { status: 'held', message: 'Waiting for owner review.', at: '2026-10-09T03:00:00Z' };
+      const route = loadRoute(f, permissions, {}, { emailApi: {
+        rentalReportDeliveryReview: async (ownerUid, inspectionId) => {
+          assert.equal(ownerUid, 'owner');
+          assert.equal(inspectionId, 'inspection');
+          return review;
+        },
+      } });
+      const response = await getAssessment(route);
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.permissions.canManageDeliveryReview, Boolean(permissions.isOwner && permissions.canRunReports !== false));
+      assert.deepEqual(payload.deliveryReview, permissions.canRunReports === false ? null : review);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('delivery review hold and release use the owner identity and current inspection without changing assessment answers', async () => {
+  for (const status of ['scheduled', 'issuing', 'issued']) {
+    const f = databaseFixture();
+    try {
+      f.sql.prepare('UPDATE trade_rental_inspections SET status=?').run(status);
+      let review = null;
+      const inputs = [];
+      let issuanceCalls = 0;
+      let reconciliationCalls = 0;
+      const route = loadRoute(f, { isOwner: true, memberId: 'owner-member', actorUid: 'owner' }, {
+        issueRentalAssessmentReport: async () => { issuanceCalls++; return {}; },
+      }, {
+        reconcileTradeFormJobProgress: async () => { reconciliationCalls++; return {}; },
+        emailApi: {
+          rentalReportDeliveryReview: async () => review,
+          setRentalReportDeliveryReview: async (input) => {
+            inputs.push(input);
+            review = { status: input.hold ? 'held' : 'released', message: input.hold ? 'Waiting for owner review.' : 'Owner review released.', at: '2026-10-09T03:00:00Z' };
+            return review;
+          },
+        },
+      });
+      const answersBefore = f.sql.prepare('SELECT answers FROM trade_rental_inspection_modules').get().answers;
+      const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+      for (const hold of [true, false]) {
+        const response = await post(route, { action: 'set_report_delivery_review', hold, expectedInspectionRevision: 1, inspectionId: 'another-inspection' });
+        assert.equal(response.status, 200, `${status}: ${hold ? 'hold' : 'release'}`);
+        const payload = await response.json();
+        assert.deepEqual(payload.deliveryReview, review, 'The response uses the newly saved review state');
+        assert.equal(payload.inspection.status, status);
+        assert.equal(payload.permissions.isAssignedAssessor, false, 'Delivery review does not impersonate the assigned assessor');
+        assert.equal(payload.permissions.canIssue, false);
+      }
+      assert.deepEqual(inputs.map(({ access, ...input }) => ({ ...input, ownerUid: access.ownerUid, actorUid: access.actorUid, memberId: access.memberId, isOwner: access.isOwner })), [
+        { workOrderId: 'job', inspectionId: 'inspection', hold: true, ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true },
+        { workOrderId: 'job', inspectionId: 'inspection', hold: false, ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true },
+      ]);
+      assert.equal(issuanceCalls, 0);
+      assert.equal(reconciliationCalls, 0);
+      assert.equal(f.sql.prepare('SELECT answers FROM trade_rental_inspection_modules').get().answers, answersBefore);
+      assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('delivery review action rejects team members and owners without report permission before calling the hold service', async () => {
+  for (const permissions of [{ isOwner: false }, { isOwner: true, canRunReports: false }]) {
+    const f = databaseFixture();
+    try {
+      let reviewWrites = 0;
+      const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+      const route = loadRoute(f, permissions, {}, { emailApi: {
+        setRentalReportDeliveryReview: async () => { reviewWrites++; return {}; },
+      } });
+      for (const hold of [true, false]) {
+        const response = await post(route, { action: 'set_report_delivery_review', hold, expectedInspectionRevision: 1 });
+        assert.equal(response.status, 403);
+      }
+      assert.equal(reviewWrites, 0);
+      assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('delivery review action requires a literal boolean and the currently reviewed inspection revision', async () => {
+  const invalid = [
+    { hold: 'true', expectedInspectionRevision: 1, status: 400 },
+    { hold: 'false', expectedInspectionRevision: 1, status: 400 },
+    { hold: 1, expectedInspectionRevision: 1, status: 400 },
+    { hold: null, expectedInspectionRevision: 1, status: 400 },
+    { expectedInspectionRevision: 1, status: 400 },
+    { hold: true, expectedInspectionRevision: 0, status: 409 },
+    { hold: false, expectedInspectionRevision: 2, status: 409 },
+    { hold: true, status: 409 },
+  ];
+  for (const { status, ...body } of invalid) {
+    const f = databaseFixture();
+    try {
+      let reviewWrites = 0;
+      const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+      const route = loadRoute(f, { isOwner: true }, {}, { emailApi: {
+        setRentalReportDeliveryReview: async () => { reviewWrites++; return {}; },
+      } });
+      const response = await post(route, { action: 'set_report_delivery_review', ...body });
+      assert.equal(response.status, status, JSON.stringify(body));
+      assert.equal(reviewWrites, 0);
+      assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore);
+    } finally { f.sql.close(); }
+  }
+});
+
+test('another business cannot hold a rental report even with owner and report permissions', async () => {
+  const f = databaseFixture();
+  try {
+    let reviewWrites = 0;
+    const route = loadRoute(f, { ownerUid: 'another-owner', isOwner: true }, {}, { emailApi: {
+      setRentalReportDeliveryReview: async () => { reviewWrites++; return {}; },
+    } });
+    const response = await post(route, { action: 'set_report_delivery_review', hold: true, expectedInspectionRevision: 1 });
+    assert.equal(response.status, 404);
+    assert.equal(reviewWrites, 0);
+  } finally { f.sql.close(); }
+});
+
+test('an owner delivery hold allows the assigned assessor to generate the report without sending email', async () => {
+  const f = reportIssuanceFixture();
+  try {
+    f.sql.exec("UPDATE trade_rental_inspections SET status='in_progress'");
+    const review = { status: 'held', message: 'Waiting for owner review.', at: '2026-10-09T03:00:00Z' };
+    let issuanceCalls = 0;
+    let emailCalls = 0;
+    const route = loadRoute(f, {}, { issueRentalAssessmentReport: async () => {
+      issuanceCalls++;
+      f.markIssued();
+      return { reportId: 'report' };
+    } }, { emailApi: {
+      rentalReportDeliveryReview: async () => review,
+      emailRentalAssessmentReport: async () => { emailCalls++; return { status: 'accepted' }; },
+    } });
+    const response = await post(route, { action: 'issue_report' });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.issuedReport.reportId, 'report');
+    assert.equal(payload.inspection.status, 'issued');
+    assert.deepEqual(payload.deliveryReview, review);
+    assert.equal(payload.permissions.canManageDeliveryReview, false);
+    assert.equal(issuanceCalls, 1);
+    assert.equal(emailCalls, 0);
   } finally { f.sql.close(); }
 });
