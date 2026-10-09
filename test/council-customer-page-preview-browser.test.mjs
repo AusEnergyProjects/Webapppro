@@ -9,6 +9,7 @@ import { chromium } from "playwright-core";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const browserPath = [process.env.TEST_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/chromium"].find(value => value && fs.existsSync(value));
+const councilName = "Synthetic South Eastern Coastal Council";
 const bundle = await build({
   stdin: { resolveDir: root, loader: "tsx", contents: `
     import React, {useState} from 'react';
@@ -72,10 +73,10 @@ async function fixture(browser, width = 1280, canManage = true) {
 test("Current council profile previews the real, safe customer journey", { skip: !browserPath, timeout: 90000 }, async t => {
   const browser = await chromium.launch({ executablePath: browserPath, headless: true });
   try {
-    for (const width of [1280, 390]) await t.test(`unsaved branding, logo upload, focus and enquiry at ${width}px`, async () => {
+    for (const width of [1280, 488, 390]) await t.test(`unsaved branding, wide logo, focus and enquiry at ${width}px`, async () => {
       const { page, errors } = await fixture(browser, width);
       try {
-        await page.getByRole("textbox", { name: "Council name", exact: true }).fill("Synthetic Coastal Council");
+        await page.getByRole("textbox", { name: "Council name", exact: true }).fill(councilName);
         await page.getByRole("textbox", { name: "Council home website", exact: true }).fill("https://www.coastalcouncil.vic.gov.au/energy");
         await page.getByRole("textbox", { name: "Primary colour hex", exact: true }).fill("#00402F");
         await page.getByRole("textbox", { name: "Accent colour hex", exact: true }).fill("#9E5330");
@@ -86,17 +87,28 @@ test("Current council profile previews the real, safe customer journey", { skip:
         await launcher.click();
         const preview = page.locator("dialog");
         await preview.waitFor({ state: "visible" });
-        await preview.getByText("Preview using Synthetic Coastal Council.", { exact: false }).waitFor();
+        await preview.getByText(`Preview using ${councilName}.`, { exact: false }).waitFor();
         assert.equal(await preview.getByRole("link", { name: "Back to council website", exact: false }).getAttribute("href"), "https://www.coastalcouncil.vic.gov.au/energy");
         assert.equal(await preview.getByText("Available in participating postcodes", { exact: false }).count(), 0);
         assert.doesNotMatch(await preview.innerText(), /\b3182\b|\b3183\b/, "The customer page must not expose the council's postcode roster");
         assert.equal(await preview.locator('[style*="--c-header-start"]').evaluate(element => element.style.getPropertyValue("--c-header-start")), "#00402f");
-        const logo = preview.getByRole("img", { name: "Synthetic Coastal Council logo", exact: true });
+        const logo = preview.getByRole("img", { name: `${councilName} logo`, exact: true });
         const previewLogo = await logo.getAttribute("src");
         await logo.evaluate(image => image.decode());
         const geometry = await logo.evaluate(image => ({ width: image.clientWidth, height: image.clientHeight, naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight, fit: getComputedStyle(image).objectFit }));
         assert.equal(geometry.naturalWidth, 512); assert.equal(geometry.naturalHeight, 124); assert.equal(geometry.fit, "contain");
-        assert.ok(geometry.width >= 170 && geometry.width <= 200, `Wide logo readable at ${geometry.width}px`);
+        assert.ok(geometry.width >= 120 && geometry.width <= 200, `Wide logo readable at ${geometry.width}px`);
+        const identity = await preview.getByText(councilName, { exact: true }).evaluate(element => {
+          const text = element.firstChild;
+          const words = [...element.textContent.matchAll(/\S+/g)].map(match => {
+            const range = document.createRange();
+            range.setStart(text, match.index); range.setEnd(text, match.index + match[0].length);
+            return { word: match[0], lineCount: range.getClientRects().length };
+          });
+          return { width: element.getBoundingClientRect().width, words };
+        });
+        assert.ok(identity.width >= 160, `Wide logo leaves readable council identity width at ${identity.width}px`);
+        for (const word of identity.words) assert.equal(word.lineCount, 1, `Council name word ${word.word} must not fragment across lines at ${width}px`);
         assert.equal(await page.locator("#site-content").count(), 1);
         assert.equal(await page.locator("form form").count(), 0);
         assert.equal(await preview.getByRole("button", { name: "Close preview", exact: true }).evaluate(button => button === document.activeElement), true);
@@ -146,12 +158,12 @@ test("Current council profile previews the real, safe customer journey", { skip:
         await preview.getByRole("button", { name: "Close preview", exact: true }).click();
         await preview.waitFor({ state: "hidden" });
         assert.equal(await launcher.evaluate(button => button === document.activeElement), true);
-        assert.equal(await page.getByRole("textbox", { name: "Council name", exact: true }).inputValue(), "Synthetic Coastal Council");
+        assert.equal(await page.getByRole("textbox", { name: "Council name", exact: true }).inputValue(), councilName);
         assert.equal(await page.getByRole("form", { name: "Journey metrics fixture" }).evaluate(form => form.parentElement.closest("form") === null), true);
         await page.getByRole("button", { name: "Save council profile", exact: true }).click();
         await page.waitForFunction(() => window.fixtureSaved.length === 1);
         const saved = await page.evaluate(() => window.fixtureSaved[0]);
-        assert.equal(saved.name, "Synthetic Coastal Council"); assert.equal(saved.logoDataUrl, previewLogo);
+        assert.equal(saved.name, councilName); assert.equal(saved.logoDataUrl, previewLogo);
         assert.deepEqual(saved.postcodes, ["3182", "3183"]);
         assert.deepEqual(errors, []);
       } finally { await page.close(); }
