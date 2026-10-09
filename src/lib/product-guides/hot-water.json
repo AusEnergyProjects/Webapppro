@@ -8,8 +8,41 @@
     "check": "Ask whether winter recovery covers your showers. Tank material, water quality and controller choice affect suitability and warranty. Frost protection still needs power outside your preferred heating window.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Australian specifications", "url": "https://www.sanden-hot-water.com.au/specifications/", "kind": "Manufacturer AU specifications", "revision": "Current online specifications; issue date not displayed"},
-      {"title": "Operation and warranty questions", "url": "https://www.sanden-hot-water.com.au/faqs/", "kind": "Manufacturer AU guidance", "revision": "Current online FAQ; issue date not displayed"}
+      {
+        "title": "Australian specifications",
+        "url": "https://www.sanden-hot-water.com.au/specifications/",
+        "kind": "Manufacturer AU specifications",
+        "revision": "Current online specifications; issue date not displayed"
+      },
+      {
+        "title": "Operation and warranty questions",
+        "url": "https://www.sanden-hot-water.com.au/faqs/",
+        "kind": "Manufacturer AU guidance",
+        "revision": "Current online FAQ; issue date not displayed"
+      }
+    ],
+    "brand": "Sanden",
+    "image": {
+      "src": "/products/hot-water/sanden-ecoplus-co2.webp",
+      "alt": "Sanden GAU-A45HPD outdoor heat-pump unit; tank supplied separately",
+      "sourceUrl": "https://pure-electric.com.au/sites/default/files/2024-05/Sanden%20Heat%20Pump%20G5.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Different tank sizes let you choose storage for your shower routine.",
+        "con": "No extra electric heater; check how quickly water reheats in winter."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Onboard timer lets you choose heating periods.",
+        "con": "Frost protection still needs power outside those periods; do not simply turn the supply off."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "The outdoor heater's warranty can extend to ten years.",
+        "con": "Extension needs the specified setup; tank cover reduces over time and depends on water quality."
+      }
     ]
   },
   {
@@ -21,8 +54,41 @@
     "check": "Following surplus solar needs the specified external signal and setup. Ask for the exact tank and controller, winter recovery, warranty labour and any service travel charges.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "V2 controller specification", "url": "https://reclaimenergy.com.au/wp-content/uploads/2026/08/Reclaim-Controller-v2-SpecSheet-Issue05-Sept2024-web.pdf", "kind": "Manufacturer AU specification", "revision": "Issue 05, September 2024; current link uploaded August 2026"},
-      {"title": "Australian warranty terms", "url": "https://reclaimenergy.com.au/warranties/", "kind": "Manufacturer AU warranty", "revision": "Current online terms; issue date not displayed"}
+      {
+        "title": "V2 controller specification",
+        "url": "https://reclaimenergy.com.au/wp-content/uploads/2026/08/Reclaim-Controller-v2-SpecSheet-Issue05-Sept2024-web.pdf",
+        "kind": "Manufacturer AU specification",
+        "revision": "Issue 05, September 2024; current link uploaded August 2026"
+      },
+      {
+        "title": "Australian warranty terms",
+        "url": "https://reclaimenergy.com.au/warranties/",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current online terms; issue date not displayed"
+      }
+    ],
+    "brand": "Reclaim Energy",
+    "image": {
+      "src": "/products/hot-water/reclaim-co2-v2.webp",
+      "alt": "Reclaim CO2 heat-pump system with tank and V2 controller; representative range image",
+      "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/08/Reclaim-Herosystem-v2-controller-shadows-rgb-web.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": null,
+        "con": "Ask how much water the chosen tank stores and how quickly it reheats in winter."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Two schedules let you heat at different times each day.",
+        "con": "Following spare solar needs extra controls; frost protection still needs power outside your heating times."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Confirm which warranty years cover labour, travel and the chosen tank."
+      }
     ]
   },
   {
@@ -34,9 +100,47 @@
     "check": "Ask for the actual stored-water volume and winter recovery. The longer tank and refrigeration warranty does not give the same cover to sensors, valves, elements and anodes.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Reclaim ECO product", "url": "https://reclaimenergy.com.au/reclaim-eco-r290-heat-pump/", "kind": "Manufacturer AU product", "revision": "Current online product; issue date not displayed"},
-      {"title": "Current owner and installation manual", "url": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/H4148-E-Reclaim-Heat-Pump-Manual.pdf", "kind": "Manufacturer AU manual", "revision": "H4148 Rev E; applies to products manufactured and sold after 1 July 2026"},
-      {"title": "Australian warranty terms", "url": "https://reclaimenergy.com.au/warranties/", "kind": "Manufacturer AU warranty", "revision": "Current online terms; issue date not displayed"}
+      {
+        "title": "Reclaim ECO product",
+        "url": "https://reclaimenergy.com.au/reclaim-eco-r290-heat-pump/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current online product; issue date not displayed"
+      },
+      {
+        "title": "Current owner and installation manual",
+        "url": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/H4148-E-Reclaim-Heat-Pump-Manual.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "H4148 Rev E; applies to products manufactured and sold after 1 July 2026"
+      },
+      {
+        "title": "Australian warranty terms",
+        "url": "https://reclaimenergy.com.au/warranties/",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current online terms; issue date not displayed"
+      }
+    ],
+    "brand": "Reclaim Energy",
+    "image": {
+      "src": "/products/hot-water/reclaim-eco-r290.webp",
+      "alt": "Reclaim ECO integrated heat-pump water heater; representative range image",
+      "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/06/Reclaim-EcoAIO-Products-NewLogo-600PX-400x631-Single-EcoBadge.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Extra electric heating can help after heavier hot-water use.",
+        "con": "Extra heating uses more electricity; check actual stored water and how quickly it reheats in winter."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Screen and phone controls let you choose heating times.",
+        "con": "Scheduled heating can still draw grid power when solar is insufficient; phone control needs a working connection."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Valves, sensors and the extra electric heater have shorter cover than the tank."
+      }
     ]
   },
   {
@@ -48,8 +152,41 @@
     "check": "A maintenance-free anode does not remove all servicing. For indoor placement, require the current model manual and enough air space. Confirm solar-control hardware and whether the chosen booster suits busy winter mornings.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Current Australian WWK product", "url": "https://www.stiebel-eltron.com.au/products/wwk-222-heat-pump?hsLang=en-au", "kind": "Manufacturer AU product", "revision": "Current online product; issue date not displayed"},
-      {"title": "WWK family specification", "url": "https://www.stiebel-eltron.com.au/download/1717382093_STIEBE%20ELTRON%20Data%20Sheet%20WWK%20May%202024.pdf", "kind": "Manufacturer AU datasheet", "revision": "Issue 05_24; placement wording differs within sheet, so use current model manual"}
+      {
+        "title": "Current Australian WWK product",
+        "url": "https://www.stiebel-eltron.com.au/products/wwk-222-heat-pump?hsLang=en-au",
+        "kind": "Manufacturer AU product",
+        "revision": "Current online product; issue date not displayed"
+      },
+      {
+        "title": "WWK family specification",
+        "url": "https://www.stiebel-eltron.com.au/download/1717382093_STIEBE%20ELTRON%20Data%20Sheet%20WWK%20May%202024.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "Issue 05_24; placement wording differs within sheet, so use current model manual"
+      }
+    ],
+    "brand": "Stiebel Eltron",
+    "image": {
+      "src": "/products/hot-water/stiebel-wwk.webp",
+      "alt": "Stiebel Eltron WWK 222 integrated heat-pump water heater; representative WWK range image",
+      "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/products/wwk-222-front.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "H versions offer an extra electric heater for busy shower periods.",
+        "con": "Other versions lack that extra heater; check winter heating time for your routine."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Compatible solar controls can start heating when your panels have spare power.",
+        "con": "Extra solar-control equipment is needed; tank protection still needs power outside heating periods."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "No scheduled replacement of the part that protects the tank from rust.",
+        "con": "Other servicing is still needed, and this protection needs power."
+      }
     ]
   },
   {
@@ -61,8 +198,41 @@
     "check": "Confirm the exact model and circuit work. Require its current manual for water-quality limits, as web and sheet wording differs. The longer cylinder warranty has shorter labour and component cover.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "AmbiPower 280e product", "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-Heat-Pump/p/551E280G5", "kind": "Manufacturer AU product and warranty summary", "revision": "Current 551E280 family page; links August 2026 Wi-Fi sheet"},
-      {"title": "Current Wi-Fi model manual", "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-551E280-WiFi-122339-Rev-02-2026-May.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MjA0NjMwN3xhcHBsaWNhdGlvbi9wZGZ8YURWbEwyZzRPQzg1TXprMU5qazJNVEEzTlRVd0wybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UVXhSVEk0TUNCWGFVWnBJQzBnTVRJeU16TTVJRkpsZGkwd01pQXRJREl3TWpZZ1RXRjVMbkJrWmd8MzM5YTRmZThmNTY2MGFkZjQ2ZTdjZDI4ZjQ2YTY1ZWU2YmZjNjY2ZDgzZGRmN2ZhMzQ1MzQwM2U4NzE4ODcyZQ", "kind": "Manufacturer AU owner and installation manual", "revision": "122339 Rev 02, May 2026; match the quoted Wi-Fi variant"}
+      {
+        "title": "AmbiPower 280e product",
+        "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-Heat-Pump/p/551E280G5",
+        "kind": "Manufacturer AU product and warranty summary",
+        "revision": "Current 551E280 family page; links August 2026 Wi-Fi sheet"
+      },
+      {
+        "title": "Current Wi-Fi model manual",
+        "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-551E280-WiFi-122339-Rev-02-2026-May.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MjA0NjMwN3xhcHBsaWNhdGlvbi9wZGZ8YURWbEwyZzRPQzg1TXprMU5qazJNVEEzTlRVd0wybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UVXhSVEk0TUNCWGFVWnBJQzBnTVRJeU16TTVJRkpsZGkwd01pQXRJREl3TWpZZ1RXRjVMbkJrWmd8MzM5YTRmZThmNTY2MGFkZjQ2ZTdjZDI4ZjQ2YTY1ZWU2YmZjNjY2ZDgzZGRmN2ZhMzQ1MzQwM2U4NzE4ODcyZQ",
+        "kind": "Manufacturer AU owner and installation manual",
+        "revision": "122339 Rev 02, May 2026; match the quoted Wi-Fi variant"
+      }
+    ],
+    "brand": "Rheem",
+    "image": {
+      "src": "/products/hot-water/rheem-ambipower-280e.webp",
+      "alt": "Rheem AmbiPower 280e heat-pump water heater, front product view",
+      "sourceUrl": "https://www.rheem.com.au/rheem/medias/300Wx300H-Rheem-AmbiPower-280e-Front-Display-On-1200px.jpg?context=bWFzdGVyfGltYWdlc3wzMDI3NXxpbWFnZS9qcGVnfGFEQm1MMmc1WXk4NU1ETXlNVFkwTWpRMU5UTTBMek13TUZkNE16QXdTRjlTYUdWbGJTQkJiV0pwVUc5M1pYSWdNamd3WlNCR2NtOXVkQ0F0SUVScGMzQnNZWGtnVDI1Zk1USXdNSEI0TG1wd1p3fDM2OWY1NzJkY2UzNjBkMzJmMTFkYjYxZmQ1NGMwMWQ1MzA3ZTU2MmE0NjA4MzQ3YzcxNWRjMmUwODdlNWFkOWE"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "280 litres of storage, with extra electric heating available.",
+        "con": "Extra heating uses more electricity; ask how quickly it reheats after busy winter showers."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Confirm whether the quoted version lets you set heating times and which phone controls are included."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Standard tank cover is ten years.",
+        "con": "Tank labour is three years; other parts are shorter, with conditions for water quality and servicing."
+      }
     ]
   },
   {
@@ -74,8 +244,41 @@
     "check": "Ask how its actual storage and winter recovery fit your showers. Use the current model manual for circuit and water-quality requirements; the tank warranty is longer than labour and several other parts.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "AmbiPower MDc 180 product", "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-MDc-180-Heat-Pump/p/551D180C5", "kind": "Manufacturer AU product and warranty summary", "revision": "Current 551D180 family page"},
-      {"title": "Owner and installation manual", "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-HP-551D180-122937-Rev-02-2025-December.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MjA1NzAyOHxhcHBsaWNhdGlvbi9wZGZ8YURRMUwyaGhPUzg1TXpNeE1EUXlOekV6TmpNd0wybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCSVVDQTFOVEZFTVRnd0lDMGdNVEl5T1RNM0lGSmxkaTB3TWlBdElESXdNalVnUkdWalpXMWlaWEl1Y0dSbXxmMTQyOWMxY2ZmZDA0ZDU5NDNjMGQxZmM3NjBiNTkzMjkzNGRkNWFlYmM2OWE4YTA0NTE3ZGI1OTBmN2NlODRl", "kind": "Manufacturer AU owner and installation manual", "revision": "122937 Rev 02, December 2025"}
+      {
+        "title": "AmbiPower MDc 180 product",
+        "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-MDc-180-Heat-Pump/p/551D180C5",
+        "kind": "Manufacturer AU product and warranty summary",
+        "revision": "Current 551D180 family page"
+      },
+      {
+        "title": "Owner and installation manual",
+        "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-HP-551D180-122937-Rev-02-2025-December.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MjA1NzAyOHxhcHBsaWNhdGlvbi9wZGZ8YURRMUwyaGhPUzg1TXpNeE1EUXlOekV6TmpNd0wybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCSVVDQTFOVEZFTVRnd0lDMGdNVEl5T1RNM0lGSmxkaTB3TWlBdElESXdNalVnUkdWalpXMWlaWEl1Y0dSbXxmMTQyOWMxY2ZmZDA0ZDU5NDNjMGQxZmM3NjBiNTkzMjkzNGRkNWFlYmM2OWE4YTA0NTE3ZGI1OTBmN2NlODRl",
+        "kind": "Manufacturer AU owner and installation manual",
+        "revision": "122937 Rev 02, December 2025"
+      }
+    ],
+    "brand": "Rheem",
+    "image": {
+      "src": "/products/hot-water/rheem-ambipower-mdc180.webp",
+      "alt": "Rheem AmbiPower MDc180 heat-pump water heater, front product view",
+      "sourceUrl": "https://www.rheem.com.au/rheem/medias/300Wx300H-Rheem-Ambipower-180L-Front.png?context=bWFzdGVyfGltYWdlc3wyNjU4OHxpbWFnZS9wbmd8YURaaEwyZzBZUzg1TVRnMU1EYzFNek14TVRBeUx6TXdNRmQ0TXpBd1NGOVNhR1ZsYlY5QmJXSnBjRzkzWlhKZk1UZ3dURjlHY205dWRDNXdibWN8Nzg1ZDUyZjA2ZTcyNGMxZmMyZDI4YzU4ZDdlMTQyYzZkMjI4ZjI2ZTRmMzMyZjFjNDFiOGYxYmRlY2RmNGJjNQ"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "178 litres of stored water suits lower daily demand.",
+        "con": "Less stored water than larger tanks; ask how quickly it reheats after consecutive showers."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Ask whether this exact version supports your preferred heating schedule and any phone control."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Standard tank cover is seven years.",
+        "con": "Tank labour is three years; other parts have shorter cover, and water quality affects cover."
+      }
     ]
   },
   {
@@ -87,8 +290,41 @@
     "check": "Match the current 571D270 model rather than an older Ambiheat brochure. Ask about winter boost use, circuit work and water quality using its manual. Cylinder, labour and other parts have different warranty periods.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Current Ambiheat HDc270 product", "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/Ambiheat-/Rheem-Ambiheat-HDc270-Heat-Pump-%28with-R513a-refrigerant%29/p/571D270R5", "kind": "Manufacturer AU product and warranty summary", "revision": "Current 571D270 family, R513a refrigerant"},
-      {"title": "Current owner and installation manual", "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-571D270-series-121919-Rev-06-2025-Dec.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MjU3OTU2N3xhcHBsaWNhdGlvbi9wZGZ8YUdVekwyaGxPQzg1TXpNd056a3hNREl5TmpJeUwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UY3hSREkzTUNCelpYSnBaWE1nTFNBeE1qRTVNVGtnVW1WMkxUQTJJQzBnTWpBeU5TQkVaV011Y0dSbXw0Yjk5MDE4MzRmYzAyZGVlMGQ3OGU1MDczZGQ3NzllOWJhNDA3MWQ1NjI4MWZjN2VhNGU0NDNkMjMyZGVmOTg2", "kind": "Manufacturer AU owner and installation manual", "revision": "121919 Rev 06, December 2025"}
+      {
+        "title": "Current Ambiheat HDc270 product",
+        "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/Ambiheat-/Rheem-Ambiheat-HDc270-Heat-Pump-%28with-R513a-refrigerant%29/p/571D270R5",
+        "kind": "Manufacturer AU product and warranty summary",
+        "revision": "Current 571D270 family, R513a refrigerant"
+      },
+      {
+        "title": "Current owner and installation manual",
+        "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-571D270-series-121919-Rev-06-2025-Dec.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MjU3OTU2N3xhcHBsaWNhdGlvbi9wZGZ8YUdVekwyaGxPQzg1TXpNd056a3hNREl5TmpJeUwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UY3hSREkzTUNCelpYSnBaWE1nTFNBeE1qRTVNVGtnVW1WMkxUQTJJQzBnTWpBeU5TQkVaV011Y0dSbXw0Yjk5MDE4MzRmYzAyZGVlMGQ3OGU1MDczZGQ3NzllOWJhNDA3MWQ1NjI4MWZjN2VhNGU0NDNkMjMyZGVmOTg2",
+        "kind": "Manufacturer AU owner and installation manual",
+        "revision": "121919 Rev 06, December 2025"
+      }
+    ],
+    "brand": "Rheem",
+    "image": {
+      "src": "/products/hot-water/rheem-ambiheat-hdc270.webp",
+      "alt": "Rheem Ambiheat HDc270 heat-pump water heater; manufacturer range image",
+      "sourceUrl": "https://www.rheem.com.au/rheem/medias/Rheem-Ambiheat-HDC270-Heat-Pump-270L-551270-1200px-300Wx300H?context=bWFzdGVyfGltYWdlc3wzMjM5MXxpbWFnZS9wbmd8YUdJNUwyZ3hOeTg0T0RNM05qQTFNVFl6TURNNEwxSm9aV1Z0SUVGdFltbG9aV0YwSUVoRVF6STNNQ0JJWldGMElGQjFiWEFnTWpjd1RDQW9OVFV4TWpjd0tWOHhNakF3Y0hoZk16QXdWM2d6TURCSXw5NDgwODU0ZGEwODZiNzU0Y2ViZDIxODIwYmMxNzRkNTA0NTBjNzViZWZiMGJkYWRkZjBmNTRiZTYwMWMxM2Zl"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "270 litres of storage and an extra electric heater.",
+        "con": "Extra heating uses more electricity; ask how quickly it reheats after busy winter showers."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Ask which heating schedules the quoted touchscreen version supports."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Standard tank cover is ten years.",
+        "con": "Tank labour is three years; other parts have shorter cover, and water quality affects cover."
+      }
     ]
   },
   {
@@ -100,8 +336,41 @@
     "check": "Ask for winter recovery and the exact water-quality variant. Electric mode changes power use. The extended seven-year tank warranty requires scheduled servicing and does not cover every component for seven years.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Enviroflo AR product", "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-ar/enviroflo-ar-300L-heat-pump", "kind": "Manufacturer AU product", "revision": "Current AR 300/340 litre family page"},
-      {"title": "AR and GR warranty booklet", "url": "https://www.rinnai.com.au/documents/13324417c9/hw-electric-hp-enviroflo-ar-gr-2602-war.pdf", "kind": "Manufacturer AU warranty", "revision": "Current linked AR/GR booklet, file revision 2602"}
+      {
+        "title": "Enviroflo AR product",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-ar/enviroflo-ar-300L-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current AR 300/340 litre family page"
+      },
+      {
+        "title": "AR and GR warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/13324417c9/hw-electric-hp-enviroflo-ar-gr-2602-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current linked AR/GR booklet, file revision 2602"
+      }
+    ],
+    "brand": "Rinnai",
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-ar.webp",
+      "alt": "Rinnai Enviroflo AR 300 litre heat-pump water heater; representative AR range image",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/a92f4a440c/hw-electric-hp-enviroflo-ar-300-ima.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Two larger tank sizes give choices for busier households.",
+        "con": "Extra electric heating uses more power; ask how quickly water reheats in winter."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Confirm how heating times are set; changing heating modes can change electricity use."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Tank warranty can extend to seven years.",
+        "con": "Scheduled servicing is required; shorter cover applies to other parts."
+      }
     ]
   },
   {
@@ -113,9 +382,47 @@
     "check": "Confirm the exact model and circuit: the page and linked manual describe different electrical variants. Ask about winter recovery and the servicing required for the extended tank warranty.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Enviroflo GR product", "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-gr/enviroflo-gr-180l-heat-pump", "kind": "Manufacturer AU product", "revision": "Current GR 180 litre page; tank-size variants grouped"},
-      {"title": "Linked GR electrical-variant manual", "url": "https://www.rinnai.com.au/documents/x/hw-electric-hp-enviroflo-gr-15a-oim.pdf", "kind": "Manufacturer AU installation manual", "revision": "Current linked GR 15 A manual; do not apply it automatically to the page's 10 A model"},
-      {"title": "AR and GR warranty booklet", "url": "https://www.rinnai.com.au/documents/13324417c9/hw-electric-hp-enviroflo-ar-gr-2602-war.pdf", "kind": "Manufacturer AU warranty", "revision": "Current linked AR/GR booklet, file revision 2602"}
+      {
+        "title": "Enviroflo GR product",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-gr/enviroflo-gr-180l-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current GR 180 litre page; tank-size variants grouped"
+      },
+      {
+        "title": "Linked GR electrical-variant manual",
+        "url": "https://www.rinnai.com.au/documents/x/hw-electric-hp-enviroflo-gr-15a-oim.pdf",
+        "kind": "Manufacturer AU installation manual",
+        "revision": "Current linked GR 15 A manual; do not apply it automatically to the page's 10 A model"
+      },
+      {
+        "title": "AR and GR warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/13324417c9/hw-electric-hp-enviroflo-ar-gr-2602-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current linked AR/GR booklet, file revision 2602"
+      }
+    ],
+    "brand": "Rinnai",
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-gr.webp",
+      "alt": "Rinnai Enviroflo GR integrated heat-pump water heater; representative GR range image",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/9c77d06b21/hw-electric-hp-enviroflo-gr-ima.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Several tank sizes help match storage to your shower routine.",
+        "con": "Ask how quickly the chosen size reheats after busy winter showers."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Confirm the exact model supports your chosen heating hours and phone controls."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Tank warranty can extend to seven years.",
+        "con": "Required servicing must be followed; ask which parts and repair labour get the full seven years."
+      }
     ]
   },
   {
@@ -127,8 +434,41 @@
     "check": "Ask the installer to verify pipe routes, circuit work and winter recovery. Require the warranty for the exact heating unit; the checked five-kilowatt warranty should not be assumed to cover every version unchanged.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Enviroflo Split product", "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump", "kind": "Manufacturer AU product", "revision": "Current S5 product page; S5/S7 and tank variants grouped"},
-      {"title": "Five-kilowatt model warranty", "url": "https://www.rinnai.com.au/documents/ed084e9041/hw-electric-hp-enviroflo-s5-war.pdf", "kind": "Manufacturer AU warranty", "revision": "Current linked S5 warranty; issue date not established"}
+      {
+        "title": "Enviroflo Split product",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current S5 product page; S5/S7 and tank variants grouped"
+      },
+      {
+        "title": "Five-kilowatt model warranty",
+        "url": "https://www.rinnai.com.au/documents/ed084e9041/hw-electric-hp-enviroflo-s5-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current linked S5 warranty; issue date not established"
+      }
+    ],
+    "brand": "Rinnai",
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-split.webp",
+      "alt": "Rinnai Enviroflo S5 split heat-pump system with tank and controller; representative range image",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/650d893a67/hw-electric-hp-enviroflo-s5-ima.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Different tank sizes let you match stored water to your household.",
+        "con": "Tank size alone does not establish enough hot water; ask about winter heating time."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Ask whether the quoted controller supports scheduled heating and what extra controls are required."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "S5 version: ten-year tank cover and five-year tank labour.",
+        "con": "Other parts have shorter cover; different versions and service areas can change labour or travel charges."
+      }
     ]
   },
   {
@@ -140,8 +480,47 @@
     "check": "Match the quoted model to current R290 documents rather than older iStore brochures. Ask for winter recovery, boost use and full warranty labour and travel terms. Installer popularity is not a measured reliability result.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Current Australian documents", "url": "https://heatpumps.istore.net.au/downloads-2/", "kind": "Manufacturer AU document library", "revision": "Current resource page links R290 brochure and model manual"},
-      {"title": "R290 installation manual", "url": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf", "kind": "Manufacturer AU installation manual", "revision": "V1.5, February 2026"}
+      {
+        "title": "Current Australian documents",
+        "url": "https://heatpumps.istore.net.au/downloads-2/",
+        "kind": "Manufacturer AU document library",
+        "revision": "Current resource page links R290 brochure and model manual"
+      },
+      {
+        "title": "R290 installation manual",
+        "url": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf",
+        "kind": "Manufacturer AU installation manual",
+        "revision": "V1.5, February 2026"
+      },
+      {
+        "title": "Manufacturer five-year comprehensive warranty bulletin",
+        "url": "https://heatpumps.istore.net.au/wp-content/uploads/2025/12/Tech-Bulletin-5-Year-Comprehensive-Warranty-1-Oct-2022-1-1.pdf",
+        "kind": "Manufacturer information",
+        "revision": "Technical bulletin effective 1 October 2022, linked on current resources page; checked 10 October 2026"
+      }
+    ],
+    "brand": "iStore",
+    "image": {
+      "src": "/products/hot-water/istore-r290.webp",
+      "alt": "iStore 180 and 270 litre R290 heat-pump water heaters; manufacturer range image",
+      "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/08/new-render-heatpumps-duo1.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Extra electric heating can help after heavier hot-water use.",
+        "con": "Using that extra heater raises electricity use; check how quickly it reheats in winter."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Onboard timer lets you heat during sunny or cheaper hours.",
+        "con": "Running in those hours can still draw grid power when your solar is insufficient."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "The maker advertises a five-year warranty for the whole system.",
+        "con": "Confirm required servicing and whether labour or travel charges are included."
+      }
     ]
   },
   {
@@ -153,8 +532,41 @@
     "check": "Choose the version for your winter and peak demand. Following surplus solar through Solar Soaker needs the specified extra monitoring pack and setup; a timer alone does not follow changing solar output.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "All-in-One Select product", "url": "https://www.emerald.com.au/hotwaterheatpump-allinone-select/", "kind": "Manufacturer AU product", "revision": "Current Select family page"},
-      {"title": "Current Select specification", "url": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf", "kind": "Manufacturer AU datasheet", "revision": "September 2026"}
+      {
+        "title": "All-in-One Select product",
+        "url": "https://www.emerald.com.au/hotwaterheatpump-allinone-select/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current Select family page"
+      },
+      {
+        "title": "Current Select specification",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "September 2026"
+      }
+    ],
+    "brand": "Emerald",
+    "image": {
+      "src": "/products/hot-water/emerald-all-in-one-select.webp",
+      "alt": "Emerald All-in-One Select heat-pump water heater; manufacturer range image",
+      "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/06/Emerald-Heat-Pump-All-In-One-Select_angle_1_B2C_RGB_300dpi_update.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "E versions offer extra electric heating for busy periods.",
+        "con": "Other versions have no extra heater; confirm enough hot water for your winter shower routine."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "App schedules let you choose when water heats.",
+        "con": "Automatically following spare solar needs extra monitoring equipment and setup; scheduled hours alone can still use grid power."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Confirm the exact version's servicing needs and cover for parts, labour and travel."
+      }
     ]
   },
   {
@@ -166,8 +578,41 @@
     "check": "Require a compliant pipe layout and a winter recovery estimate. Quiet-operation settings can change heating performance. Confirm the residential model and its booster rather than applying commercial specifications.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Emerald Split product", "url": "https://www.emerald.com.au/hotwaterheatpump-split/", "kind": "Manufacturer AU product", "revision": "Current split family page"},
-      {"title": "Split system specification", "url": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf", "kind": "Manufacturer AU datasheet", "revision": "September 2025; residential HPR200/300 and E variants grouped"}
+      {
+        "title": "Emerald Split product",
+        "url": "https://www.emerald.com.au/hotwaterheatpump-split/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current split family page"
+      },
+      {
+        "title": "Split system specification",
+        "url": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "September 2025; residential HPR200/300 and E variants grouped"
+      }
+    ],
+    "brand": "Emerald",
+    "image": {
+      "src": "/products/hot-water/emerald-split.webp",
+      "alt": "Emerald split heat-pump water heater with tank and outdoor unit; manufacturer range image",
+      "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2024/11/Emerald_Heat_Pump_Split_System_indoor_and_outdoor.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "E versions offer extra electric heating for busy periods.",
+        "con": "Quiet settings can slow heating; check winter heating time and whether the quoted version has an extra heater."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Confirm which heating schedules the supplied controls support and whether extra solar-control equipment is needed."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Ask which servicing is required and which warranty years include repair labour and travel."
+      }
     ]
   },
   {
@@ -179,8 +624,41 @@
     "check": "Ask for actual storage and winter recovery, rather than treating first-hour delivery as continuous output. Keep the required hygiene cycle powered. Verify current model documents and full warranty terms.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Current Ecogenica systems", "url": "https://ecogenica.com.au/hot-water-system", "kind": "Manufacturer AU product", "revision": "Current Econova RVW family; brand names grouped as one family"},
-      {"title": "Econova RVW brochure", "url": "https://ecogenica.com.au/images/14.05.25-Brochure-ECON-RVW2.0E-2.pdf", "kind": "Manufacturer AU specification brochure", "revision": "14 May 2025"}
+      {
+        "title": "Current Ecogenica systems",
+        "url": "https://ecogenica.com.au/hot-water-system",
+        "kind": "Manufacturer AU product",
+        "revision": "Current Econova RVW family; brand names grouped as one family"
+      },
+      {
+        "title": "Econova RVW brochure",
+        "url": "https://ecogenica.com.au/images/14.05.25-Brochure-ECON-RVW2.0E-2.pdf",
+        "kind": "Manufacturer AU specification brochure",
+        "revision": "14 May 2025"
+      }
+    ],
+    "brand": "Econova",
+    "image": {
+      "src": "/products/hot-water/ecogenica-econova-rvw.webp",
+      "alt": "Econova ECON-300RVW heat-pump water heater; product photograph from the manufacturer range page",
+      "sourceUrl": "https://ecogenica.com.au/images/rwa1.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "290 litres of storage; extra electric heating is available on the 2.0E version.",
+        "con": "Plain RVW has no extra heater; quoted first-hour supply is not continuous hot-water output."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Confirm the heating schedule; required heating to control germs must stay powered."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Ask which servicing is required and which warranty years include repair labour and travel."
+      }
     ]
   },
   {
@@ -192,9 +670,47 @@
     "check": "Solar-control mode needs integration. Require the current model manual for the circuit: older and current electrical details differ. The longer cylinder cover does not include all later replacement labour or travel.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Australian Monoblock product", "url": "https://www.haierhome.com.au/hot-water/heat-pump-water-heater-MONOBLOCK.html", "kind": "Manufacturer AU product", "revision": "Current HP200M1U1P / HP250M1U1P / HP330M1U1 family page"},
-      {"title": "Current model manual", "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf", "kind": "Manufacturer AU/NZ installation manual", "revision": "Current linked V1125 manual; complete document not reviewed in this research"},
-      {"title": "Hot-water warranty", "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/wqxwf7nxg8vg4xw5zgrp8/Haier-ServiceWarranty-en-HeatPumpWaterHeater-HVAC-HHB-2311-NZ-AU.pdf", "kind": "Manufacturer AU/NZ warranty", "revision": "Version 1, November 2023; currently linked"}
+      {
+        "title": "Australian Monoblock product",
+        "url": "https://www.haierhome.com.au/hot-water/heat-pump-water-heater-MONOBLOCK.html",
+        "kind": "Manufacturer AU product",
+        "revision": "Current HP200M1U1P / HP250M1U1P / HP330M1U1 family page"
+      },
+      {
+        "title": "Current model manual",
+        "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf",
+        "kind": "Manufacturer AU/NZ installation manual",
+        "revision": "Current linked V1125 manual; complete document not reviewed in this research"
+      },
+      {
+        "title": "Hot-water warranty",
+        "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/wqxwf7nxg8vg4xw5zgrp8/Haier-ServiceWarranty-en-HeatPumpWaterHeater-HVAC-HHB-2311-NZ-AU.pdf",
+        "kind": "Manufacturer AU/NZ warranty",
+        "revision": "Version 1, November 2023; currently linked"
+      }
+    ],
+    "brand": "Haier",
+    "image": {
+      "src": "/products/hot-water/haier-500-monoblock.webp",
+      "alt": "Haier HP250M1U1P 500 Series Monoblock heat-pump water heater; representative range image",
+      "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/72g5z3j278pcvnn23vwkjtr/haier_04_HP250M1_34_au-nz_600x400_HHV.png?width=600"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Several tank sizes let you match storage to your daily shower routine.",
+        "con": "Ask how quickly the chosen size heats water after busy winter showers."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Timer lets you choose lower-cost heating hours.",
+        "con": "Following spare solar needs extra setup; confirm the electrical supply for this model."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Confirm water conditions and servicing; longer tank cover excludes some later repair labour or travel."
+      }
     ]
   },
   {
@@ -206,8 +722,42 @@
     "check": "A recall covers specified units made in November 2024 and sold from 9 December 2024 to 31 March 2025: the tank can fall under high pressure. Check the serial against the notice and confirm any replacement remedy before purchase or use.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Apricus product and recall acknowledgement", "url": "https://apricus.com.au/all-in-one-heat-pump/", "kind": "Manufacturer AU product", "revision": "Current APHP-R290-260 family page"},
-      {"title": "Affected serials and replacement remedy", "url": "https://www.productsafety.gov.au/system/files/recall/Recall%20Advertisement%20-%2011%20April%202025_2.pdf", "kind": "ACCC Product Safety Australia recall", "revision": "11 April 2025; PRA 2025/20482"}
+      {
+        "title": "Apricus product and recall acknowledgement",
+        "url": "https://apricus.com.au/all-in-one-heat-pump/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current APHP-R290-260 family page"
+      },
+      {
+        "title": "Affected serials and replacement remedy",
+        "url": "https://www.productsafety.gov.au/system/files/recall/Recall%20Advertisement%20-%2011%20April%202025_2.pdf",
+        "kind": "ACCC Product Safety Australia recall",
+        "revision": "11 April 2025; PRA 2025/20482"
+      }
+    ],
+    "brand": "Apricus",
+    "image": {
+      "src": "/products/hot-water/apricus-all-in-one.webp",
+      "alt": "Apricus APHP-R290-260 All-in-One heat-pump water heater; manufacturer range image",
+      "sourceUrl": "https://apricus.com.au/wp-content/uploads/2022/07/product_hero_shot_all_in_one.jpg"
+    },
+    "warning": "Recall: specified APHP-R290-260 units made in November 2024, sold 9 December 2024 to 31 March 2025. The tank can fall under high pressure. Check the serial against the official notice and confirm the replacement remedy before purchase or use.",
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "260 litres of storage with extra electric heating for heavy use.",
+        "con": "Extra heating uses more electricity; use only a unit cleared by the recall check."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Scheduled heating and phone controls help follow your routine.",
+        "con": "Keep required heating to control germs enabled; recall clearance comes before using the unit."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Check the serial against the recall and confirm replacement before purchase or use."
+      }
     ]
   },
   {
@@ -219,8 +769,41 @@
     "check": "Use the current manual for size and clearance, as older brochures differ. Ask for winter recovery. Standard labour cover is shorter than tank and parts cover, with a stated extension for eligible Victorian purchases.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "EVO270-E product and warranty", "url": "https://evoheat.com.au/hot-water-heat-pump/evo270-e/", "kind": "Manufacturer AU product and warranty summary", "revision": "Current R290 EVO270-E product page"},
-      {"title": "Current owner and installation manual", "url": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf", "kind": "Manufacturer AU manual", "revision": "Current linked manual uploaded October 2026; printed issue date not established"}
+      {
+        "title": "EVO270-E product and warranty",
+        "url": "https://evoheat.com.au/hot-water-heat-pump/evo270-e/",
+        "kind": "Manufacturer AU product and warranty summary",
+        "revision": "Current R290 EVO270-E product page"
+      },
+      {
+        "title": "Current owner and installation manual",
+        "url": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Current linked manual uploaded October 2026; printed issue date not established"
+      }
+    ],
+    "brand": "EvoHeat",
+    "image": {
+      "src": "/products/hot-water/evoheat-evo270-e.webp",
+      "alt": "EvoHeat EVO270-E R290 heat-pump water heater",
+      "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2024/09/Evo270-E-R290-3-1.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Extra electric heating can help after heavier hot-water use.",
+        "con": "Using that extra heater raises electricity use; check how quickly it reheats in winter."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Timer and holiday settings help match your routine.",
+        "con": "Phone control needs an optional accessory; the timer does not follow changing solar output."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Tank cover is six years; heating parts have five.",
+        "con": "Standard labour cover is one year; confirm servicing and any Victorian extension."
+      }
     ]
   },
   {
@@ -232,8 +815,41 @@
     "check": "Ask for recovery in your winter conditions; the published example uses warmer test conditions. Confirm the circuit and full warranty: tank, refrigeration, other parts and labour are not all covered for the same period.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Ecosmart Pro Series product", "url": "https://www.dux.com.au/products/ecosmart-pro-series-270l", "kind": "Manufacturer AU product and warranty summary", "revision": "Current 270DHB36 / 270DHB36P family page"},
-      {"title": "Pro Series specification", "url": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf", "kind": "Manufacturer AU datasheet", "revision": "Current linked filename says 2026; printed issue date not established"}
+      {
+        "title": "Ecosmart Pro Series product",
+        "url": "https://www.dux.com.au/products/ecosmart-pro-series-270l",
+        "kind": "Manufacturer AU product and warranty summary",
+        "revision": "Current 270DHB36 / 270DHB36P family page"
+      },
+      {
+        "title": "Pro Series specification",
+        "url": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "Current linked filename says 2026; printed issue date not established"
+      }
+    ],
+    "brand": "Dux",
+    "image": {
+      "src": "/products/hot-water/dux-ecosmart-pro-series.webp",
+      "alt": "Dux Ecosmart Pro Series 270 litre heat-pump water heater",
+      "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-HP-270L.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "270 litres of stored water.",
+        "con": "Winter heating can be slower than the published warm-weather example; check your shower routine."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Timer lets you choose sunny or cheaper heating hours.",
+        "con": "Chosen hours can still use grid power; winter heating may need a longer window."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Tank, heating parts and repair labour have different cover periods; ask which services are required."
+      }
     ]
   },
   {
@@ -245,9 +861,47 @@
     "check": "Require the current manual to resolve conflicting pipe details on the product page. Confirm circuit work and winter recovery. The heat pump and electric element have different maximum water temperatures, and extended cylinder cover has labour limits.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Australian Split product", "url": "https://www.haierhome.com.au/hot-water/heat-pump-water-heater-SPLITSYSTEM.html", "kind": "Manufacturer AU product", "revision": "Current HP300S2-F7-SET page"},
-      {"title": "Current installation manual", "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/xfct4gcshck2nxk7cht536/Haier-UserInstall-en-SPLITSYSTEM-HVAC-HHB-v1-NZ-AU.pdf", "kind": "Manufacturer AU/NZ installation manual", "revision": "Current linked v1 manual; printed issue date not established"},
-      {"title": "Hot-water warranty", "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/wqxwf7nxg8vg4xw5zgrp8/Haier-ServiceWarranty-en-HeatPumpWaterHeater-HVAC-HHB-2311-NZ-AU.pdf", "kind": "Manufacturer AU/NZ warranty", "revision": "Version 1, November 2023; currently linked"}
+      {
+        "title": "Australian Split product",
+        "url": "https://www.haierhome.com.au/hot-water/heat-pump-water-heater-SPLITSYSTEM.html",
+        "kind": "Manufacturer AU product",
+        "revision": "Current HP300S2-F7-SET page"
+      },
+      {
+        "title": "Current installation manual",
+        "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/xfct4gcshck2nxk7cht536/Haier-UserInstall-en-SPLITSYSTEM-HVAC-HHB-v1-NZ-AU.pdf",
+        "kind": "Manufacturer AU/NZ installation manual",
+        "revision": "Current linked v1 manual; printed issue date not established"
+      },
+      {
+        "title": "Hot-water warranty",
+        "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/wqxwf7nxg8vg4xw5zgrp8/Haier-ServiceWarranty-en-HeatPumpWaterHeater-HVAC-HHB-2311-NZ-AU.pdf",
+        "kind": "Manufacturer AU/NZ warranty",
+        "revision": "Version 1, November 2023; currently linked"
+      }
+    ],
+    "brand": "Haier",
+    "image": {
+      "src": "/products/hot-water/haier-500-split.webp",
+      "alt": "Haier HP300S2-F7-SET 500 Series Split heat-pump water heater",
+      "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/j83ckx5gkkpfntfzt6ft6fk7/haier_04_SPLITSYSTEM_10_mug_au-nz_hero_HHV_600x400.jpg?width=600"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Extra electric heating can help after heavier hot-water use.",
+        "con": "Extra heating uses more electricity; the installer must check your electrical supply and winter heating time."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": "Schedules let you choose when water heats.",
+        "con": "Phone scheduling needs setup; ask which settings turn on the extra electric heater."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": null,
+        "con": "Confirm water conditions and servicing; longer tank cover excludes some repair labour. Installer must verify pipe layout."
+      }
     ]
   },
   {
@@ -259,8 +913,41 @@
     "check": "Without a booster, confirm busy-morning and cold-weather recovery carefully. Rated hot-water delivery differs from tank volume. Ask for the exact model's scheduling and complete warranty labour and travel terms.",
     "checkedAt": "2026-10-10",
     "sources": [
-      {"title": "Current Australian domestic range", "url": "https://www.quantumenergy.com.au/domestic-heat-pumps/", "kind": "Manufacturer AU product range", "revision": "Current 150/200/270/340-08AC6-290 capacities grouped"},
-      {"title": "Representative 270 litre model", "url": "https://www.quantumenergy.com.au/product/270l-heat-pump/", "kind": "Manufacturer AU product specifications", "revision": "Current 270-08AC6-290 page; issue date not displayed"}
+      {
+        "title": "Current Australian domestic range",
+        "url": "https://www.quantumenergy.com.au/domestic-heat-pumps/",
+        "kind": "Manufacturer AU product range",
+        "revision": "Current 150/200/270/340-08AC6-290 capacities grouped"
+      },
+      {
+        "title": "Representative 270 litre model",
+        "url": "https://www.quantumenergy.com.au/product/270l-heat-pump/",
+        "kind": "Manufacturer AU product specifications",
+        "revision": "Current 270-08AC6-290 page; issue date not displayed"
+      }
+    ],
+    "brand": "Quantum Energy",
+    "image": {
+      "src": "/products/hot-water/quantum-compact-r290.webp",
+      "alt": "Quantum Compact 270 litre R290 heat-pump water heater; representative Compact range image",
+      "sourceUrl": "https://www.quantumenergy.com.au/wp-content/uploads/domestic-compact-270.webp"
+    },
+    "comparisons": [
+      {
+        "criterion": "busy-showers",
+        "pro": "Several tank sizes let you choose storage for your shower routine.",
+        "con": "No extra electric heater; ask how much hot water it delivers during busy winter mornings."
+      },
+      {
+        "criterion": "heating-times",
+        "pro": null,
+        "con": "Ask whether the exact model lets you choose heating hours or needs a separate controller."
+      },
+      {
+        "criterion": "upkeep",
+        "pro": "Tank cover is five years; heating and electrical parts have two.",
+        "con": "Labour and travel cover were not verified; get those terms before purchase."
+      }
     ]
   }
 ]

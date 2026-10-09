@@ -14,6 +14,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "Fronius",
+    "image": {
+      "src": "/products/inverters/fronius-primo.webp",
+      "alt": "Fronius Primo. Product range shown.",
+      "sourceUrl": "https://australia.a.bigcontent.io/v1/static/14195228_1_P_PROD_SPEC_FRNPRIMO50-1"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": null,
+        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "This unit provides no blackout power; rooftop solar stops when the grid goes down."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -37,6 +60,29 @@
         "kind": "manufacturer_installation_guidance",
         "revision": "Version 1.0, 13 May 2023; checked 10 October 2026"
       }
+    ],
+    "brand": "Fronius",
+    "image": {
+      "src": "/products/inverters/fronius-primo-gen24-plus.webp",
+      "alt": "Fronius Primo GEN24 Plus. Product range shown.",
+      "sourceUrl": "https://www.fronius.com/~/downloads/Solar%20Energy/Datasheets/SE_DS_Fronius_Primo_GEN24_GEN24Plus_3_to_6_kW_EN_withoutWebshop.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Connects solar and a compatible battery through the same unit.",
+        "con": "The quote must include the Plus version and a supported battery; ordinary GEN24 differs."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A dedicated emergency outlet is available; a complete battery installation can supply selected household circuits.",
+        "con": "The outlet is not whole-home backup; wider coverage needs additional equipment and a supported battery."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -53,6 +99,29 @@
         "url": "https://www.sma-australia.com.au/products/hybrid-inverters/sunny-boy-smart-energy",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      }
+    ],
+    "brand": "SMA",
+    "image": {
+      "src": "/products/inverters/sma-sunny-boy-smart-energy.webp",
+      "alt": "SMA Sunny Boy Smart Energy. Product range shown.",
+      "sourceUrl": "https://d3yvy865gav9f.cloudfront.net/asset/851725204959/document_tf78puhkml0rb7g728i78ppd72/SMA_SBSE%20Brochure-en-au-10.pdf?content-disposition=inline"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Connects solar and a compatible battery through the same unit.",
+        "con": "Battery choice must match the exact Australian model; a battery is not included by default."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply selected household circuits through a complete battery and backup installation.",
+        "con": "An emergency outlet differs from household backup; additional equipment and agreed circuits are needed."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "The 5 and 6 kW models separately manage three roof directions.",
+        "con": "Other sizes differ; panel placement and shade still need a suitable design."
       }
     ]
   },
@@ -77,6 +146,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated global product page checked 10 October 2026; Australian variant must be confirmed"
       }
+    ],
+    "brand": "SMA",
+    "image": {
+      "src": "/products/inverters/sma-sunny-tripower-smart-energy.webp",
+      "alt": "SMA Sunny Tripower Smart Energy. Product range shown.",
+      "sourceUrl": "https://www.sma.de/fileadmin/content/website-meta/products/hybrid-inverters/sunny-tripower-smart-energy/SMA-Sunny-Tripower-Smart-Energy-Hero-2560.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Combines solar and a compatible battery for homes with three-phase electricity.",
+        "con": "The exact Australian model, supported battery and current local availability still need confirmation."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply selected household circuits with a correctly configured battery installation.",
+        "con": "The appliances it can run together are limited; the complete Australian backup design needs confirmation."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": null,
+        "con": "The number of separately managed roof directions is not confirmed for the Australian model."
+      }
     ]
   },
   {
@@ -99,6 +191,29 @@
         "url": "https://enphase.com/en-au/blog/professionals/iq8-series-microinverters-latest-information-installers",
         "kind": "manufacturer_compatibility",
         "revision": "2 May 2023; checked 10 October 2026"
+      }
+    ],
+    "brand": "Enphase",
+    "image": {
+      "src": "/products/inverters/enphase-iq8.webp",
+      "alt": "Enphase IQ8. Product range shown.",
+      "sourceUrl": "https://enphase.com/en-au/download/iq8ac-and-iq8hc-microinverters-data-sheet"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Compatible battery storage can be added alongside the rooftop solar system.",
+        "con": "Extra equipment is needed; each small panel inverter has no direct battery connection."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can support selected backup circuits in a complete, compatible battery system.",
+        "con": "Panels alone provide no blackout power; a battery and additional equipment are required."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Each panel works separately, suiting roofs with several facing directions.",
+        "con": "One inverter per panel adds more rooftop equipment; panel placement still needs suitable design."
       }
     ]
   },
@@ -123,6 +238,29 @@
         "kind": "manufacturer_compatibility",
         "revision": "Undated Australian programme page checked 10 October 2026; offer pricing is not used"
       }
+    ],
+    "brand": "SolarEdge",
+    "image": {
+      "src": "/products/inverters/solaredge-home-genesis.webp",
+      "alt": "SolarEdge Home Genesis. Product range shown.",
+      "sourceUrl": "https://8979728.fs1.hubspotusercontent-na1.net/hubfs/8979728/LP%20Images/Australia%20-%20Aus%20Marketing%20Resources%20Im1.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Supports a matched battery while the electricity grid is working.",
+        "con": "Battery compatibility and required extra equipment need confirmation for the exact model."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Genesis alone provides no blackout power; it must not be confused with Home Hub backup."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Manages panels individually across different roof directions.",
+        "con": "Needs a compatible extra device on each panel, with the full roof design checked."
+      }
     ]
   },
   {
@@ -139,6 +277,29 @@
         "url": "https://knowledge-center.solaredge.com/sites/kc/files/se-home-hub-universal-inverter-datasheet-aus.pdf",
         "kind": "manufacturer_specification",
         "revision": "Australian Universal datasheet checked 10 October 2026; printed issue date not stated"
+      }
+    ],
+    "brand": "SolarEdge",
+    "image": {
+      "src": "/products/inverters/solaredge-home-hub-universal.webp",
+      "alt": "SolarEdge Home Hub Universal. Product range shown.",
+      "sourceUrl": "https://acsolarwarehouse.com/shop/solaredge-home-hub-5kw-universal-inverter-27356/document/2892"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Combines solar and storage using a compatible SolarEdge Home Battery.",
+        "con": "Battery choices are tied to the supported SolarEdge system, not any brand."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply selected household circuits through a complete battery and backup installation.",
+        "con": "Needs additional backup equipment; available power depends on the battery and circuits included."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Manages panels individually across different roof directions.",
+        "con": "Needs a compatible extra device on each panel, with the full roof design checked."
       }
     ]
   },
@@ -157,6 +318,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "Sungrow",
+    "image": {
+      "src": "/products/inverters/sungrow-sg-rs.webp",
+      "alt": "Sungrow SG-RS. Product range shown.",
+      "sourceUrl": "https://official-oversears-file.sungrowpower.com/page-assets/da78b486-ab72-44c4-b1b8-dae55508d274.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": null,
+        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "SG-RS provides no blackout power; the separate SH-RS model has different capabilities."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages groups of panels facing different roof directions.",
+        "con": "The number of separately managed roof directions needs confirmation for the exact RS model."
+      }
     ]
   },
   {
@@ -173,6 +357,29 @@
         "url": "https://www.sungrowpower.com/au/en/products/residential-energy-storage-system/shrs-3-36-4-5-6",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      }
+    ],
+    "brand": "Sungrow",
+    "image": {
+      "src": "/products/inverters/sungrow-sh-rs.webp",
+      "alt": "Sungrow SH-RS. Product range shown.",
+      "sourceUrl": "https://official-oversears-file.sungrowpower.com/page-assets/2634dff5-5bd7-4d4b-ab3b-6ac12addc9de.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Connects solar and a compatible battery through the same unit.",
+        "con": "The supported battery depends on the exact SH-RS version; other generations can differ."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A correctly installed battery can supply selected household circuits.",
+        "con": "Backup wiring must be included; the number of appliances running together remains limited."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "The reviewed model separately manages two roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
       }
     ]
   },
@@ -191,6 +398,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "Sungrow",
+    "image": {
+      "src": "/products/inverters/sungrow-sh-t.webp",
+      "alt": "Sungrow SH-T. Product range shown.",
+      "sourceUrl": "https://official-oversears-file.sungrowpower.com/page-assets/4ca5e42a-9a95-407d-aac6-8e4d84cd1710.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Combines solar and matched SBR or SBH storage for a three-phase home.",
+        "con": "The supported battery combination depends on the exact inverter model."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can provide three-phase backup through a complete, matched battery installation.",
+        "con": "Large appliances cannot run without limit; the circuits and starting loads must suit the design."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "The reviewed 5 to 10 kW models separately manage two roof directions.",
+        "con": "Roof-direction support for other sizes is unconfirmed; more directions need a suitable design."
+      }
     ]
   },
   {
@@ -207,6 +437,29 @@
         "url": "https://www.goodwe.com.au/dns-g3-au",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      }
+    ],
+    "brand": "GoodWe",
+    "image": {
+      "src": "/products/inverters/goodwe-dns-g3.webp",
+      "alt": "GoodWe DNS G3. Product range shown.",
+      "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20220530/DNSG3-31.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": null,
+        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "This solar unit provides no blackout power by itself."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
       }
     ]
   },
@@ -225,6 +478,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "GoodWe",
+    "image": {
+      "src": "/products/inverters/goodwe-eh-plus.webp",
+      "alt": "GoodWe EH Plus+. Product range shown.",
+      "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20211227/639a92b851bf8.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Supports a compatible battery now or later, depending on the purchased version.",
+        "con": "Some versions need paid activation before a battery works; storage is not included by default."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A fully enabled, correctly installed battery version can supply selected household circuits.",
+        "con": "Battery-ready versions need activation; backup equipment, wiring and appliance limits must be included."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -241,6 +517,29 @@
         "url": "https://www.goodwe.com.au/et-g2",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      }
+    ],
+    "brand": "GoodWe",
+    "image": {
+      "src": "/products/inverters/goodwe-et-g2.webp",
+      "alt": "GoodWe ET G2. Product range shown.",
+      "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20240925/ET-G2-31.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Combines solar and a compatible battery for homes with three-phase electricity.",
+        "con": "The exact model and supported battery must match; earlier ET generations differ."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply selected household circuits through a complete battery installation.",
+        "con": "Backup depends on battery and circuit design; a bigger inverter does not run unlimited appliances."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Some models manage three roof directions separately.",
+        "con": "The number of separately managed roof directions varies with the exact model."
       }
     ]
   },
@@ -265,6 +564,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian specifications checked 10 October 2026"
       }
+    ],
+    "brand": "Huawei",
+    "image": {
+      "src": "/products/inverters/huawei-sun2000-l1.webp",
+      "alt": "Huawei SUN2000-L1. Product range shown.",
+      "sourceUrl": "https://solarex.com.au/image/cache/catalog/inverters/huawei/P-HUA-SUN2000-5KTL-L1-500x500.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Provides a connection for the specified Huawei LUNA2000-S0 battery.",
+        "con": "Other LUNA battery generations are not automatically compatible with this inverter."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can support selected household circuits with a compatible battery and backup installation.",
+        "con": "Additional equipment is required; exact battery compatibility and circuit coverage need confirmation."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -282,6 +604,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "Growatt",
+    "image": {
+      "src": "/products/inverters/growatt-min-xh2.webp",
+      "alt": "Growatt MIN-XH2. Product range shown.",
+      "sourceUrl": "https://au.growatt.com/upload/image/XH2s.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Provides a route to storage using the specified APX battery system.",
+        "con": "The battery and required extra equipment must match this exact XH2 version."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "The manufacturer says backup is not included; battery-ready does not mean blackout power."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -298,6 +643,29 @@
         "url": "https://www.solisinverters.au/uploads/files/202505/Solis_datasheet_S6-GR1P(5-10)K03-NV-ND-AU_AUS_V1,6_202505.pdf",
         "kind": "manufacturer_specification",
         "revision": "AUS V1.6, May 2025; checked 10 October 2026"
+      }
+    ],
+    "brand": "Solis",
+    "image": {
+      "src": "/products/inverters/solis-s6-gr1p.webp",
+      "alt": "Solis S6-GR1P. Product range shown.",
+      "sourceUrl": "https://www.solisinverters.au/uploads/files/202505/Solis_datasheet_S6-GR1P(5-10)K03-NV-ND-AU_AUS_V1,6_202505.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": null,
+        "con": "Adding storage needs a separate compatible battery inverter or replacing this unit."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "This unit provides no blackout power; rooftop solar stops when the grid goes down."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages three groups of panels facing different roof directions.",
+        "con": "Other Solis versions differ; more than three separately managed directions need another suitable design."
       }
     ]
   },
@@ -322,6 +690,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "Solis",
+    "image": {
+      "src": "/products/inverters/solis-s6-eh1p-plus.webp",
+      "alt": "Solis S6-EH1P PLUS. Product range shown.",
+      "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Connects solar and a compatible battery, with scheduled charging and discharging.",
+        "con": "The exact battery must be supported; other PLUS and S6 versions can differ."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A compatible battery and correctly wired installation can supply selected circuits.",
+        "con": "Appliance starting-power limits apply; a battery and backup wiring must be included."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -344,6 +735,29 @@
         "url": "https://www.fox-ess.com/Public/Uploads/uploadfile/files/Download/INVERTER-WARRANTY-AU-20251024.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Printed version 3.4, 1 October 2024; checked 10 October 2026; warranty-duration wording needs confirmation"
+      }
+    ],
+    "brand": "FoxESS",
+    "image": {
+      "src": "/products/inverters/foxess-ac1-g2.webp",
+      "alt": "FoxESS AC1 G2. Product range shown.",
+      "sourceUrl": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260828/ENH1G2DatasheetAUV1.520260820.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Adds supported battery storage while keeping a working existing solar inverter.",
+        "con": "Needs a matched battery; this unit does not replace the inverter connected to your panels."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A correctly installed battery can supply selected household circuits.",
+        "con": "Existing solar may stop during a blackout; included circuits and appliance limits still matter."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Keeps the existing solar roof layout when adding battery storage.",
+        "con": "Your existing solar inverter still determines which roof directions the panels can use."
       }
     ]
   },
@@ -368,6 +782,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
       }
+    ],
+    "brand": "SolaX",
+    "image": {
+      "src": "/products/inverters/solax-x1-hybrid-g4.webp",
+      "alt": "SolaX X1 Hybrid G4. Product range shown.",
+      "sourceUrl": "https://au.solaxpower.com/uploads/file/solax-x1-hybrid-g4-datasheet-en-au.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Connects solar and a compatible battery, with scheduled charging and discharging.",
+        "con": "Battery and any extra equipment must match the Australian G4 version."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A compatible battery and correctly installed system can supply selected circuits.",
+        "con": "Additional switching equipment may be needed; appliance and starting-power limits still apply."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
+      }
     ]
   },
   {
@@ -390,6 +827,29 @@
         "url": "https://au.saj-electric.com/en-au/h2-series",
         "kind": "manufacturer_specification",
         "revision": "Undated Australian product page checked 10 October 2026"
+      }
+    ],
+    "brand": "SAJ",
+    "image": {
+      "src": "/products/inverters/saj-h2.webp",
+      "alt": "SAJ H2. Product range shown.",
+      "sourceUrl": "https://static.wixstatic.com/media/f28763_f42088a6192c43b2ae818331033cce3a~mv2.jpg/v1/fit/w_1625,h_2250,q_90/file.jpg/v1/fit/w_500,h_500,q_90/file.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "battery",
+        "pro": "Connects solar and a compatible battery through the same unit.",
+        "con": "The supported battery must match the H2-S2 version; other H2 versions differ."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "A compatible battery and correctly installed system can supply selected circuits.",
+        "con": "Backup circuits and appliance limits need confirmation; a battery connection alone does not provide backup."
+      },
+      {
+        "criterion": "roof-layout",
+        "pro": "Separately manages two groups of panels facing different roof directions.",
+        "con": "More than two separately managed roof directions need another suitable design."
       }
     ]
   }

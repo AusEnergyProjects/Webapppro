@@ -14,6 +14,29 @@
         "kind": "manufacturer_specification",
         "revision": "Rev 4, 5 August 2024"
       }
+    ],
+    "brand": "REC",
+    "image": {
+      "src": "/products/solar/rec-alpha-pure-rx.webp",
+      "alt": "REC Alpha Pure-RX. Product range shown.",
+      "sourceUrl": "https://www.recgroup.com/sites/default/files/2024-08/Web_DS_Alpha_Pure-RX_EN%20AU.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 226 watts per square metre of panel.",
+        "con": "Each panel is 1.73 by 1.21 metres; narrow roof sections may limit placement."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.4% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "20-year panel fault cover advertised; eligible installations can receive 25 years.",
+        "con": "Extended cover needs an eligible REC installer and registration; labour cover has conditions."
+      }
     ]
   },
   {
@@ -36,6 +59,29 @@
         "url": "https://www.winaico.com.au/wst-465ncx48-aw",
         "kind": "manufacturer_specification",
         "revision": "Undated page checked 10 October 2026"
+      }
+    ],
+    "brand": "Winaico",
+    "image": {
+      "src": "/products/solar/winaico-ncx48-aw.webp",
+      "alt": "Winaico NCX48. Product range shown.",
+      "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/08/WINAICO_WST-470NCX48-AW_AUS_0726.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 235 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; its 25 kg weight needs suitable roof support."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.8% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "30-year panel fault cover advertised.",
+        "con": "Labour, removal, freight and the applicable Australian claim conditions still need confirmation."
       }
     ]
   },
@@ -60,6 +106,29 @@
         "kind": "manufacturer_specification",
         "revision": "Undated page checked 10 October 2026"
       }
+    ],
+    "brand": "Tindo",
+    "image": {
+      "src": "/products/solar/tindo-walara-g4p.webp",
+      "alt": "Tindo Walara G4P. Product range shown.",
+      "sourceUrl": "https://tindosolar.com.au/wp-content/uploads/2025/08/Tindo_Walara-475G4P_BL_V03-250815.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 219 watts per square metre of panel.",
+        "con": "Each panel is 1.91 metres long, needing more clear roof length than many compact options."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 3.0% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year panel fault cover advertised, with an Australian manufacturer support contact.",
+        "con": "Panel cover and installer workmanship cover are separate; included labour costs need confirmation."
+      }
     ]
   },
   {
@@ -83,6 +152,29 @@
         "kind": "manufacturer_specification",
         "revision": "July 2025 URL; fetch timed out, specifications above taken from AU page"
       }
+    ],
+    "brand": "AIKO",
+    "image": {
+      "src": "/products/solar/aiko-neostar-2p54.webp",
+      "alt": "AIKO Neostar 2P54. Product range shown.",
+      "sourceUrl": "https://aikosolar.com/wp-content/uploads/2024/03/Black-2P_Mono-blass_wbbf_MAH54Mw-detail.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 243 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; shade and installation gaps reduce usable roof space."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year panel fault cover advertised.",
+        "con": "Applicable Australian claim support, labour and removal costs still need confirmation."
+      }
     ]
   },
   {
@@ -99,6 +191,35 @@
         "url": "https://www.trinasolar.com/au/NEG9R.28/",
         "kind": "manufacturer_specification",
         "revision": "Undated current product page"
+      },
+      {
+        "title": "Trina NEG9R.28 exact-family rated power, dimensions and heat specification",
+        "url": "https://pages.trinasolar.com/rs/567-KJK-096/images/Datasheet_210R_NEG9R.28_EN_2024C_web.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "TSM_EN_2024_C, checked 10 October 2026; Australian fault-cover applicability unconfirmed"
+      }
+    ],
+    "brand": "Trina Solar",
+    "image": {
+      "src": "/products/solar/trina-vertex-s-plus-neg9r28.webp",
+      "alt": "Trina Vertex S+. Product range shown.",
+      "sourceUrl": "https://pages.trinasolar.com/rs/567-KJK-096/images/Datasheet_210R_NEG9R.28_EN_2024C_web.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 230 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; roof edges and shade still limit placement."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": null,
+        "con": "The applicable Australian panel-fault cover term and local claim support are not confirmed."
       }
     ]
   },
@@ -123,6 +244,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "Jinko Solar",
+    "image": {
+      "src": "/products/solar/jinko-tiger-neo-54hl4r-bdv.webp",
+      "alt": "Jinko Tiger Neo 54HL4R-BDV. Product range shown.",
+      "sourceUrl": "https://jinkosolar.com.au/wp-content/uploads/2023/01/JKM430-450N-54HL4R-BDV-F1C1.1-EN-for-AU-CEC.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 225 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; rear-light gains are not guaranteed on a roof."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year panel fault cover advertised for Australia.",
+        "con": "Current model eligibility, labour costs and the local claim process still need confirmation."
+      }
     ]
   },
   {
@@ -145,6 +289,29 @@
         "url": "https://www.longi.com/au/products/modules/",
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
+      }
+    ],
+    "brand": "LONGi",
+    "image": {
+      "src": "/products/solar/longi-x10-54hvb.webp",
+      "alt": "LONGi Hi-MO X10 premium black. Product range shown.",
+      "sourceUrl": "https://static.longi.com/LR_7_54_HVB_475_495_M_30_30_and_15_Frame_BGV_02_20250820_EN_1_39b1ccce57.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 243 watts per square metre of panel.",
+        "con": "Each panel is 1.80 by 1.13 metres; space between panels still reduces roof coverage."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": null,
+        "con": "Australian panel-fault cover and local claim support are not confirmed for this exact model."
       }
     ]
   },
@@ -169,6 +336,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "Risen",
+    "image": {
+      "src": "/products/solar/risen-rsm96-bndg.webp",
+      "alt": "Risen RSM96 BNDG. Product range shown.",
+      "sourceUrl": "https://risenenergy.com.au/_astro/front.D4fDdnp3_ZuCKXU.webp"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 238 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; roof layout and shade still limit total generation."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year panel fault cover advertised for Australian and New Zealand roofs.",
+        "con": "Applicable claim conditions and any labour, removal or freight cover still need confirmation."
+      }
     ]
   },
   {
@@ -191,6 +381,29 @@
         "url": "https://astronergy.com.au/download-product/",
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
+      }
+    ],
+    "brand": "Astronergy",
+    "image": {
+      "src": "/products/solar/astronergy-astro-n7s.webp",
+      "alt": "Astronergy ASTRO N7s. Product range shown.",
+      "sourceUrl": "https://astronergy.com.au/wp-content/uploads/2025/11/455-475_%C2%B15WASTRO-N7s_CHSM48RNDGF-BH_1762x1134x30_AU_20250916-V2.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 238 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; glass choice changes its weight and roof requirements."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "30-year panel fault cover advertised for rooftop installations.",
+        "con": "Labour, removal, freight and local claim support still need confirmation under the applicable policy."
       }
     ]
   },
@@ -215,6 +428,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "DMEGC",
+    "image": {
+      "src": "/products/solar/dmegc-g12rt-g48hbb.webp",
+      "alt": "DMEGC Infinity RT. Product range shown.",
+      "sourceUrl": "https://www.dmegcsolar.com/upload/img/2026-05/6a0c0cddccd22.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 238 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres and generates from the front only."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": null,
+        "con": "Australian panel-fault cover is not confirmed; a 30-year output promise is a different protection."
+      }
     ]
   },
   {
@@ -238,6 +474,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "Suntech",
+    "image": {
+      "src": "/products/solar/suntech-black-pro-nfb.webp",
+      "alt": "Suntech Ultra T Black Pro. Product range shown.",
+      "sourceUrl": "https://www.suntech-power.com/download/au/STP445-465S-H48-Nfb%2B(Black%20Pro%20Monofacial)_AU.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 233 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; its 24.8 kg weight needs suitable roof support."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year panel fault cover advertised.",
+        "con": "Applicable Australian claim support, labour and removal costs still need confirmation."
+      }
     ]
   },
   {
@@ -254,6 +513,29 @@
         "url": "https://www.hyundaisolar.com.au/wp-content/uploads/2025/01/Data-Sheet-Hyundai-440W-HiT-HxxxOF-BF-Solar-Panel-1.pdf",
         "kind": "manufacturer_specification",
         "revision": "14 June 2023; uploaded January 2025"
+      }
+    ],
+    "brand": "Hyundai",
+    "image": {
+      "src": "/products/solar/hyundai-heteromax-hit.webp",
+      "alt": "Hyundai HeteroMax HiT. Product range shown.",
+      "sourceUrl": "https://www.hyundaisolar.com.au/wp-content/uploads/2025/01/Data-Sheet-Hyundai-440W-HiT-HxxxOF-BF-Solar-Panel-1.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 230 watts per square metre of panel.",
+        "con": "Each panel is 1.72 by 1.13 metres; shade and installation gaps reduce usable roof space."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "30-year panel fault cover advertised for this model.",
+        "con": "Current Australian model eligibility, local help and included labour costs still need confirmation."
       }
     ]
   },
@@ -278,6 +560,29 @@
         "kind": "manufacturer_specification",
         "revision": "Linked from AU manufacturer index; 29 July 2025"
       }
+    ],
+    "brand": "DAS Solar",
+    "image": {
+      "src": "/products/solar/das-dh96te-black-pro.webp",
+      "alt": "DAS Solar DH96TE Black Pro. Product range shown.",
+      "sourceUrl": "https://yidao.cdn.shwebspace.com/uploads/688866c7/DAS-DH96TE-EN-460-475%26ef%26bc%2688Black%20Pro%26ef%26bc%2689.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 238 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; shade and installation gaps reduce usable roof space."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year cover for panel materials and manufacturing defects advertised.",
+        "con": "Australian claim support and any labour, removal or freight cover still need confirmation."
+      }
     ]
   },
   {
@@ -301,6 +606,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "Canadian Solar",
+    "image": {
+      "src": "/products/solar/canadian-top-hiku6-48td.webp",
+      "alt": "Canadian Solar TOPHiKu6. Product range shown.",
+      "sourceUrl": "https://static.csisolar.com/wp-content/uploads/sites/2/2022/09/19180028/Datasheet-CS-Datasheet-TOPHiKu6_Black-frame_CS6.2-48TD_v1.5C1_AU_-5W10W.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 243 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; its 24.6 kg weight needs suitable roof support."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.9% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year cover for panel materials and manufacturing defects advertised.",
+        "con": "The Australian policy determines labour, removal and freight cover; these are not confirmed here."
+      }
     ]
   },
   {
@@ -317,6 +645,29 @@
         "url": "https://phonosolar.com.au/wp-content/uploads/2024/11/Phono-Solar-Helios-Clear-v1.4.pdf",
         "kind": "manufacturer_specification",
         "revision": "v1.4; November 2024 URL"
+      }
+    ],
+    "brand": "Phono Solar",
+    "image": {
+      "src": "/products/solar/phono-helios-plus.webp",
+      "alt": "Phono Helios+. Product range shown.",
+      "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/elementor/thumbs/Helios-Clear-Web-Image-qogoe0bo80c3ld74z7dcd7gdlolyxsfap43mn0z0ls.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 220 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; a transparent rear does not guarantee extra roof energy."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.4% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "30-year panel fault cover advertised for residential installations, with Australian warranty support.",
+        "con": "Commercial installations receive 25 years; labour, removal and freight cover still need confirmation."
       }
     ]
   },
@@ -341,6 +692,29 @@
         "kind": "manufacturer_specification",
         "revision": "Indexed AUS-EN-20250109A; direct fetch 403"
       }
+    ],
+    "brand": "JA Solar",
+    "image": {
+      "src": "/products/solar/ja-deep-blue4-jam54d41-lb.webp",
+      "alt": "JA Solar DeepBlue 4.0 Pro. Product range shown.",
+      "sourceUrl": "https://www.jasolar.eu/fileadmin/_processed_/2/9/csm_JAM_54_D41_LB_winkel_vorne_3_7413ca0794.webp"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 228 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; rear-light gains depend on roof and mounting."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 3.0% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": null,
+        "con": "Applicable Australian panel-fault cover, labour costs and current local claim arrangements are not confirmed."
+      }
     ]
   },
   {
@@ -357,6 +731,29 @@
         "url": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf",
         "kind": "manufacturer_specification",
         "revision": "IEC AU CEC 10.2025 V4.9"
+      }
+    ],
+    "brand": "REC",
+    "image": {
+      "src": "/products/solar/rec-alpha-pro-m.webp",
+      "alt": "REC Alpha Pro M. Product range shown.",
+      "sourceUrl": "https://www.recgroup.com/sites/default/files/2025-11/DS_Alpha_Pro%20M_IEC_EN_AUCEC_101125.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 225 watts per square metre of panel.",
+        "con": "Each panel is 2.18 by 1.31 metres and 32.5 kg, limiting fit on ordinary home roofs."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.4% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "20-year panel fault cover advertised; eligible installations can receive 25 years.",
+        "con": "Extended cover needs an eligible REC installer and registration; installation size affects labour cover."
       }
     ]
   },
@@ -381,6 +778,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "Tongwei",
+    "image": {
+      "src": "/products/solar/tongwei-tnc2-48hd.webp",
+      "alt": "Tongwei TNC 2.0. Product range shown.",
+      "sourceUrl": "https://au.tongwei.cn/uploads/20260722/371fdb503528b878c41d900b4a6ecb3b.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 240 watts per square metre of panel.",
+        "con": "Each panel is 1.76 by 1.13 metres; actual roof layout determines how many fit."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.8% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "25-year cover for panel materials and manufacturing defects advertised.",
+        "con": "Australian claim support and any labour, removal or freight cover still need confirmation."
+      }
     ]
   },
   {
@@ -404,6 +824,29 @@
         "kind": "manufacturer_specification",
         "revision": "Checked 10 October 2026"
       }
+    ],
+    "brand": "Winaico",
+    "image": {
+      "src": "/products/solar/winaico-wbc-bdx54.webp",
+      "alt": "Winaico WBC. Product range shown.",
+      "sourceUrl": "https://www.winaico.com.au/wp-content/uploads/2026/04/WINAICO_WST-485BDX54-B2_AUS_0126.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 238 watts per square metre of panel.",
+        "con": "Each panel is 1.80 by 1.13 metres; its 25 kg weight needs suitable roof support."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "30-year panel fault cover advertised.",
+        "con": "Insurance offers are separate; applicable Australian labour, removal and claim cover still needs confirmation."
+      }
     ]
   },
   {
@@ -420,6 +863,29 @@
         "url": "https://www.longi.com/au/products/modules/hi-mo-x10-guardian-light-design/",
         "kind": "manufacturer_specification",
         "revision": "Undated current product page"
+      }
+    ],
+    "brand": "LONGi",
+    "image": {
+      "src": "/products/solar/longi-guardian-light.webp",
+      "alt": "LONGi Hi-MO X10 Guardian Light. Product range shown.",
+      "sourceUrl": "https://static.longi.com/_c174d703e1.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "roof-space",
+        "pro": "Up to about 248 watts per square metre of panel.",
+        "con": "Each panel is 1.99 metres long; low weight does not remove roof and fixing requirements."
+      },
+      {
+        "criterion": "hot-weather",
+        "pro": "Loses about 2.6% power for a 10°C rise in panel temperature.",
+        "con": "This is a same-sunlight laboratory comparison; hotter roofs reduce output further and home results vary."
+      },
+      {
+        "criterion": "warranty",
+        "pro": "15-year panel fault cover advertised.",
+        "con": "Applicable Australian claim support and any labour, removal or freight cover still need confirmation."
       }
     ]
   }

@@ -14,6 +14,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Daikin",
+    "image": {
+      "src": "/products/air-conditioning/daikin-alira-x.webp",
+      "alt": "Daikin Alira X wall-mounted indoor air-conditioning unit; manufacturer range photograph",
+      "sourceUrl": "https://static.wixstatic.com/media/b0568f_60da5f4bd9714f92baea286717d9d183~mv2.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Adjustable airflow helps steer the breeze away from where you sit.",
+        "con": "Choose the heating version; positioning and settings determine whether airflow reaches the room comfortably."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built in.",
+        "con": "Remote access needs setup, a compatible phone and a working internet connection."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      }
     ]
   },
   {
@@ -30,6 +53,29 @@
         "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/cora",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "Daikin",
+    "image": {
+      "src": "/products/air-conditioning/daikin-cora.webp",
+      "alt": "Daikin Cora wall-mounted indoor air-conditioning unit; manufacturer range photograph",
+      "sourceUrl": "https://static.wixstatic.com/media/b0568f_5da69d61bc5d4f47901a17ac68f85568~mv2.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Air can travel along the ceiling, reducing a direct cold breeze.",
+        "con": "Position determines where air reaches; choose the heating-and-cooling version if you need winter warmth."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is available as an optional extra.",
+        "con": "Quote must include the adapter and setup; remote access needs internet."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
       }
     ]
   },
@@ -48,6 +94,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Daikin",
+    "image": {
+      "src": "/products/air-conditioning/daikin-lite.webp",
+      "alt": "Daikin Lite wall-mounted indoor air-conditioning unit; manufacturer range photograph",
+      "sourceUrl": "https://static.wixstatic.com/media/b0568f_a3a455b07a52413c9b3ab8379ca1b021~mv2.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Ceiling-directed airflow helps keep the cold breeze above where you sit.",
+        "con": "Choose the heating-and-cooling version for winter; positioning still determines whether air reaches the room."
+      },
+      {
+        "criterion": "controls",
+        "pro": null,
+        "con": "Phone control was not verified; ask whether an adapter and app support are available."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      }
     ]
   },
   {
@@ -64,6 +133,29 @@
         "url": "https://www.daikin.com.au/products/residential/split-system-air-conditioning/xl-series",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "Daikin",
+    "image": {
+      "src": "/products/air-conditioning/daikin-xl.webp",
+      "alt": "Daikin XL wall-mounted indoor air-conditioning unit; representative XL range photograph",
+      "sourceUrl": "https://static.wixstatic.com/media/b0568f_d98c14586d9346f8968ad0ececefe5f2~mv2.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Adjustable airflow helps reach across a larger open living area.",
+        "con": "Air will not reliably reach closed rooms; choose the heating-and-cooling version for winter."
+      },
+      {
+        "criterion": "controls",
+        "pro": null,
+        "con": "Phone controls were not verified; check the exact XL or XL Premium model and any extra equipment."
+      },
+      {
+        "criterion": "installation",
+        "pro": "One wall unit can serve a large open room.",
+        "con": "Installer must size it for that area; closed bedrooms may need their own units."
       }
     ]
   },
@@ -82,6 +174,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Daikin",
+    "image": {
+      "src": "/products/air-conditioning/daikin-floor-standing.webp",
+      "alt": "Daikin floor-standing indoor air-conditioning unit; manufacturer range photograph",
+      "sourceUrl": "https://static.wixstatic.com/media/ea7b3d_837f3802ae944e39b6d029ff5bef0b9d~mv2.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Air starts after warming, then lower outlets send warmth near floor level.",
+        "con": "Furniture can block the outlets; ask whether the position heats your seating area comfortably."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built into the current range.",
+        "con": "Confirm the quoted model and setup; remote access needs a working internet connection."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Fits rooms with little high wall space.",
+        "con": "Furniture must leave outlets clear, with access for cleaning and an outdoor unit."
+      }
     ]
   },
   {
@@ -98,6 +213,29 @@
         "url": "https://www.mitsubishielectric.com.au/product/msz-ap25-80vgd-split-system-air-conditioner/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "Mitsubishi Electric",
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ap.webp",
+      "alt": "Mitsubishi Electric MSZ-AP 70/80 wall-mounted indoor unit; representative AP range photograph",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/AP_70-80HP_front-1920x1440-1-1200x900.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Air flaps let you steer the breeze up, down and sideways.",
+        "con": "Check the chosen size's reach; airflow cannot reliably serve rooms behind closed doors."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Current versions include phone control.",
+        "con": "Older versions may need an adapter; check the full model and home internet connection."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
       }
     ]
   },
@@ -116,6 +254,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Mitsubishi Electric",
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-gs.webp",
+      "alt": "Mitsubishi Electric MSZ-GS 25/35 indoor unit; representative GS range photograph",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/07/MSZ-GS25_35VFD-1920x1440-1-1200x900.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": null,
+        "con": "Airflow direction and draught controls were not verified; ask how air can be aimed away from seating."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is available with optional Wi-Fi equipment.",
+        "con": "Adapter and setup must be included in the quote; remote access needs internet."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Accessible vanes and guards make cleaning easier.",
+        "con": "Still needs clear airflow, suitable wall space and a separate outdoor unit."
+      }
     ]
   },
   {
@@ -132,6 +293,29 @@
         "url": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "Mitsubishi Electric",
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ef.webp",
+      "alt": "Mitsubishi Electric MSZ-EF white wall-mounted indoor unit; representative EF range photograph",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/MSZ-EF_W_front-1200x800.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": null,
+        "con": "Draught-avoidance controls were not established; ask how to aim air away from seating."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Current versions include phone control.",
+        "con": "Confirm the quoted version includes it; remote access needs internet and a compatible phone."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Several finishes help match the room's appearance.",
+        "con": "Slim styling still needs wall space, clear airflow and an outdoor unit."
       }
     ]
   },
@@ -150,6 +334,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Mitsubishi Electric",
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ln.webp",
+      "alt": "Mitsubishi Electric MSZ-LN wall-mounted indoor unit; representative LN range photograph",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/MSZ-LN_W_front-1920x1440-1-1200x900.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Separate flaps and a room sensor can steer air towards or away from occupied areas.",
+        "con": "Check settings for your seating positions; sensors do not replace correct unit placement."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built in.",
+        "con": "Remote access needs internet, a compatible phone and account setup."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      }
     ]
   },
   {
@@ -167,6 +374,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Mitsubishi Electric",
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-kw.webp",
+      "alt": "Mitsubishi Electric MFZ-KW floor-console indoor air-conditioning unit; manufacturer range photograph",
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/MFZ-KW-VG-front-1920x1440-1-1200x900.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Multiple outlets let you adjust where warm or cool air goes.",
+        "con": "Furniture can block those outlets and redirect the airflow."
+      },
+      {
+        "criterion": "controls",
+        "pro": null,
+        "con": "The maker lists both built-in and optional phone control; confirm the adapter for your exact KW version."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Fits low on a wall when high wall space is limited.",
+        "con": "Needs clear floor-level airflow, room for servicing and an outdoor unit."
+      }
     ]
   },
   {
@@ -183,6 +413,35 @@
         "url": "https://www.mhiaa.com.au/document/avanti-bronte-series-wf1-range-intro-flyer/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      },
+      {
+        "title": "Manufacturer current Avanti product and controls information",
+        "url": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
+        "kind": "Manufacturer information",
+        "revision": "Current public AU page, checked 10 October 2026"
+      }
+    ],
+    "brand": "Mitsubishi Heavy Industries",
+    "image": {
+      "src": "/products/air-conditioning/mhi-avanti.webp",
+      "alt": "Mitsubishi Heavy Industries Avanti DXK06ZSA-WF1 indoor unit; representative Avanti range photograph",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Automatic swinging flaps can move air around the room.",
+        "con": "Choose the heating-and-cooling version; positioning and settings determine whether airflow reaches seating comfortably."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built into WF1 versions.",
+        "con": "Other versions need checking for adapter support; phone access needs internet and an account."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
       }
     ]
   },
@@ -201,6 +460,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Mitsubishi Heavy Industries",
+    "image": {
+      "src": "/products/air-conditioning/mhi-avanti-plus.webp",
+      "alt": "Mitsubishi Heavy Industries Avanti Plus WF indoor unit; representative Avanti Plus range photograph",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/12/WebCategoryImages_AVANTIPLUS_588x330_12.24.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Automatic swinging flaps can spread air across the room.",
+        "con": "Aim it around seating; automatic swinging does not guarantee freedom from draughts."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built into current WF versions.",
+        "con": "Older versions can need an extra adapter; phone access needs internet and an account."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      }
     ]
   },
   {
@@ -217,6 +499,35 @@
         "url": "https://www.mhiaa.com.au/document/avanti-bronte-series-wf1-range-intro-flyer/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      },
+      {
+        "title": "Manufacturer current Bronte product and controls information",
+        "url": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+        "kind": "Manufacturer information",
+        "revision": "Current public AU page, checked 10 October 2026"
+      }
+    ],
+    "brand": "Mitsubishi Heavy Industries",
+    "image": {
+      "src": "/products/air-conditioning/mhi-bronte.webp",
+      "alt": "Mitsubishi Heavy Industries Bronte SRK63ZRA-WF1 indoor unit; representative Bronte range photograph",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/01/WebHeroImages_768x341_BRONTE_12.24.png"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Longer-reaching adjustable airflow helps in large open rooms.",
+        "con": "Air will not reliably reach around corners or closed doors; confirm the heating-and-cooling version."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built into WF1 versions.",
+        "con": "Other versions need checking for adapter support; phone access needs internet and an account."
+      },
+      {
+        "criterion": "installation",
+        "pro": "One wall unit can serve a larger open area.",
+        "con": "Installer must check room shape and sizing; closed rooms may need separate units."
       }
     ]
   },
@@ -235,6 +546,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "GENERAL",
+    "image": {
+      "src": "/products/air-conditioning/general-lifestyle-next.webp",
+      "alt": "GENERAL Lifestyle Next ASTG09KMTC indoor unit; representative Lifestyle Next range photograph",
+      "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/shared-album/product-tiles/astg09kmtc673304b5-2f59-46d2-aef2-838e2e37218a.jpg?sfvrsn=cf2505f_7"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": null,
+        "con": "Ask about aiming airflow away from seating; confirm the version provides heating if you need it."
+      },
+      {
+        "criterion": "controls",
+        "pro": "A phone-control adapter is supplied with this range.",
+        "con": "App needs a compatible phone, account and internet; check which features are available."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      }
     ]
   },
   {
@@ -251,6 +585,29 @@
         "url": "https://www.generalairstage.com.au/residential-products/single-room-solutions/wall-mounted",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "GENERAL",
+    "image": {
+      "src": "/products/air-conditioning/general-comfort.webp",
+      "alt": "GENERAL Comfort ASTH09KNCA indoor unit; representative Comfort range photograph",
+      "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/shared-album/product-tiles/fujitsu-airstage-products/asth0709knca.png?sfvrsn=183ec9ab_3"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": null,
+        "con": "Airflow direction was not verified; ask about draughts and choose the heating-and-cooling version."
+      },
+      {
+        "criterion": "controls",
+        "pro": null,
+        "con": "Phone control was not verified for every version; ask which adapter and app the quote includes."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
       }
     ]
   },
@@ -269,6 +626,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "GENERAL",
+    "image": {
+      "src": "/products/air-conditioning/general-floor-console.webp",
+      "alt": "GENERAL AGTG09KVCA floor-console indoor air-conditioning unit; representative range photograph",
+      "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/articles/agtg09kvca060230fd-dbbd-4983-8d37-66121410c771.jpg?sfvrsn=6c24aa70_1"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": null,
+        "con": "Ask how its airflow is aimed away from seating; keep furniture clear of outlets."
+      },
+      {
+        "criterion": "controls",
+        "pro": null,
+        "con": "Phone controls were not verified; confirm the exact model's adapter support, compatible app and setup."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Fits rooms where high wall space is limited.",
+        "con": "Keep furniture clear of the outlets; outdoor placement and electrical work still need checking."
+      }
     ]
   },
   {
@@ -285,6 +665,29 @@
         "url": "https://www.panasonic.com/au/hvac/products/air-conditioner/single-room-air-conditioning/ultra-premium-reverse-cycle-inverter-hz-series-ykr.html",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "Panasonic",
+    "image": {
+      "src": "/products/air-conditioning/panasonic-hz.webp",
+      "alt": "Panasonic CS-HZ35YKR indoor unit; representative HZ YKR range photograph",
+      "sourceUrl": "https://www.airwaresales.com.au/wp-content/uploads/2024/09/panasonic-hz-series-2.5kw-3.5kw.jpg"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Adjustable airflow helps steer the breeze through the room.",
+        "con": "Confirm whether direction is manual or automatic, and how it avoids your seating area."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built in through Comfort Cloud.",
+        "con": "Remote access needs internet, a compatible phone and account setup."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Select the right size for winter; plan outdoor placement, pipework and electrical work."
       }
     ]
   },
@@ -303,6 +706,29 @@
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
       }
+    ],
+    "brand": "Panasonic",
+    "image": {
+      "src": "/products/air-conditioning/panasonic-z.webp",
+      "alt": "Panasonic CS-Z35AKRW indoor unit; representative Z AKR range photograph",
+      "sourceUrl": "https://cdn.shopify.com/s/files/1/0641/9388/8321/files/50091563_924164.png?v=1776228513"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Two air flaps help spread warm or cool air through the room.",
+        "con": "Check whether its airflow settings avoid your seating area; features differ from HZ."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is built in through Comfort Cloud.",
+        "con": "Phone schedules need a compatible phone, account and internet connection."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
+      }
     ]
   },
   {
@@ -319,6 +745,35 @@
         "url": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as09s0s/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      },
+      {
+        "title": "Manufacturer Australian DUALCOOL AI Air brochure and feature conditions",
+        "url": "https://www.lg.com/content/dam/channel/wcms/au/pdfs/LG_DualCool_AI_Air_Split_Systems_Brochure_Nov_25.pdf",
+        "kind": "Manufacturer information",
+        "revision": "November 2025 AU brochure; checked 10 October 2026"
+      }
+    ],
+    "brand": "LG",
+    "image": {
+      "src": "/products/air-conditioning/lg-dualcool-ai-standard.webp",
+      "alt": "LG AS09S0S DUALCOOL AI Air Standard indoor air-conditioning unit",
+      "sourceUrl": "https://www.climatehvac.com.au/assets/full/AS09S0S.png?20251112084440"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Two air flaps offer direct or gentler airflow.",
+        "con": "Automatic direction needs your position set in the app; it does not track your movements."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Phone control is included through the ThinQ app.",
+        "con": "Remote access needs internet, an account and setup; some automatic features need extra app settings."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
       }
     ]
   },
@@ -336,6 +791,29 @@
         "url": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/",
         "kind": "Manufacturer information",
         "revision": "Current public page or linked AU document, checked 10 October 2026"
+      }
+    ],
+    "brand": "Samsung",
+    "image": {
+      "src": "/products/air-conditioning/samsung-geo-windfree.webp",
+      "alt": "Samsung AR12DXEANWKNSA AI Smart GEO WindFree indoor unit; representative range photograph",
+      "sourceUrl": "https://images.samsung.com/is/image/samsung/p6pim/au/ar12dxeanwknsa/gallery/au-wall-mount-ar12dxeanwknsa-geo-windfree--purification-split-system-ai-smart-----kw-white-554025824?$Q90_684_547_JPG$"
+    },
+    "comparisons": [
+      {
+        "criterion": "comfort",
+        "pro": "Gentler airflow helps reduce cold draughts after the room cools.",
+        "con": "Normal airflow is still needed to cool the room down first."
+      },
+      {
+        "criterion": "controls",
+        "pro": "Built-in phone control uses the SmartThings app.",
+        "con": "Needs internet and a Samsung account; some automatic settings work only within specified temperature limits."
+      },
+      {
+        "criterion": "installation",
+        "pro": "Wall-mounted indoor unit keeps your floor space free.",
+        "con": "Needs suitable wall space plus an outdoor unit, pipework and electrical work."
       }
     ]
   }

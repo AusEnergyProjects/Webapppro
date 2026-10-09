@@ -90,13 +90,16 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
   return (
     <div className="site-nav-shell">
       <nav aria-label="Primary navigation" className="comparator-nav">
-        <Link
-          className={`site-nav-home${active === "start" ? " active" : ""}`}
-          href="/"
-          aria-current={active === "start" ? "page" : undefined}
-        >
-          Home
-        </Link>
+        <div className="site-nav-quick-links">
+          <Link
+            className={`site-nav-home${active === "start" ? " active" : ""}`}
+            href="/"
+            aria-current={active === "start" ? "page" : undefined}
+          >
+            Home
+          </Link>
+          <Link href="/guides/products" className={`site-nav-home${active === "products" ? " active" : ""}`} aria-current={active === "products" ? "page" : undefined}>Compare products</Link>
+        </div>
 
         <div className="site-nav-desktop-categories">
           {DESKTOP_SHORTCUTS.map((shortcut) => (

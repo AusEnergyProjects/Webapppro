@@ -20,7 +20,7 @@ export function BrandBar() {
   );
 }
 
-export type SiteActive = "services" | "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies" | "surge" | "wholesale";
+export type SiteActive = "products" | "services" | "start" | "plan" | "calculator" | "account" | "direct-trade-request" | "direct-trade-partners" | "direct-trade-dashboard" | "direct-trade-verification" | "direct-trade-access" | "direct-trade-standards" | "assessments" | "electricity" | "gas" | "certificates" | "guides" | "rebates" | "case-studies" | "surge" | "wholesale";
 
 export function SiteNav({ active }: { active: SiteActive }) {
   return <ResponsiveSiteNav active={active} />;

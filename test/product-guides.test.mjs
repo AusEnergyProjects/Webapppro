@@ -1,77 +1,135 @@
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import * as react from "react";
 import * as jsx from "react/jsx-runtime";
-import {renderToStaticMarkup} from "react-dom/server";
-import {PUBLIC_SITE,buildPlatformMetadata} from "../src/lib/public-site.ts";
-import {searchPublicSite} from "../src/lib/public-site-search.ts";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PUBLIC_SITE, buildPlatformMetadata } from "../src/lib/public-site.ts";
+import { searchPublicSite } from "../src/lib/public-site-search.ts";
 function compile(relative, dependencies) {
- const compiled=ts.transpileModule(readFileSync(new URL(relative,import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
- const loaded={}; Function("require","exports",compiled)(name=>{assert.ok(Object.hasOwn(dependencies,name),name);return dependencies[name];},loaded);return loaded;
+  const compiled = ts.transpileModule(readFileSync(new URL(relative, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const loaded = {};
+  Function("require", "exports", compiled)(name => { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; }, loaded);
+  return loaded;
 }
-const datasets=Object.fromEntries(["solar","inverters","batteries","hot-water","air-conditioning"].map(slug=>["./product-guides/"+slug+".json",{default:JSON.parse(readFileSync(new URL("../src/lib/product-guides/"+slug+".json",import.meta.url),"utf8"))}]));
-const guide=compile("../src/lib/product-guides.ts",datasets);
-const dependencies={
- "react/jsx-runtime":jsx,
- "next/link":{default:({children,...props})=>jsx.jsx("a",{...props,children})},
- "next/navigation":{notFound(){throw new Error("NOT_FOUND");}},
- "@/components/GuideShell":{GuideShell:({title,children})=>jsx.jsxs("main",{children:[jsx.jsx("h1",{children:title}),children]}),GuideSection:({title,children})=>jsx.jsxs("section",{children:[jsx.jsx("h2",{children:title}),children]})},
- "@/components/JsonLd":{JsonLd:({data})=>jsx.jsx("script",{type:"application/ld+json",dangerouslySetInnerHTML:{__html:JSON.stringify(data)}})},
- "@/lib/product-guides":guide,"@/lib/public-site":{PUBLIC_SITE,buildPlatformMetadata},
- "../../page.module.css":{default:new Proxy({},{get:(_,key)=>String(key)})},"../page.module.css":{default:new Proxy({},{get:(_,key)=>String(key)})},
+const slugs = ["solar", "inverters", "batteries", "hot-water", "air-conditioning"];
+const datasets = Object.fromEntries(slugs.map(slug => ["./product-guides/" + slug + ".json", { default: JSON.parse(readFileSync(new URL("../src/lib/product-guides/" + slug + ".json", import.meta.url), "utf8")) }]));
+const guide = compile("../src/lib/product-guides.ts", datasets);
+const css = { default: new Proxy({}, { get: (_, key) => String(key) }) };
+const browser = compile("../src/components/ProductComparisonBrowser.tsx", { react, "react/jsx-runtime": jsx, "./ProductComparison.module.css": css });
+const dependencies = {
+  "react/jsx-runtime": jsx,
+  "next/link": { default: ({ children, ...props }) => jsx.jsx("a", { ...props, children }) },
+  "next/navigation": { notFound() { throw new Error("NOT_FOUND"); } },
+  "@/lib/product-guides": guide,
+  "@/lib/public-site": { PUBLIC_SITE, buildPlatformMetadata },
+  "./ComparatorChrome": { SiteHeader: () => jsx.jsx("nav", { children: "Navigation" }), SiteFooter: ({ children }) => jsx.jsx("footer", { children }) },
+  "./JsonLd": { JsonLd: ({ data }) => jsx.jsx("script", { type: "application/ld+json", dangerouslySetInnerHTML: { __html: JSON.stringify(data) } }) },
+  "./ProductComparisonBrowser": browser,
+  "./ProductComparison.module.css": css,
 };
-const categoryPage=compile("../src/app/guides/products/[category]/page.tsx",dependencies);
-const overview=compile("../src/app/guides/products/page.tsx",dependencies);
-test("five categories contain 20 distinct source-backed families without scores or prices",()=>{
- assert.deepEqual(guide.PRODUCT_GUIDE_CATEGORIES.map(c=>c.slug),["solar","inverters","batteries","hot-water","air-conditioning"]);
- const identifiers=[];
- for(const category of guide.PRODUCT_GUIDE_CATEGORIES) {
-  assert.equal(category.options.length,20,category.slug);assert.equal(new Set(category.options.map(o=>o.name)).size,20);
-  for(const option of category.options) {
-   identifiers.push(option.id);assert.match(option.id,/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
-   for(const field of ["name","group","fit","why","check"])assert.ok(option[field].trim(),option.id+":"+field);
-   assert.equal(option.checkedAt,"2026-10-10");assert.ok(option.sources.length);
-   for(const source of option.sources){assert.equal(new URL(source.url).protocol,"https:");assert.ok(source.title&&source.kind&&source.revision,option.id);}
-   for(const field of ["score","price","rank","rating","reviewCount"])assert.equal(Object.hasOwn(option,field),false);
-   assert.doesNotMatch([option.fit,option.why,option.check].join(" "),/[\u2013\u2014]/);
+const page = compile("../src/components/ProductComparisonPage.tsx", dependencies);
+dependencies["@/components/ProductComparisonPage"] = page;
+const categoryPage = compile("../src/app/guides/products/[category]/page.tsx", dependencies);
+const overview = compile("../src/app/guides/products/page.tsx", dependencies);
+
+test("all five categories answer the same comparison questions with real photos and evidence", () => {
+  assert.deepEqual(guide.PRODUCT_GUIDE_CATEGORIES.map(c => c.slug), slugs);
+  const ids = [];
+  for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
+    assert.equal(category.options.length, 20);
+    assert.equal(new Set(category.options.map(p => p.name)).size, 20);
+    assert.equal(category.criteria.length, 3);
+    assert.equal(new Set(category.criteria.map(item => item.id)).size, 3);
+    for (const criterion of category.criteria) assert.ok(criterion.label.trim());
+    for (const product of category.options) {
+      ids.push(product.id);
+      assert.ok(product.brand.trim());
+      assert.match(product.image.src, new RegExp("^/products/" + category.slug + "/[a-z0-9-]+\\.webp$"));
+      assert.ok(product.image.alt.trim());
+      assert.equal(new URL(product.image.sourceUrl).protocol, "https:");
+      const asset = statSync(new URL("../public" + product.image.src, import.meta.url));
+      assert.ok(asset.size > 500 && asset.size < 150000, product.id + ": image size");
+      assert.deepEqual(product.comparisons.map(point => point.criterion), category.criteria.map(item => item.id));
+      for (const point of product.comparisons) {
+        assert.ok(point.pro === null || (typeof point.pro === "string" && point.pro.trim()));
+        assert.ok(typeof point.con === "string" && point.con.trim());
+        for (const text of [point.pro, point.con].filter(text => text !== null)) {
+          assert.ok(text.trim().split(/\s+/).length <= 18, product.id + ":" + text);
+          assert.doesNotMatch(text, /[\u2013\u2014]|\bfamil(?:y|ies)\b/i);
+        }
+      }
+      assert.equal(product.checkedAt, "2026-10-10");
+      assert.ok(product.sources.length);
+      for (const source of product.sources) assert.equal(new URL(source.url).protocol, "https:");
+      for (const field of ["rank", "score", "price", "rating", "reviewCount", "pros", "cons"]) assert.equal(Object.hasOwn(product, field), false);
+    }
   }
- }
- assert.equal(new Set(identifiers).size,100);
+  assert.equal(new Set(ids).size, 100);
 });
-test("all household advice is visible with matching unordered schema and safety boundaries",async()=>{
- for(const category of guide.PRODUCT_GUIDE_CATEGORIES) {
-  const html=renderToStaticMarkup(await categoryPage.default({params:Promise.resolve({category:category.slug})}));
-  assert.equal((html.match(/<article /g)||[]).length,20);assert.equal((html.match(/<h4>/g)||[]).length,20);
-  assert.doesNotMatch(html,/<details|<form|<input/);
-  const schema=JSON.parse(html.match(/<script type="application\/ld\+json">([^]*?)<\/script>/)[1]);
-  assert.equal(schema.mainEntity.numberOfItems,20);assert.equal(schema.mainEntity.itemListOrder,"https://schema.org/ItemListUnordered");
-  assert.equal(schema.mainEntity.itemListElement.length,20);
-  for(const option of category.options) {
-   assert.ok(html.includes('id="'+option.id+'"'),option.id);
-   assert.ok(schema.mainEntity.itemListElement.some(item=>item.url.endsWith("#"+option.id)));
-   for(const source of option.sources)assert.ok(html.includes(source.url.replaceAll("&","&amp;")),source.url);
+
+test("comparable rows render immediately, with explicit unknowns, visible safety and unordered schema", async () => {
+  for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
+    const html = renderToStaticMarkup(await categoryPage.default({ params: Promise.resolve({ category: category.slug }) }));
+    assert.equal((html.match(/<article /g) || []).length, 20);
+    assert.equal((html.match(/<img /g) || []).length, 20);
+    assert.equal((html.match(/<strong>Pro<\/strong>/g) || []).length, category.options.flatMap(p => p.comparisons).filter(point => point.pro !== null).length);
+    assert.equal((html.match(/<strong>Con<\/strong>/g) || []).length, 60);
+    assert.equal((html.match(/No confirmed benefit\./g) || []).length, category.options.flatMap(p => p.comparisons).filter(point => point.pro === null).length);
+    for (const criterion of category.criteria) assert.equal(html.split(`data-criterion="${criterion.id}"`).length - 1, 20);
+    assert.match(html, /aria-label="Product categories"/);
+    assert.match(html, /aria-label="Search products"|Search products<input/);
+    assert.doesNotMatch(html, /20 options|Twenty options|product families|Start here|Choose an upgrade|aggregateRating|reviewRating/i);
+    const schema = JSON.parse(html.match(/<script type="application\/ld\+json">([^]*?)<\/script>/)[1]);
+    assert.equal(schema.mainEntity.itemListOrder, "https://schema.org/ItemListUnordered");
+    assert.equal(schema.mainEntity.numberOfItems, 20);
+    for (const product of category.options) {
+      assert.ok(html.includes('id="' + product.id + '"'));
+      assert.ok(html.includes(product.image.src));
+      if (product.warning) assert.ok(html.includes(product.warning.replaceAll("&", "&amp;").replaceAll("'", "&#x27;")));
+    }
+    const element = page.ProductComparisonPage({ category });
+    const listing = element.props.children.find(child => child?.type === browser.ProductComparisonBrowser);
+    assert.equal(listing.key, category.slug);
+    assert.deepEqual(listing.props.criteria, category.criteria);
+    for (const product of listing.props.products) {
+      assert.equal(Object.hasOwn(product, "check"), false);
+      assert.equal(Object.hasOwn(product, "why"), false);
+      assert.equal(Object.hasOwn(product, "fit"), false);
+      assert.equal(Object.hasOwn(product, "pros"), false);
+      assert.equal(Object.hasOwn(product, "cons"), false);
+    }
   }
-  assert.match(html,/Why consider it:/);assert.match(html,/Check before choosing:/);assert.match(html,/approval, local stock, eligibility/);
-  if(category.slug==="hot-water"){assert.match(html,/apricus-all-in-one/);assert.match(html,/recall/i);assert.match(html,/serial/i);}
-  if(category.slug==="batteries")assert.match(html,/older 8\/10\/12 kW single-phase/);
- }
+  const html = renderToStaticMarkup(overview.default());
+  assert.equal((html.match(/<article /g) || []).length, 20, "entry page goes directly to solar tiles");
+  for (const slug of slugs) assert.ok(html.includes('href="/guides/products/' + slug + '"'));
 });
-test("category routes have canonical metadata and missing categories return not-found",async()=>{
- assert.deepEqual(categoryPage.generateStaticParams().map(p=>p.category),guide.PRODUCT_GUIDE_CATEGORIES.map(c=>c.slug));
- for(const category of guide.PRODUCT_GUIDE_CATEGORIES) {
-  const metadata=await categoryPage.generateMetadata({params:Promise.resolve({category:category.slug})});
-  assert.equal(metadata.alternates.canonical,PUBLIC_SITE.apexUrl+"/guides/products/"+category.slug);
- }
- assert.equal(guide.findProductGuideCategory("missing"),undefined);
- await assert.rejects(categoryPage.default({params:Promise.resolve({category:"missing"})}),/NOT_FOUND/);
- await assert.rejects(categoryPage.generateMetadata({params:Promise.resolve({category:"missing"})}),/NOT_FOUND/);
+
+test("a missing comparison answer is rejected instead of silently showing an empty row", () => {
+  const category = guide.PRODUCT_GUIDE_CATEGORIES[0];
+  const product = { ...category.options[0], comparisons: category.options[0].comparisons.slice(1) };
+  assert.throws(() => renderToStaticMarkup(jsx.jsx(browser.ProductComparisonBrowser, { products: [product], criteria: category.criteria })), /Missing roof-space comparison/);
 });
-test("overview explains evidence limits and search discovers options by brands",()=>{
- const html=renderToStaticMarkup(overview.default());
- for(const category of guide.PRODUCT_GUIDE_CATEGORIES)assert.ok(html.includes('href="/guides/products/'+category.slug+'"'));
- assert.match(html,/have not installed or tested these 100 options/);assert.match(html,/preference survey is different/);
- assert.match(html,/established brands with an Australian presence/);assert.match(html,/online star ratings or review counts do not determine the selection/);
- assert.match(html,/rather than routinely testing every unit in a lab/);assert.doesNotMatch(html,/aggregateRating|reviewRating/);
- for(const [query,expected] of [["product guide","/guides/products"],["aiko rec panels","/guides/products/solar"],["fronius sma inverter","/guides/products/inverters"],["foxess sigenstor","/guides/products/batteries"],["sanden istore","/guides/products/hot-water"],["daikin mitsubishi","/guides/products/air-conditioning"]])assert.equal(searchPublicSite(query)[0]?.path,expected,query);
+
+test("server-rendered controls stay disabled until the client can respond", () => {
+  const category = guide.PRODUCT_GUIDE_CATEGORIES[2];
+  const html = renderToStaticMarkup(jsx.jsx(browser.ProductComparisonBrowser, { products: category.options, criteria: category.criteria }));
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /<input[^>]*type="search"[^>]*disabled=""/);
+  assert.match(html, /<select[^>]*disabled=""/);
+  assert.equal((html.match(/<button[^>]*disabled=""/g) || []).length, 40);
+  assert.equal((html.match(/<article /g) || []).length, 20);
+});
+
+test("category metadata and allowlist stay correct; public search finds brands", async () => {
+  assert.deepEqual(categoryPage.generateStaticParams().map(p => p.category), slugs);
+  for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
+    const metadata = await categoryPage.generateMetadata({ params: Promise.resolve({ category: category.slug }) });
+    assert.equal(metadata.alternates.canonical, PUBLIC_SITE.apexUrl + "/guides/products/" + category.slug);
+    assert.doesNotMatch(metadata.title, /20|families/i);
+  }
+  await assert.rejects(categoryPage.default({ params: Promise.resolve({ category: "missing" }) }), /NOT_FOUND/);
+  await assert.rejects(categoryPage.generateMetadata({ params: Promise.resolve({ category: "missing" }) }), /NOT_FOUND/);
+  for (const [query, expected] of [["compare products", "/guides/products"], ["aiko rec panels", "/guides/products/solar"], ["fronius sma inverter", "/guides/products/inverters"], ["foxess sigenstor", "/guides/products/batteries"], ["sanden istore", "/guides/products/hot-water"], ["daikin mitsubishi", "/guides/products/air-conditioning"]]) assert.equal(searchPublicSite(query)[0]?.path, expected);
 });

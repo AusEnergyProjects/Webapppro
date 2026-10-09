@@ -105,6 +105,7 @@ test("shared navigation groups public pages into clear consumer journeys", () =>
   assert.match(chrome, /<SurgeHeaderButton active=\{active === "surge"\} \/>/);
   assert.match(chrome, /<ResponsiveSiteNav active=\{active\} \/>/);
   assert.match(responsiveNav, /href="\/"[\s\S]*?>[\s\S]*?Home/);
+  assert.match(responsiveNav, /className="site-nav-quick-links"[\s\S]*?href="\/guides\/products"[\s\S]*?>Compare products<\/Link>/);
   assert.match(responsiveNav, /label: "Assessments"/);
   assert.match(responsiveNav, /label: "Plan & upgrades"/);
   assert.match(responsiveNav, /label: "Bills & rebates"/);

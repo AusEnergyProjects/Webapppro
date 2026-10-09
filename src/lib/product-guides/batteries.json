@@ -19,6 +19,35 @@
         "url": "https://www.tesla.com/en_au/support/energy/powerwall/learn/backwards-compatibility",
         "kind": "Manufacturer AU support",
         "revision": "Current online guidance requires software 26.26 or later for stated PW2/PW3 combination"
+      },
+      {
+        "title": "Powerwall 3 existing-solar sizing in Australia",
+        "url": "https://energylibrary.tesla.com/docs/Public/EnergyStorage/Powerwall/3/InstallManual/BackupGateway/2/en-au/GUID-23D242D1-8D65-47B9-9118-57002FFD84D2.html",
+        "kind": "Manufacturer AU installation manual",
+        "revision": "Current online manual; checked 10 October 2026"
+      }
+    ],
+    "brand": "Tesla",
+    "image": {
+      "src": "/products/batteries/tesla-powerwall-3.webp",
+      "alt": "Tesla Powerwall 3 product view from the Australian datasheet; expansion unit not shown.",
+      "sourceUrl": "https://energylibrary.tesla.com/docs/Public/EnergyStorage/Powerwall/3/Datasheet/en-au/Powerwall-3-Datasheet-AU-EN.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can be added alongside an existing solar inverter in a supported installation.",
+        "con": "Existing solar included in backup is limited to 5 kW per Powerwall."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can keep selected appliances running when installed with the required backup equipment.",
+        "con": "Your home's wiring can restrict coverage; one unit does not back up all three electricity phases."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "13.5 kWh available per unit; separate expansion batteries add more storage.",
+        "con": "Expansion batteries only work with Powerwall 3; check the permitted number before ordering."
       }
     ]
   },
@@ -48,6 +77,36 @@
         "url": "https://www.productsafety.gov.au/search-consumer-product-recalls/sigenstor-ec-80100120kw-sp-au-energy-controllers",
         "kind": "ACCC recall",
         "revision": "PRA 2025/20703"
+      },
+      {
+        "title": "SigenStor retrofit and backup technical note",
+        "url": "https://www.sigenergy.com/uploads/en_download/1743133198998866.pdf",
+        "kind": "Manufacturer technical note",
+        "revision": "Version 5.0, October 2024; includes existing-inverter verification requirements"
+      }
+    ],
+    "brand": "Sigenergy",
+    "image": {
+      "src": "/products/batteries/sigenergy-sigenstor-bat10.webp",
+      "alt": "Sigenergy SigenStor BAT 10.0 battery module; controller and additional modules not shown.",
+      "sourceUrl": "https://www.solarheroes.com.au/sigenergy-9kwh-sigenstor-battery-sigenstor-bat-10-0-with-led/"
+    },
+    "warning": "Recall: older SigenStor EC 8/10/12 kW single-phase controllers with quick-connect AC plugs, sold 4 March to 18 November 2025, may overheat and cause fire. Check the exact model and serial against the ACCC notice. Affected owners should keep the system online for firmware updates and arrange the free replacement with their retailer or Sigenergy service partner. Affected products receive an extra two-year warranty. The recall concerns controllers, not BAT 10.0 modules alone.",
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can store spare energy from existing solar while keeping the solar inverter.",
+        "con": "Keeping solar working during a blackout needs verified inverter compatibility and the right connection."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can power selected appliances with a Sigenergy backup box and a compatible battery system.",
+        "con": "Backup equipment and wiring must be included; the quoted system limits which appliances run together."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "9 kWh available per battery block; more blocks can be added.",
+        "con": "A compatible system design still limits the size you can add."
       }
     ]
   },
@@ -71,6 +130,35 @@
         "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20251219/ENH3SmartDatasheetAUV1.220250702.pdf",
         "kind": "Manufacturer AU datasheet",
         "revision": "V1.2, 2 July 2025"
+      },
+      {
+        "title": "CQ7 Australian inverter compatibility declaration",
+        "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260514/InverterBatteryCompatibilityCQ7A.pdf",
+        "kind": "Manufacturer AU compatibility declaration",
+        "revision": "1 April 2026; manufacturer-hosted file uploaded 14 May 2026"
+      }
+    ],
+    "brand": "Fox ESS",
+    "image": {
+      "src": "/products/batteries/foxess-cq7.webp",
+      "alt": "Fox ESS CQ7 modular battery tower from the Australian datasheet; module count varies.",
+      "sourceUrl": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260514/ENCQ7DatasheetAUV1.220260514.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can keep an existing Fox solar inverter listed as compatible.",
+        "con": "Other solar inverters need a separate, verified connection design."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply backup through a compatible Fox inverter and a correctly wired backup connection.",
+        "con": "The chosen inverter limits which appliances run together; a bigger battery does not cover every circuit."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "6.96 kWh available per block; more blocks can be added.",
+        "con": "Your inverter needs a minimum number of blocks and limits the maximum stack."
       }
     ]
   },
@@ -88,6 +176,29 @@
         "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260615/ENEP12wDatasheetAUV1.020260615.pdf",
         "kind": "Manufacturer AU datasheet",
         "revision": "V1.0, 15 June 2026"
+      }
+    ],
+    "brand": "Fox ESS",
+    "image": {
+      "src": "/products/batteries/foxess-ep12-plus.webp",
+      "alt": "Fox ESS EP12 Plus(w) battery pack from the Australian datasheet; one pack shown.",
+      "sourceUrl": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260615/ENEP12wDatasheetAUV1.020260615.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": null,
+        "con": "Check whether your current Fox solar inverter supports this exact battery pack."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Ask whether your quoted Fox system includes blackout cover and which appliances it can run."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "11.52 kWh available per pack; a supported system accepts up to four packs.",
+        "con": "Expansion needs a compatible inverter and room for 98 kg battery packs."
       }
     ]
   },
@@ -112,6 +223,29 @@
         "kind": "Manufacturer AU product range",
         "revision": "Online current range"
       }
+    ],
+    "brand": "Sungrow",
+    "image": {
+      "src": "/products/batteries/sungrow-sbr.webp",
+      "alt": "Sungrow SBR battery tower from its Australian product page; module count varies.",
+      "sourceUrl": "https://www.sungrowpower.com/au/en/products/residential-energy-storage-system"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can add storage to a supported Sungrow solar inverter.",
+        "con": "Your exact inverter determines which battery sizes will work."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Your quote must include backup equipment and specify which appliances can run together."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "3.2 kWh per block; add blocks within a supported stack.",
+        "con": "A complete system needs several blocks; your inverter determines which stack sizes work."
+      }
     ]
   },
   {
@@ -134,6 +268,29 @@
         "url": "https://info-support.sungrowpower.com/product-materials/7121dcb1-efca-4f83-83b2-02f59ce4a319.pdf",
         "kind": "Manufacturer manual",
         "revision": "SBH100–400-UEN-Ver15-202509"
+      }
+    ],
+    "brand": "Sungrow",
+    "image": {
+      "src": "/products/batteries/sungrow-sbh.webp",
+      "alt": "Sungrow SBH battery tower from its Australian product page; module count varies.",
+      "sourceUrl": "https://www.sungrowpower.com/au/en/products/residential-energy-storage-system"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": null,
+        "con": "Confirm whether your existing solar inverter supports this exact battery."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "More storage does not guarantee more blackout power; confirm which appliances can run together."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5 kWh per block; more blocks can build up to 40 kWh in one stack.",
+        "con": "Your inverter determines the minimum stack and maximum expansion size."
       }
     ]
   },
@@ -158,6 +315,29 @@
         "kind": "Manufacturer AU document link",
         "revision": "Direct open returned 403; latest AU PDF revision not independently established"
       }
+    ],
+    "brand": "Enphase",
+    "image": {
+      "src": "/products/batteries/enphase-iq-5p-flexphase.webp",
+      "alt": "Enphase IQ Battery 5P with FlexPhase from its Australian and New Zealand datasheet.",
+      "sourceUrl": "https://solarproof.com.au/datasheets/battery_datasheet_dsh-00745-en-anz-iqbattery-5p-with-flexphase.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can join a supported existing Enphase solar setup.",
+        "con": "Your exact solar equipment needs checking, especially if you want it working during a blackout."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can keep selected appliances running when the full backup setup is installed.",
+        "con": "Backup needs extra equipment; ask which appliances can run together."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5 kWh available per unit; more units can be added.",
+        "con": "The backup equipment and existing solar setup limit how many units can be added."
+      }
     ]
   },
   {
@@ -175,6 +355,29 @@
         "kind": "Manufacturer AU product page",
         "revision": "Online; revision date not displayed"
       }
+    ],
+    "brand": "sonnen",
+    "image": {
+      "src": "/products/batteries/sonnen-evo.webp",
+      "alt": "sonnenBatterie Evo installed product view from its Australian datasheet.",
+      "sourceUrl": "https://cdn.prod.website-files.com/6a01be8ecafc2c4a119b001f/6a182dd32e3e5a942287edc5_250429_Datasheet_sonnenBatterie_Evo_AU.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can be added alongside a compatible existing solar inverter.",
+        "con": "Check whether that inverter can recharge the battery during an outage."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Built-in backup can keep chosen essential circuits running.",
+        "con": "Check which appliances are covered and whether existing solar can recharge it during the outage."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "10 kWh available in one unit.",
+        "con": "Confirm whether future expansion is supported; do not assume this unit accepts extra battery blocks."
+      }
     ]
   },
   {
@@ -191,6 +394,29 @@
         "url": "https://www.sonnen.com.au/home-battery-storage/sonnenbatterie-12",
         "kind": "Manufacturer AU product page",
         "revision": "Online; revision date not displayed"
+      }
+    ],
+    "brand": "sonnen",
+    "image": {
+      "src": "/products/batteries/sonnen-12.webp",
+      "alt": "sonnenBatterie 12 battery and wall controller from the Australian datasheet; configuration varies.",
+      "sourceUrl": "https://cdn.prod.website-files.com/6a01be8ecafc2c4a119b001f/6a4f0e257ffaa380595e157d_279b0f5a019c363971576ef6d4500da7_sonnenBatterie-12-AU-Digital-Final-2026-07-08.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can connect to a compatible existing solar inverter.",
+        "con": "Your installer must confirm your exact solar equipment is supported."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can keep chosen household circuits running during an outage.",
+        "con": "It does not automatically cover every appliance; confirm what your quote includes."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "9.4 kWh available per block; expand to 28.2 kWh.",
+        "con": "Your installer must confirm the allowed stack size and matching solar equipment."
       }
     ]
   },
@@ -215,6 +441,29 @@
         "kind": "Manufacturer AU warranty link",
         "revision": "V1.1, 9 October 2026 listed on current manufacturer downloads page; terms not fully extracted here"
       }
+    ],
+    "brand": "BYD",
+    "image": {
+      "src": "/products/batteries/byd-premium-hvm-bcu2.webp",
+      "alt": "BYD Battery-Box Premium HVM tower from the Australian BCU 2.0 datasheet; module count varies.",
+      "sourceUrl": "https://www.bydbatterybox.com/uploads/downloads/BCU2.0_Datasheet_Battery-Box%20HVM(AU)_V1.5_EN_260929-6ac8a31a5ded6.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can work with solar inverters on BYD's approved list.",
+        "con": "Your existing inverter must be an approved model; check it before ordering."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Supports backup when paired with a suitable inverter and installation.",
+        "con": "The inverter determines which appliances can run together, regardless of the battery rating."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "2.76 kWh per block; supported towers offer 8.28 to 22.08 kWh each.",
+        "con": "A complete tower needs several blocks; your inverter and block count must be chosen together."
+      }
     ]
   },
   {
@@ -231,6 +480,29 @@
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Datasheet/AU/GW_Lynx-F-G2-Series_Datasheet-AU.pdf?rcCode=4597",
         "kind": "Manufacturer AU datasheet",
         "revision": "AU V2.1, 30 June 2026"
+      }
+    ],
+    "brand": "GoodWe",
+    "image": {
+      "src": "/products/batteries/goodwe-lynx-f-g2.webp",
+      "alt": "GoodWe Lynx Home F G2 battery tower from the Australian datasheet; module count varies.",
+      "sourceUrl": "https://www.goodwe.com.au/Ftp/Downloads/Datasheet/AU/GW_Lynx-F-G2-Series_Datasheet-AU.pdf?rcCode=4597"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can keep a supported GoodWe solar inverter designed to connect batteries.",
+        "con": "Your exact inverter must support this battery and the chosen storage size."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Ask whether your quoted inverter provides blackout cover and which appliances it can run."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "3.2 kWh available per block; more blocks can be added.",
+        "con": "A complete tower needs several blocks; your solar inverter limits total storage."
       }
     ]
   },
@@ -255,6 +527,29 @@
         "kind": "Manufacturer AU product page",
         "revision": "Online current range"
       }
+    ],
+    "brand": "GoodWe",
+    "image": {
+      "src": "/products/batteries/goodwe-esa.webp",
+      "alt": "GoodWe ESA single-phase all-in-one product view; controller output and module count vary.",
+      "sourceUrl": "https://www.goodwe.com.au/esa-3-10kw"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": null,
+        "con": "Confirm which ESA version can keep your existing solar inverter before accepting a quote."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can keep selected appliances powered through a correctly designed backup connection.",
+        "con": "Normal grid power passing through the system is not its available power during a blackout."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5, 5.9, 8 or 8.85 kWh available per block; compatible blocks can be added.",
+        "con": "The exact battery version determines capacity; your installer must confirm the permitted size and combination."
+      }
     ]
   },
   {
@@ -278,6 +573,29 @@
         "kind": "Manufacturer AU-footer datasheet",
         "revision": "V08, 1 June 2023; applies to named older module only"
       }
+    ],
+    "brand": "AlphaESS",
+    "image": {
+      "src": "/products/batteries/alphaess-smile-g3-s5-b5.webp",
+      "alt": "AlphaESS SMILE-G3-S5 shown in the Australian brochure; B5 connection type differs.",
+      "sourceUrl": "https://www.alphaess.com/Public/Uploads/uploadfile/files/20260608/AlphaESS_Brochure_AU_V02.22042026.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "The B5 version is designed for adding storage to existing solar.",
+        "con": "The S5 is the new-solar version; check which one your quote includes."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Confirm which appliances will run during an outage and what backup equipment your quote includes."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "9.3 or 10.1 kWh advertised per block; more blocks can be added.",
+        "con": "Energy you can actually use depends on battery version; expansion still shares a 5 kW power limit."
+      }
     ]
   },
   {
@@ -294,6 +612,35 @@
         "url": "https://www.solaredge.com/aus/products/residential/storage-and-backup/solaredge-home-battery-400v",
         "kind": "Manufacturer AU product page",
         "revision": "Online current range"
+      },
+      {
+        "title": "SolarEdge Home Battery 400V Australian datasheet",
+        "url": "https://knowledge-center.solaredge.com/sites/kc/files/se-home-battery-10K1PS0B-01-datasheet-aus.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "DS-000014-AUS, 15 June 2026; named BAT-10K1PS0B-01 model"
+      }
+    ],
+    "brand": "SolarEdge",
+    "image": {
+      "src": "/products/batteries/solaredge-home-battery-400v.webp",
+      "alt": "SolarEdge Home Battery 400V product view; confirm the Australian installation and compatibility.",
+      "sourceUrl": "https://marketing.solaredge.com/en-gb/solaredge-home-battery-uk-information-22"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can be added to a supported SolarEdge solar inverter.",
+        "con": "Your existing SolarEdge inverter must be an approved model."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply blackout power with the required SolarEdge backup equipment.",
+        "con": "A battery alone is insufficient; your quote needs the correct backup equipment and wiring."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "9.7 kWh available per unit; supported SolarEdge systems can add more batteries.",
+        "con": "Some Australian three-phase inverters allow only one battery; confirm the approved count."
       }
     ]
   },
@@ -318,6 +665,29 @@
         "kind": "Manufacturer AU product range",
         "revision": "Online current range"
       }
+    ],
+    "brand": "Growatt",
+    "image": {
+      "src": "/products/batteries/growatt-apx-hv-s2.webp",
+      "alt": "Growatt APX HV Battery S2 AU stack from its Australian datasheet; module count varies.",
+      "sourceUrl": "https://au.growatt.com/upload/file/APX_HV_Battery-S2_AU_Datasheet_202603.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can keep a supported Growatt solar inverter designed to connect batteries.",
+        "con": "Your inverter must support this exact APX version and battery combination."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Confirm whether the quoted inverter supports backup and which appliances it can run."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5 kWh advertised per block; more compatible blocks can be added.",
+        "con": "APX versions are not interchangeable; confirm which battery blocks your system accepts."
+      }
     ]
   },
   {
@@ -340,6 +710,29 @@
         "url": "https://au.growatt.com/products/alp-lv-battery-%28alp-5.0l-e2%29",
         "kind": "Manufacturer AU product page",
         "revision": "Online current range"
+      }
+    ],
+    "brand": "Growatt",
+    "image": {
+      "src": "/products/batteries/growatt-alp-lv-e2.webp",
+      "alt": "Growatt ALP LV E2 battery stack from the Australian datasheet; module count varies.",
+      "sourceUrl": "https://au.growatt.com/upload/file/ALP_LV_Battery_System_ALP_5.0L-E2_AU_202601.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can connect to an existing solar inverter that supports this battery.",
+        "con": "The exact inverter must be checked; not every solar setup is compatible."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Check backup equipment and appliance limits; this battery alone does not confirm blackout cover."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5 kWh available per block; expand with a supported battery combination.",
+        "con": "The battery allows up to ten blocks; your inverter and installation can set a lower limit."
       }
     ]
   },
@@ -364,6 +757,29 @@
         "kind": "Manufacturer document hub",
         "revision": "AU LVS section and May 2025 minimum-configuration list present"
       }
+    ],
+    "brand": "BYD",
+    "image": {
+      "src": "/products/batteries/byd-premium-lvs.webp",
+      "alt": "BYD Battery-Box Premium LVS tower from the Australian datasheet; module count varies.",
+      "sourceUrl": "https://www.bydbatterybox.com/uploads/downloads/Datasheet%20BYD%20Battery-Box%20Premium%20LVS%20Datasheet_AU_V2.3-656e94f89bd61.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can work with solar inverters on BYD's approved list.",
+        "con": "Your existing inverter must be on the approved list and support your chosen battery size."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can supply backup power through a suitable inverter and installation.",
+        "con": "The inverter and wiring determine which appliances run; the battery alone does not provide blackout cover."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "4 kWh available per block; more blocks or supported extra towers can be added.",
+        "con": "Larger towers cannot be joined together; confirm the allowed layout before expanding."
+      }
     ]
   },
   {
@@ -386,6 +802,29 @@
         "url": "https://www.solaxpower.com/uploads/file/solax-tsys-hs51-datasheet-en.pdf",
         "kind": "Manufacturer datasheet",
         "revision": "V1.6; document date not printed in extracted text"
+      }
+    ],
+    "brand": "SolaX",
+    "image": {
+      "src": "/products/batteries/solax-tsys-hs51.webp",
+      "alt": "SolaX TSYS-HS51 battery tower from the Australian product page; module count varies.",
+      "sourceUrl": "https://au.solaxpower.com/products/tsys-hs51.html"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": "Can keep a supported SolaX solar inverter designed to connect batteries.",
+        "con": "Your exact inverter must support the quoted battery version."
+      },
+      {
+        "criterion": "blackout",
+        "pro": null,
+        "con": "Confirm blackout cover and the appliances supported by your exact SolaX solar inverter."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5.1 kWh advertised per block; more compatible blocks can be added.",
+        "con": "Advertised capacity exceeds energy you can use; check battery versions and expansion accessories."
       }
     ]
   },
@@ -410,6 +849,29 @@
         "kind": "Manufacturer AU product range",
         "revision": "Online current range; direct text fetch is a JavaScript shell, indexed manufacturer content supplies range"
       }
+    ],
+    "brand": "Redback",
+    "image": {
+      "src": "/products/batteries/redback-hybrid-g3.webp",
+      "alt": "Redback Hybrid Battery System G3 shown in the manufacturer datasheet; confirm quoted battery revision.",
+      "sourceUrl": "https://digital.redbacktech.com/support-document/public/SH5000-G3%20SH6000-G3%20Datasheet%2020Dec2024.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": null,
+        "con": "Confirm whether your existing solar inverter can stay alongside the quoted Redback system."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can keep selected household circuits running during an outage.",
+        "con": "The 5 or 6 kW power limit restricts which appliances can run together."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "4.8 kWh advertised per unit; up to four fit the standard G3 enclosure.",
+        "con": "Energy you can use is lower; newer packages differ, so confirm quoted capacity and expansion."
+      }
     ]
   },
   {
@@ -432,6 +894,29 @@
         "url": "https://au.saj-electric.com/en-au/hs3",
         "kind": "Manufacturer AU product page",
         "revision": "Online current range"
+      }
+    ],
+    "brand": "SAJ",
+    "image": {
+      "src": "/products/batteries/saj-hs3-au.webp",
+      "alt": "SAJ HS3 single-phase AU battery system from the Australian datasheet; module count varies.",
+      "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Datasheet/AU%20HS3/HS3-%285-6K%29-S2-W-PX-AU-%28210x285%29mm_datasheet_en_AU.pdf"
+    },
+    "comparisons": [
+      {
+        "criterion": "existing-solar",
+        "pro": null,
+        "con": "Confirm whether your existing solar inverter can stay and which equipment must change."
+      },
+      {
+        "criterion": "blackout",
+        "pro": "Can power selected appliances through its designed backup connection.",
+        "con": "Check which appliances are covered and the actual backup power of your quoted system."
+      },
+      {
+        "criterion": "expansion",
+        "pro": "5 kWh per battery block; more blocks can be added.",
+        "con": "Australian expansion limits differ from the general website; confirm your quote's maximum."
       }
     ]
   }

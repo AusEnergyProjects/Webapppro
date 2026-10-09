@@ -18,7 +18,7 @@ export default function GuidesPage() {
       <a href="#quotes-and-support">Quotes and support</a>
     </nav>
 
-    <section className="guide-callout guide-callout-primary"><div><h2>Which systems are worth considering?</h2><p>Explore 20 options each for panels, inverters, batteries, heat-pump hot water and air conditioning. See who they could suit, with plain-language pros and cons.</p></div><Link href="/guides/products">Explore the product guides</Link></section>
+    <section className="guide-callout guide-callout-primary"><div><h2>Which systems are worth considering?</h2><p>See product photos and compare the pros and cons of panels, inverters, batteries, heat pumps and aircon.</p></div><Link href="/guides/products">Compare products</Link></section>
 
     <div className={styles.nextSteps}>
       <Link href="/compare"><span>Use your own bill</span><strong>Compare electricity plans</strong><small>Then explore solar and storage.</small></Link>
