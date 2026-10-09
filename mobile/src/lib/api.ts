@@ -218,6 +218,82 @@ export async function downloadElectricalAssessmentFile(
   } finally { clearTimeout(timeout); }
 }
 
+/** Rental photos remain private job evidence and are opened with the current business authority. */
+export async function downloadRentalEvidencePhoto(
+  jobMediaId: string, expectedBusinessKey: string, signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(jobMediaId) || !expectedBusinessKey) {
+    throw new ApiError('This saved photo request is invalid.', 400, 'RENTAL_PHOTO_REQUEST_INVALID');
+  }
+  const revision = businessSessionRevision();
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const assertSession = () => {
+    if (revision !== businessSessionRevision()) throw new ApiError('Your business changed. Reopen this photo.', 409, 'BUSINESS_CHANGED');
+    if (controller.signal.aborted) throw new ApiError('Photo preview cancelled.', 408, 'RENTAL_PHOTO_CANCELLED');
+  };
+  const timeout = setTimeout(abort, JSON_REQUEST_TIMEOUT_MS);
+  try {
+    assertSession();
+    const headers = await authenticatedHeaders({}, undefined, false, expectedBusinessKey);
+    assertSession();
+    const response = await expoFetch(`${API_BASE_URL}/api/trade-field-work?preview=${encodeURIComponent(jobMediaId)}`, {
+      method: 'GET', headers, redirect: 'error', signal: controller.signal,
+    });
+    assertSession();
+    if (!response.ok) {
+      const body = await responseBody(response);
+      assertSession();
+      throw new ApiError(String(body.error || 'This saved photo could not be opened.'), response.status, String(body.code || 'RENTAL_PHOTO_UNAVAILABLE'));
+    }
+    const contentType = (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
+    const maximum = 8 * 1024 * 1024;
+    const advertised = response.headers.get('content-length');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)
+      || (advertised !== null && (!/^\d+$/.test(advertised) || Number(advertised) > maximum))) {
+      throw new ApiError('This saved photo has an unsupported format or size.', 413, 'RENTAL_PHOTO_INVALID');
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new ApiError('This saved photo is empty.', 502, 'RENTAL_PHOTO_INVALID');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const chunk = await reader.read();
+        assertSession();
+        if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > maximum) throw new ApiError('This saved photo is too large.', 413, 'RENTAL_PHOTO_INVALID');
+        chunks.push(chunk.value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    } finally { reader.releaseLock(); }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const actualType = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? 'image/jpeg'
+      : [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((value, index) => bytes[index] === value) ? 'image/png'
+        : bytes.length >= 12 && new TextDecoder().decode(bytes.subarray(0, 4)) === 'RIFF'
+          && new TextDecoder().decode(bytes.subarray(8, 12)) === 'WEBP' ? 'image/webp' : '';
+    if (!size || actualType !== contentType || (advertised !== null && Number(advertised) !== size)) {
+      throw new ApiError('This saved photo did not download completely or could not be verified.', 502, 'RENTAL_PHOTO_INVALID');
+    }
+    assertSession();
+    return { bytes, contentType };
+  } catch (error) {
+    if (controller.signal.aborted) throw new ApiError(signal?.aborted ? 'Photo preview cancelled.'
+      : 'This photo took too long to open. Try previewing it again.', 408, signal?.aborted ? 'RENTAL_PHOTO_CANCELLED' : 'NETWORK_TIMEOUT');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
 /** In-memory authorization for one mounted calling session, never field-data storage. */
 export type TeamCallAnswerAccess = { answerToken: string; callId: string; threadId: string };
 

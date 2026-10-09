@@ -812,20 +812,38 @@ test('native photo prompts reflect the corrected answer while previously capture
   assert.match(renderedText(renderedNativeBranch(select, env)), /controller|operating indicator/i);
 });
 
-test('saved native photos have distinct names and guarded removal controls, including while an answer is queued', () => {
+test('saved native photos can be previewed by exact media reference while removal stays guarded', () => {
   const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
   const env = { check: {}, photoRequirement: { minimumFiles: 0, minimumPhotos: 0 }, active: { key: 'minimum_standards' },
     presentation: undefined, styles: {}, editable: false, canRemovePhotos: true, busy: '', visiblePhotos: [], draft: { photos: [] },
-    evidence: [{ id: 'one', fileName: 'chosen.jpg', caption: 'Ceiling insulation', contentType: 'image/jpeg' },
-      { id: 'two', fileName: 'keep.jpg', caption: 'Ceiling insulation', contentType: 'image/jpeg' }],
-    View: 'view', Text: 'text', Image: 'image', FieldButton: 'button', removeSavedPhoto(id) { env.removed = id; } };
+    evidence: [{ id: 'one', jobMediaId: 'media-one', fileName: 'chosen.jpg', caption: 'Ceiling insulation', contentType: 'image/jpeg' },
+      { id: 'two', jobMediaId: 'media-two', fileName: 'keep.jpg', caption: 'Ceiling insulation', contentType: 'image/jpeg' }],
+    View: 'view', Text: 'text', Image: 'image', FieldButton: 'button', removeSavedPhoto(id) { env.removed = id; }, openPhotoPreview(value) { env.preview = value; } };
   const buttons = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button' && renderedText(node) === 'Remove photo');
+  const previews = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button' && renderedText(node) === 'Preview photo');
   const tree = renderedNativeBranch(select, env);
-  assert.match(renderedText(tree), /chosen\.jpg/); assert.match(renderedText(tree), /keep\.jpg/);
+  assert.match(renderedText(tree), /Saved photo\s+1/); assert.match(renderedText(tree), /Saved photo\s+2/);
+  assert.doesNotMatch(renderedText(tree), /chosen\.jpg|keep\.jpg/);
+  previews()[1].props.onPress(); assert.deepEqual(env.preview, { jobMediaId: 'media-two', contentType: 'image/jpeg', title: 'Saved photo 2' });
   assert.equal(buttons().length, 2); assert.equal(buttons()[0].props.disabled, false);
   buttons()[0].props.onPress(); assert.equal(env.removed, 'one');
   env.canRemovePhotos = false; assert.ok(buttons().every(button => button.props.disabled));
   env.canRemovePhotos = true; env.busy = 'remove'; assert.ok(buttons().every(button => button.props.disabled));
+  assert.ok(previews().every(button => !button.props.disabled), 'Read-only and busy answer controls must not prevent preview');
+  previews()[0].props.onPress(); assert.equal(env.preview.jobMediaId, 'media-one');
+});
+
+test('pending photo previews retain the original phone URI and uploaded media reference', () => {
+  const select = (node, ast) => ts.isJsxElement(node) && node.openingElement.getText(ast) === '<View style={styles.photo}>';
+  const photo = { uri: 'file:///camera.jpg', mediaId: 'uploaded-photo', capture: { captureObservedAtUtc: '2026-10-09T01:00:00Z' } };
+  const env = { check: {}, active: { key: 'minimum_standards' }, photoRequirement: { minimumFiles: 0, minimumPhotos: 0 }, presentation: undefined, styles: {}, editable: false,
+    canRemovePhotos: false, busy: 'sync', evidence: [], visiblePhotos: [photo], draft: { photos: [photo] },
+    View: 'view', Text: 'text', Image: 'image', FieldButton: 'button', openPhotoPreview(value) { env.preview = value; } };
+  const tree = renderedNativeBranch(select, env);
+  const preview = renderedNodes(tree, node => node.type === 'button' && renderedText(node) === 'Preview photo')[0];
+  assert.ok(!preview.props.disabled); preview.props.onPress();
+  assert.deepEqual(env.preview, { jobMediaId: 'uploaded-photo', uri: 'file:///camera.jpg', title: 'Photo on this phone 1' });
+  assert.equal(env.draft.photos[0], photo);
 });
 
 test('successful photo-removal tombstones cannot count as evidence or re-enter the Next queue before local cleanup', async () => {

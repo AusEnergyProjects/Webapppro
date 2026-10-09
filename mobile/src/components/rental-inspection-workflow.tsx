@@ -13,6 +13,7 @@ import { KeyboardAwareScrollView } from '@/components/keyboard-aware-scroll-view
 import { FieldButton } from '@/components/field-button';
 import { FieldSelect } from '@/components/field-select';
 import { FieldDatePicker } from '@/components/field-date-picker';
+import { RentalPhotoPreview, type RentalPhotoPreviewTarget } from '@/components/rental-photo-preview';
 import { assertLocalDataOwner, getLocalDataOwner, readRentalSetting, writeRentalSetting, type LocalDataOwner } from '@/lib/database';
 import { observeLocation, observedTime } from '@/lib/evidence';
 import { RENTAL_ADVERSE_OUTCOMES, newRentalItem,
@@ -160,6 +161,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const [editEquipmentKey, setEditEquipmentKey] = useState('');
   const [saves, setSaves] = useState<RentalSaveRecord[]>([]);
   const [documents, setDocuments] = useState<PendingRentalDocument[]>([]);
+  const [photoPreview, setPhotoPreview] = useState<{ photo: RentalPhotoPreviewTarget; owner: LocalDataOwner } | null>(null);
+  const closePhotoPreview = useCallback(() => setPhotoPreview(null), []);
   const busyRef = useRef(false);
   const mounted = useRef(true);
   const scroll = useRef<ScrollView>(null);
@@ -167,6 +170,10 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const cacheKey = 'rental-wizard:' + workOrderId;
   const pendingWrite = useRef(Promise.resolve());
   const localOwner = useRef<LocalDataOwner | null>(null);
+  function openPhotoPreview(photo: RentalPhotoPreviewTarget) {
+    const owner = localOwner.current;
+    if (owner) setPhotoPreview({ photo, owner });
+  }
   const loadedCacheKey = useRef('');
   const promptedModules = useRef(new Set<string>());
   const selectedModuleId = useRef(moduleId);
@@ -938,12 +945,14 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
             {evidence.length || visiblePhotos.length || photoRequirement.minimumFiles || photoRequirement.minimumPhotos ? <Text style={styles.small}>{evidence.length} linked · {visiblePhotos.length} on this phone{photoRequirement.minimumPhotos ? ' · ' + photoRequirement.minimumPhotos + ' photos required' : photoRequirement.minimumFiles ? ' · ' + photoRequirement.minimumFiles + ' evidence file required' : ''}</Text> : null}
           {evidence.filter((entry) => entry.contentType.startsWith('image/')).map((entry, index) => <View key={entry.id} style={styles.pendingPhoto}>
             <Text style={styles.label}>Saved photo {index + 1}</Text>
-            <Text style={styles.small}>{entry.fileName}{entry.capture?.capturedAtUtc ? ' · ' + new Date(entry.capture.capturedAtUtc).toLocaleString() : ''}</Text>
+            {entry.capture?.capturedAtUtc ? <Text style={styles.small}>{new Date(entry.capture.capturedAtUtc).toLocaleString()}</Text> : null}
             {entry.caption ? <Text style={styles.small}>{entry.caption}</Text> : null}
+            <FieldButton variant="secondary" onPress={() => openPhotoPreview({ jobMediaId: entry.jobMediaId, contentType: entry.contentType, title: `Saved photo ${index + 1}` })}>Preview photo</FieldButton>
             <FieldButton variant="quiet" disabled={!canRemovePhotos || Boolean(busy)} onPress={() => removeSavedPhoto(entry.id)}>Remove photo</FieldButton>
           </View>)}
           {visiblePhotos.map((p, index) => <View key={p.uri} style={styles.pendingPhoto}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} alt={`Pending photo ${index + 1}`} accessibilityLabel={`Pending photo ${index + 1}`} />
+            <FieldButton variant="secondary" onPress={() => openPhotoPreview({ jobMediaId: p.mediaId, uri: p.uri, title: `Photo on this phone ${index + 1}` })}>Preview photo</FieldButton>
             <Text style={styles.small}>Photo {index + 1} {p.source === 'native_file_upload' ? 'added from gallery' : 'saved'} {new Date(p.capture.captureObservedAtUtc).toLocaleTimeString()} · {p.mediaId ? 'Uploaded, ready to link' : p.location?.location.state === 'captured' ? 'GPS ' + Math.round(p.location.location.accuracyMetres || 0) + ' m' : p.locationPending ? 'Recording GPS; you can press Next' : 'GPS needs review; you can keep assessing'}</Text>
             {!p.mediaId && (p.location?.location.state !== 'captured' || p.location.location.accuracyMetres === null || p.location.location.accuracyMetres > 100 || p.location.location.mocked) ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void refreshPhotoGps(index)}>Retry GPS</FieldButton> : null}
             <FieldButton variant="quiet" disabled={!canRemovePhotos || Boolean(busy)} onPress={() => void removePhoto(p.uri)}>Remove pending photo</FieldButton>
@@ -976,6 +985,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     {page !== 'categories' ? <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}><FieldButton variant="secondary" style={styles.flex} disabled={Boolean(busy)} onPress={previous}>Previous</FieldButton>
       {page === 'earlier' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : page === 'metadata' ? <FieldButton style={styles.flex} disabled={Boolean(busy)} loading={busy === 'metadata'} onPress={() => { if (editable) void saveMetadata(); else if (metadataIndex + 1 < metadata.length) setMetadataIndex(metadataIndex + 1); else setPage('review'); }}>Next</FieldButton> : page === 'review' ? <FieldButton style={styles.flex} variant="secondary" onPress={() => setPage('categories')}>Sections</FieldButton> : <FieldButton style={styles.flex} disabled={Boolean(busy) || queuedAnswer?.status === 'syncing'} loading={busy === 'save' || busy === 'restore'} onPress={() => { if (canReviewQueuedAnswer) void reviewQueuedAnswer(); else void next(); }}>{canReviewQueuedAnswer ? 'Edit saved answer' : queuedAnswer?.status === 'syncing' ? 'Syncing answer...' : 'Next'}</FieldButton>}
     </View> : null}
+    {photoPreview ? <RentalPhotoPreview photo={photoPreview.photo} owner={photoPreview.owner} online={online} onClose={closePhotoPreview} /> : null}
   </View>;
 }
 const styles = StyleSheet.create({
