@@ -1230,6 +1230,71 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+test('assessment GET protects the same recovery promise before it completes and reloads once after caller disconnect', { timeout: 2000 }, async () => {
+  const f = reportIssuanceFixture();
+  const recovery = deferred();
+  const registered = deferred();
+  const abort = new AbortController();
+  const lifetimePromises = [];
+  let recoveryCalls = 0;
+  try {
+    const route = loadRoute(f, {}, { recoverRentalAssessmentReport: (input) => {
+      recoveryCalls++;
+      assert.equal(input.access.ownerUid, 'owner');
+      assert.equal(input.access.memberId, 'worker');
+      assert.equal(input.workOrderId, 'job');
+      return recovery.promise;
+    } }, { waitUntil: (promise) => { lifetimePromises.push(promise); registered.resolve(); } });
+    const responsePromise = route.GET(new Request('https://test.example/api/trade-rental-inspections?workOrderId=job', { signal: abort.signal }));
+    await registered.promise;
+    assert.equal(lifetimePromises.length, 1);
+    assert.equal(lifetimePromises[0], recovery.promise, 'The original cleanup/recovery operation is registered, rather than a second invocation');
+    assert.equal(recoveryCalls, 1);
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_inspections').get().status, 'issuing', 'Protection is registered before recovery settles');
+    abort.abort();
+    f.sql.exec("UPDATE trade_rental_inspections SET status='in_progress',revision=revision+1");
+    recovery.resolve();
+    await lifetimePromises[0];
+    const response = await responsePromise;
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.inspection.status, 'in_progress');
+    assert.equal(payload.inspection.revision, 2);
+    assert.equal(payload.permissions.canEdit, true);
+    assert.equal(recoveryCalls, 1);
+  } finally { f.sql.close(); }
+});
+
+test('protected assessment recovery failure preserves503 and never returns a falsely recovered inspection', { timeout: 2000 }, async () => {
+  const f = reportIssuanceFixture();
+  const recovery = deferred();
+  const registered = deferred();
+  const lifetimePromises = [];
+  let recoveryCalls = 0;
+  try {
+    const changesBefore = f.sql.prepare('SELECT total_changes() changes').get().changes;
+    const route = loadRoute(f, {}, { recoverRentalAssessmentReport: () => { recoveryCalls++; return recovery.promise; } }, {
+      waitUntil: (promise) => { lifetimePromises.push(promise); registered.resolve(); },
+    });
+    const responsePromise = getAssessment(route);
+    await registered.promise;
+    assert.equal(lifetimePromises.length, 1);
+    assert.equal(lifetimePromises[0], recovery.promise);
+    const rejectedLifetime = assert.rejects(lifetimePromises[0], /RENTAL_REPORT_CLEANUP_REQUIRED/);
+    recovery.reject(new Error('RENTAL_REPORT_CLEANUP_REQUIRED'));
+    await rejectedLifetime;
+    const response = await responsePromise;
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.equal(payload.ok, false);
+    assert.match(payload.error, /clearing its private staged files/);
+    assert.equal(payload.inspection, undefined);
+    assert.equal(recoveryCalls, 1);
+    assert.equal(f.sql.prepare('SELECT status FROM trade_rental_inspections').get().status, 'issuing');
+    assert.equal(f.sql.prepare('SELECT total_changes() changes').get().changes, changesBefore);
+  } finally { f.sql.close(); }
+});
+
 test('one report promise is protected before issuance completes and reconciles the job after the caller disconnects', { timeout: 2000 }, async () => {
   const f = reportIssuanceFixture();
   const issuance = deferred();

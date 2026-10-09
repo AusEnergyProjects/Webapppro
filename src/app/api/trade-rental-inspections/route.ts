@@ -1129,7 +1129,9 @@ export async function GET(request: Request) {
     if (String(context.inspection.status) === "issuing" && access.canRunReports
       && access.memberId === String(context.inspection.assessor_member_id || "")
       && access.memberId === String(context.job.assignee_member_id || "")) {
-      await recoverRentalAssessmentReport({ access, workOrderId });
+      const recovery = recoverRentalAssessmentReport({ access, workOrderId });
+      waitUntil(recovery);
+      await recovery;
       context = await contextFor(access, workOrderId);
     }
     return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)) });

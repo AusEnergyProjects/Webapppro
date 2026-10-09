@@ -443,6 +443,107 @@ test("report issue records cleanup manifests before R2 writes and stale recovery
   assert.match(source, /async function retryFailedRentalReportCleanup[\s\S]*status = 'failed'[\s\S]*cleanupFailedRentalReportObjects/);
 });
 
+async function failedReportCleanupFixture(count = 9) {
+  const [{ DatabaseSync }, { default: ts }, assessment] = await Promise.all([
+    import("node:sqlite"), import("typescript"), import("../src/lib/trade-rental-assessment.mjs"),
+  ]);
+  const sql = new DatabaseSync(":memory:");
+  sql.exec(`CREATE TABLE trade_rental_reports (id TEXT, firebase_uid TEXT, status TEXT, revision INTEGER,
+    report_snapshot TEXT, pdf_object_key TEXT, pdf_sha256 TEXT, pdf_size_bytes INTEGER,
+    issuer_snapshot TEXT, updated_at TEXT);`);
+  const keys = Array.from({ length: count }, (_, index) => `trade-issued-documents/rental-report/report/revision-1/evidence/${index}.jpg`);
+  const originalKey = "trade-job-media/original-photo.jpg";
+  const objects = new Set([...keys, originalKey]);
+  const row = { report_id: "report", report_revision: 1, report_snapshot: JSON.stringify({ evidence: keys.map((objectKey) => ({ objectKey })) }),
+    pdf_object_key: "", pdf_sha256: "", pdf_size_bytes: 0 };
+  sql.prepare("INSERT INTO trade_rental_reports VALUES ('report','owner','failed',1,?,'','',0,'{}','')").run(row.report_snapshot);
+  const state = { active: 0, maximum: 0, calls: [], cleanupWrites: 0, delete: undefined };
+  const bucket = { delete: async (key) => {
+    state.calls.push(key); state.active++; state.maximum = Math.max(state.maximum, state.active);
+    try {
+      if (state.delete) await state.delete(key);
+      else await new Promise((resolve) => setImmediate(resolve));
+      objects.delete(key);
+    } finally { state.active--; }
+  } };
+  const d1 = { prepare: (query) => {
+    let parameters = [];
+    return { bind(...values) { parameters = values; return this; },
+      async run() { const result = sql.prepare(query).run(...parameters);
+        if (query.includes("SET pdf_object_key") && result.changes) state.cleanupWrites++;
+        return { meta: { changes: result.changes } }; },
+      async first() { return sql.prepare(query).get(...parameters) || null; } };
+  } };
+  const source = await readFile(new URL("../src/lib/trade-rental-report-server.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(`${source}\nexport { cleanupFailedRentalReportObjects };`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const dependencies = { "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../db": { getD1: () => d1 },
+    "@/lib/trade-rental-assessment.mjs": assessment,
+    "@/lib/trade-issued-document-store": { deleteImmutableIssuedPdf: async () => { throw new Error("ISSUED_PDF_REFERENCE_INVALID"); } } };
+  const transformedModule = { exports: {} };
+  new Function("require", "module", "exports", compiled)((id) => dependencies[id] || {}, transformedModule, transformedModule.exports);
+  return { sql, row, state, objects, keys, originalKey, cleanup: (input = row, owner = "owner") => transformedModule.exports.cleanupFailedRentalReportObjects(input, owner) };
+}
+
+test("failed report cleanup bounds immutable deletions to four and concurrent cleanup records one completed manifest", async () => {
+  const f = await failedReportCleanupFixture();
+  try {
+    await f.cleanup();
+    assert.equal(f.state.maximum, 4);
+    assert.equal(f.state.calls.length, f.keys.length);
+    assert.deepEqual([...f.objects], [f.originalKey]);
+    assert.equal(f.state.cleanupWrites, 1);
+    const marker = JSON.parse(f.sql.prepare("SELECT issuer_snapshot FROM trade_rental_reports").get().issuer_snapshot);
+    assert.ok(marker.cleanupCompletedAt);
+    assert.equal(marker.removedObjectCount, f.keys.length);
+  } finally { f.sql.close(); }
+  const concurrent = await failedReportCleanupFixture();
+  try {
+    await Promise.all([concurrent.cleanup(), concurrent.cleanup()]);
+    assert.equal(concurrent.state.cleanupWrites, 1);
+    assert.deepEqual([...concurrent.objects], [concurrent.originalKey]);
+  } finally { concurrent.sql.close(); }
+});
+
+test("failed report cleanup settles a failed delete batch without marking completion or deleting original evidence", async () => {
+  const f = await failedReportCleanupFixture();
+  try {
+    let release; const held = new Promise((resolve) => { release = resolve; });
+    f.state.delete = async (key) => { if (key === f.keys[0]) throw new Error("R2 unavailable"); await held; };
+    let settled = false;
+    const cleanup = f.cleanup().then(() => { settled = true; }, (error) => { settled = true; throw error; });
+    const rejected = assert.rejects(cleanup, /R2 unavailable/);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(settled, false, "Other deletes in the failed batch must settle before failure returns");
+    assert.equal(f.state.calls.length, 4, "Later batches must not start after the first batch fails");
+    release(); await rejected;
+    assert.equal(f.state.cleanupWrites, 0);
+    assert.equal(f.objects.has(f.originalKey), true);
+    assert.deepEqual(JSON.parse(f.sql.prepare("SELECT issuer_snapshot FROM trade_rental_reports").get().issuer_snapshot), {});
+    f.state.delete = undefined; await f.cleanup();
+    assert.deepEqual([...f.objects], [f.originalKey]);
+    assert.equal(f.state.cleanupWrites, 1);
+  } finally { f.sql.close(); }
+});
+
+test("cleanup completion cannot conceal an invalid evidence prefix or mismatched owner, status, revision, snapshot or PDF reference", async () => {
+  const f = await failedReportCleanupFixture();
+  try {
+    await assert.rejects(f.cleanup({ ...f.row, report_snapshot: JSON.stringify({ evidence: [{ objectKey: f.originalKey }] }) }), /RENTAL_REPORT_CLEANUP_INVALID/);
+    assert.equal(f.state.calls.length, 0);
+    await f.cleanup();
+    await assert.rejects(f.cleanup(f.row, "other-owner"), /RENTAL_REPORT_CLEANUP_CONFLICT/);
+    await assert.rejects(f.cleanup({ ...f.row, report_revision: 2 }), /RENTAL_REPORT_CLEANUP_CONFLICT/);
+    await assert.rejects(f.cleanup({ ...f.row, report_snapshot: JSON.stringify({ evidence: [] }) }), /RENTAL_REPORT_CLEANUP_CONFLICT/);
+    await assert.rejects(f.cleanup({ ...f.row, pdf_object_key: "invalid.pdf", pdf_sha256: "a".repeat(64), pdf_size_bytes: 100 }), /ISSUED_PDF_REFERENCE_INVALID/);
+    f.sql.prepare("UPDATE trade_rental_reports SET status='issued'").run();
+    await assert.rejects(f.cleanup(), /RENTAL_REPORT_CLEANUP_CONFLICT/);
+    assert.equal(f.objects.has(f.originalKey), true);
+    assert.equal(f.state.cleanupWrites, 1);
+  } finally { f.sql.close(); }
+});
+
 async function renderReportSnapshot(snapshot) {
   const [ts, React, jsxRuntime, { renderToStaticMarkup }, quotation, assessment] = await Promise.all([
     import("typescript").then((value) => value.default), import("react"), import("react/jsx-runtime"), import("react-dom/server"),

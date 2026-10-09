@@ -587,7 +587,10 @@ function failedReportEvidenceKeys(row: Row) {
 
 async function cleanupFailedRentalReportObjects(row: Row, ownerUid: string) {
   const evidenceKeys = failedReportEvidenceKeys(row);
-  for (const objectKey of evidenceKeys) await bucket().delete(objectKey);
+  await rentalEvidenceBatches(evidenceKeys, (objectKey) => bucket().delete(objectKey));
+  const removedPdfReference = row.pdf_object_key && row.pdf_sha256 && number(row.pdf_size_bytes) > 0
+    ? { objectKey: String(row.pdf_object_key), sha256: String(row.pdf_sha256), sizeBytes: number(row.pdf_size_bytes) }
+    : null;
   if (row.pdf_object_key && row.pdf_sha256 && number(row.pdf_size_bytes) > 0) {
     await deleteImmutableIssuedPdf({
       objectKey: String(row.pdf_object_key),
@@ -606,11 +609,24 @@ async function cleanupFailedRentalReportObjects(row: Row, ownerUid: string) {
     WHERE id = ? AND firebase_uid = ? AND status = 'failed'
       AND pdf_object_key = ? AND pdf_sha256 = ? AND pdf_size_bytes = ?
       AND json_extract(issuer_snapshot, '$.cleanupCompletedAt') IS NULL`)
-    .bind(JSON.stringify({ cleanupCompletedAt: cleanedAt, removedObjectCount: evidenceKeys.length + (row.pdf_object_key ? 1 : 0) }),
+    .bind(JSON.stringify({ cleanupCompletedAt: cleanedAt, removedObjectCount: evidenceKeys.length + (removedPdfReference ? 1 : 0), removedPdfReference }),
       cleanedAt, row.report_id, ownerUid, String(row.pdf_object_key || ""),
       String(row.pdf_sha256 || ""), number(row.pdf_size_bytes))
     .run();
-  if (number(cleaned.meta.changes) !== 1) throw new Error("RENTAL_REPORT_CLEANUP_CONFLICT");
+  if (number(cleaned.meta.changes) === 1) return;
+  // Another cleanup may have completed these same immutable objects while our
+  // deletes were in flight. Only its exact completed manifest confirms success.
+  const completed = await getD1().prepare(`SELECT issuer_snapshot FROM trade_rental_reports
+    WHERE id = ? AND firebase_uid = ? AND status = 'failed' AND revision = ?
+      AND report_snapshot = ? AND pdf_object_key = '' AND pdf_sha256 = '' AND pdf_size_bytes = 0`)
+    .bind(row.report_id, ownerUid, number(row.report_revision), String(row.report_snapshot || "{}"))
+    .first<Row>();
+  const manifest = parsedObject(completed?.issuer_snapshot);
+  if (typeof manifest.cleanupCompletedAt !== "string" || !manifest.cleanupCompletedAt
+    || manifest.removedObjectCount !== evidenceKeys.length + (removedPdfReference ? 1 : 0)
+    || canonicalRentalJson(manifest.removedPdfReference) !== canonicalRentalJson(removedPdfReference)) {
+    throw new Error("RENTAL_REPORT_CLEANUP_CONFLICT");
+  }
 }
 
 async function retryFailedRentalReportCleanup(ownerUid: string, workOrderId: string) {
