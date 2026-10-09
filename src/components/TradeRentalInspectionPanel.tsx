@@ -160,7 +160,8 @@ type AssessmentResult = {
     internalPdfUrl: string;
     link: null | { id: string; status: string; expiresAt: string; viewCount: number; downloadCount: number; shareUrl: string; pdfUrl: string } }>;
   issuedReport?: { reportId: string; reportNumber: string; issuedAt: string; expiresAt: string; shareUrl: string; pdfUrl: string };
-  permissions?: { canEdit: boolean; canIssue: boolean; canRevokeLink: boolean; isAssignedAssessor: boolean; canManageDeliveryReview: boolean };
+  permissions?: { canEdit: boolean; canIssue: boolean; canRevokeLink: boolean; isAssignedAssessor: boolean; canManageDeliveryReview: boolean; canCorrectReportFormatting: boolean };
+  formattingRevisionPending?: boolean;
   deliveryReview?: { status: "held" | "released"; message: string } | null;
   blockers?: CompletionBlocker[];
   error?: string;
@@ -958,6 +959,20 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
         : "Report email approved. The assessor's saved Finish request can now send it.");
   }
 
+  async function correctReportFormatting() {
+    if (!latestReport || data.inspection?.revision === undefined) return;
+    await mutate({ action: "correct_report_formatting", reportId: latestReport.id,
+      expectedInspectionRevision: data.inspection.revision }, "correct-report-formatting",
+      "The corrected report is saved. Open the new PDF to review it; email remains paused.");
+  }
+
+  async function correctCoolingAccess() {
+    if (!latestReport || data.inspection?.revision === undefined) return;
+    await mutate({ action: "correct_cooling_access", reportId: latestReport.id,
+      expectedInspectionRevision: data.inspection.revision }, "correct-cooling-access",
+      "The cooling access correction is saved in a new report revision. Email remains paused.");
+  }
+
   async function copyReportLink() {
     const shareUrl = latestReport?.link?.shareUrl;
     if (!shareUrl) return;
@@ -1195,10 +1210,19 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
     <section className={styles.issueCard}>
       <header><div><span>Final assessor issue</span><h4>{latestReport ? latestReport.reportNumber : "Issue the complete rental report"}</h4></div><strong>{latestReport ? "Issued" : allModulesComplete ? "Ready" : "Waiting"}</strong></header>
       {data.deliveryReview?.status === "held" && <p role="status">Email paused for owner review. The completed PDF can be saved and opened before it is emailed.</p>}
+      {data.formattingRevisionPending && <p role="status">The corrected PDF is being prepared. Refresh shortly to open it. Email remains paused.</p>}
       {data.permissions?.canManageDeliveryReview && <div className={styles.reportActions}>
         {data.deliveryReview?.status === "held"
-          ? <button type="button" disabled={Boolean(busy) || !latestReport} onClick={() => void changeDeliveryReview(false)}>{busy === "delivery-review" ? "Saving..." : "Approve report email"}</button>
+          ? <button type="button" disabled={Boolean(busy) || !latestReport || data.formattingRevisionPending} onClick={() => void changeDeliveryReview(false)}>{busy === "delivery-review" ? "Saving..." : "Approve report email"}</button>
           : <button type="button" disabled={Boolean(busy)} onClick={() => void changeDeliveryReview(true)}>{busy === "delivery-review" ? "Saving..." : "Pause email for my review"}</button>}
+      </div>}
+      {data.permissions?.canCorrectReportFormatting && latestReport && data.deliveryReview?.status === "held" && <div className={styles.reportActions}>
+        <button type="button" disabled={Boolean(busy)} onClick={() => void correctReportFormatting()}>{busy === "correct-report-formatting" ? "Preparing corrected PDF..." : "Correct report formatting"}</button>
+        <small>Creates a new PDF revision from the saved assessment. The original report and assessor&apos;s answers are retained.</small>
+        {(data.items || []).some((item) => item.checkKey === "cooling_2027_readiness" && item.response.accessStatus === "Not accessed") && <>
+          <button type="button" disabled={Boolean(busy)} onClick={() => void correctCoolingAccess()}>{busy === "correct-cooling-access" ? "Preparing corrected PDF..." : "Correct cooling access"}</button>
+          <small>Changes the cooling access answer from Not accessed to Clear access in a new revision. The original report is retained and the owner correction is recorded.</small>
+        </>}
       </div>}
       {latestReport?.link?.status === "active" && latestReport.link.shareUrl ? <>
         <p>The immutable PDF and quick-view report contain all issued details and evidence, except internal notes. The no-account link expires {dateLabel(latestReport.link.expiresAt)}.</p>

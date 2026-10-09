@@ -262,9 +262,13 @@ test("ceiling joist spacing prints its millimetre label and saved value in the f
   });
   const original = structuredClone(snapshot);
   const content = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
-  const label = "Clear gap between ceiling joists (mm)";
-  assert.equal(content.split(label).length - 1, 2, "The measured gap label must appear in the linked finding and the complete assessment");
+  assert.equal((content.match(/Clear gap between ceiling/g) || []).length, 2, "The measured gap label must appear in the linked finding and the complete assessment");
+  assert.equal((content.match(/joists \(mm\)/g) || []).length, 2, "The long label must wrap within the label column");
   assert.equal((content.match(/^430 Tj$/gm) || []).length, 2, "The saved millimetre value must appear exactly once in each section");
+  const joistPositions = [...content.matchAll(/1 0 0 1 ([\d.]+) [\d.]+ Tm\s*430 Tj/g)].map((match) => Number(match[1]));
+  const areaPositions = [...content.matchAll(/1 0 0 1 ([\d.]+) [\d.]+ Tm\s*24\.5 Tj/g)].map((match) => Number(match[1]));
+  assert.equal(joistPositions.length, 2);
+  assert.deepEqual(joistPositions, areaPositions, "Joist and area measurements must start in the same value column");
   assert.doesNotMatch(content, /Joist Clear Width|joistClearWidthMm/);
   assert.deepEqual(snapshot, original);
 });
@@ -430,10 +434,12 @@ test("rental assessment PDF embeds Unicode fonts, paginates long scopes and atta
 
 test("report issue records cleanup manifests before R2 writes and stale recovery deletes only after winning", async () => {
   const source = await readFile(new URL("../src/lib/trade-rental-report-server.ts", import.meta.url), "utf8");
-  const stage = source.indexOf("const stageResults = await db.batch");
-  const evidenceWrite = source.indexOf("await storePreparedRentalEvidence(preparedObjects");
-  const pdfPlan = source.indexOf("const pdfPlan = await db.prepare");
-  const pdfWrite = source.indexOf("stored = await storeImmutableIssuedPdf");
+  const issueStart = source.indexOf("async function createRentalAssessmentReport(");
+  assert.ok(issueStart >= 0, "the assessment issue implementation exists");
+  const stage = source.indexOf("const stageResults = await db.batch", issueStart);
+  const evidenceWrite = source.indexOf("await storePreparedRentalEvidence(preparedObjects", issueStart);
+  const pdfPlan = source.indexOf("const pdfPlan = await db.prepare", issueStart);
+  const pdfWrite = source.indexOf("stored = await storeImmutableIssuedPdf", issueStart);
   assert.ok(stage >= 0 && evidenceWrite > stage, "the staged snapshot must exist before immutable evidence is written");
   assert.ok(pdfPlan > evidenceWrite && pdfWrite > pdfPlan, "the planned PDF reference must be durable before its object is written");
   assert.match(source, /recovered = number\(recoveryResults\[0\]\?\.meta\.changes\) === 1[\s\S]*recoveryResults\[3\][\s\S]*=== 0/);

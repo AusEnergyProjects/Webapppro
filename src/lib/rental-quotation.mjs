@@ -45,7 +45,12 @@ export function rentalObservationNumberIsValid(value, key = "") {
   const text = value.trim();
   return !text || (/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text) && Number.isFinite(Number(text)));
 }
-export function rentalObservationResponseLabel(key) {
+export function rentalObservationResponseLabel(key, checkKey = "") {
+  if (key === "welsRating") return "Existing showerhead WELS rating";
+  if (checkKey === "vents_2027_readiness") {
+    if (key === "ventType") return "Wall vent type";
+    if (key === "count") return "Number of wall vents needing sealing";
+  }
   const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Total insulation area required", sealLengthMetres: "Total draughtproofing length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", joistClearWidthMm: "Clear gap between ceiling joists", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
   const quotationNames = { hotWaterCableRunMetres: "Hot-water system to switchboard cable run", airconTotalCableMetres: "Earlier combined RCAC cable run", airconSwitchboardToOutdoorMetres: "Switchboard to proposed outdoor RCAC unit cable run", airconOutdoorToIndoorMetres: "Proposed outdoor RCAC unit to indoor unit distance", cooktopCableRunMetres: "Cooktop to switchboard cable run", cableMeasurementStatus: "Cable length basis", cableRouteBasis: "Cable route and measurement basis", cableLimitationReason: "Cable measurement limitation", nonIc4DownlightCount: "Confirmed non-IC4 downlight count", downlightCountStatus: "Non-IC4 downlight count status", downlightEvidence: "Downlight label / count evidence", downlightCountLimitation: "Downlight count limitation" };
   for (const mode of ["heating", "cooling"]) {

@@ -114,6 +114,14 @@ export function rentalReportScopeText(value) {
   return String(record(source.inspection).reportBoundary || source.reportBoundary || "This report records the selected assessment checks, findings and supporting evidence. Refer to each section for its scope and any assessment limits.");
 }
 
+/** @param {Array<[string, unknown]>} entries @param {unknown} checkKey */
+function orderedObservationEntries(entries, checkKey) {
+  if (checkKey !== "vents_2027_readiness") return entries;
+  const ventKeys = ["ventType", "count"];
+  return [...ventKeys.flatMap((key) => entries.filter(([entryKey]) => entryKey === key)),
+    ...entries.filter(([key]) => !ventKeys.includes(key))];
+}
+
 /** Newly introduced quote inputs remain explicitly unknown in older reports. */
 export function rentalReportObservationEntries(value) {
   const item = record(value);
@@ -121,6 +129,9 @@ export function rentalReportObservationEntries(value) {
     : rentalObservationResponseProjection(item.checkKey, item.outcome, record(item.response)).response));
   const entries = Object.entries(response).filter(([key, entry]) => key !== "showerCaptureVersion" && entry !== "" && entry !== null && entry !== undefined);
   for (const field of rentalObservationFields(item.checkKey)) {
+    // Older assessments already record the appliance type. Do not add an
+    // unanswered supply-classification row to their issued presentation.
+    if (field.key === "hotWaterSupplyType") continue;
     if (field.legacy || field.captureVersion !== 4 && field.key !== "joistClearWidthMm" || entries.some(([key]) => key === field.key)) continue;
     if (field.showIfAll && !rentalObservationFieldIsVisible({ ...field, showIf: undefined }, { outcome: item.outcome, response })) continue;
     if (field.showForOutcomes && !field.showForOutcomes.includes(item.outcome)) continue;
@@ -130,15 +141,16 @@ export function rentalReportObservationEntries(value) {
     }
     entries.push([field.key, "Not recorded"]);
   }
-  return entries;
+  return orderedObservationEntries(entries, item.checkKey);
 }
 
 /** Older snapshots retained inactive answers in response; new snapshots freeze them separately. */
 export function rentalReportRetainedObservationEntries(value) {
   const item = record(value);
   const projected = item.historicalObservation ? {} : rentalObservationResponseProjection(item.checkKey, item.outcome, record(item.response)).retainedResponse;
-  return Object.entries(record(publicRentalReportValue({ ...projected, ...record(item.retainedResponse) })))
+  const entries = Object.entries(record(publicRentalReportValue({ ...projected, ...record(item.retainedResponse) })))
     .filter(([key, entry]) => key !== "showerCaptureVersion" && entry !== "" && entry !== null && entry !== undefined);
+  return orderedObservationEntries(entries, item.checkKey);
 }
 
 /** A recorded answer is separate from its compliance/planning classification.

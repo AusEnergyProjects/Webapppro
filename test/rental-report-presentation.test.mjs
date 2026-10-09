@@ -7,6 +7,7 @@ import * as branding from "../src/lib/rental-report-branding.mjs";
 import { rentalAssessmentTemplateSnapshot } from "../src/lib/trade-rental-assessment.mjs";
 import { rentalReportAnswerPresentation, rentalReportCheckStandard, rentalReportSectionGroups, rentalReportSectionResult, rentalReportScopeText, rentalReportObservationEntries, rentalReportRetainedObservationEntries } from "../src/lib/rental-report-answer.mjs";
 import { createRentalAssessmentPdfBytes } from "../src/lib/trade-rental-report-pdf.mjs";
+import { rentalObservationResponseLabel } from "../src/lib/rental-quotation.mjs";
 
 function completedModule() {
   const template = rentalAssessmentTemplateSnapshot(["minimum_standards"], "current_minimum_standards").modules.minimum_standards;
@@ -33,6 +34,94 @@ function reportWithModule(assessmentModule) {
     business: { name: "Australian Energy Assessments", abn: "73675233557" }, property: { address: "1 Example Street" },
     issuer: { name: "Example Assessor" }, modules: [assessmentModule], findings: [], evidence: [], sources: [] };
 }
+
+test("a recorded gas-storage system does not gain an unanswered supply-type row in the report", async () => {
+  const item = { id: "hot-water", checkKey: "hot_water_2027_readiness", outcome: "does_not_meet",
+    response: { applianceType: "Gas storage", hotWaterCableRunMetres: "12.5", cableMeasurementStatus: "Estimated" } };
+  const before = structuredClone(item);
+  const entries = Object.fromEntries(rentalReportObservationEntries(item));
+  assert.equal(entries.applianceType, "Gas storage");
+  assert.equal(entries.hotWaterCableRunMetres, "12.5");
+  assert.equal(Object.hasOwn(entries, "hotWaterSupplyType"), false);
+  const snapshot = reportWithModule({ key: "minimum_standards", sections: [{ key: "hot_water", title: "Hot water", summary: "", items: [item] }] });
+  const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  assert.match(content, /Gas storage/);
+  assert.doesNotMatch(content, /Hot Water Supply Type/);
+  assert.deepEqual(item, before);
+  const shared = Object.fromEntries(rentalReportObservationEntries({ ...item,
+    response: { hotWaterSupplyType: "Shared building system", sharedHotWaterServiceStatus: "Hot water supplied when checked" } }));
+  assert.equal(shared.hotWaterSupplyType, "Shared building system");
+});
+
+test("an owner answer correction is identified separately from the original assessor in the PDF", async () => {
+  const snapshot = reportWithModule(completedModule());
+  snapshot.report.answerCorrection = { sourceReportNumber: "TEST-R1", field: "accessStatus", fromValue: "Not accessed", toValue: "Clear access", correctedAt: "2026-10-09T04:00:00Z" };
+  const before = structuredClone(snapshot);
+  const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  const printed = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]).join(" ");
+  assert.match(printed, /Owner correction:/);
+  assert.match(printed, /Cooling access changed from Not accessed to Clear access/);
+  assert.match(printed, /The original TEST-R1 is retained/);
+  assert.match(content, /Example Assessor/);
+  assert.deepEqual(snapshot, before);
+});
+
+test("wall vent observations identify the vent before its quantity without changing saved answers", () => {
+  for (const count of [5, 0]) {
+    const item = { checkKey: "vents_2027_readiness", outcome: "does_not_meet",
+      response: { count, limitationStatus: "No limitation", ventType: "Wall grille", unfamiliarRecordedField: "Retain this observation" } };
+    const before = structuredClone(item);
+    assert.deepEqual(rentalReportObservationEntries(item), [
+      ["ventType", "Wall grille"], ["count", count], ["limitationStatus", "No limitation"],
+      ["unfamiliarRecordedField", "Retain this observation"],
+    ]);
+    assert.equal(rentalObservationResponseLabel("ventType", item.checkKey), "Wall vent type");
+    assert.equal(rentalObservationResponseLabel("count", item.checkKey), "Number of wall vents needing sealing");
+    assert.deepEqual(item, before);
+  }
+  assert.equal(rentalObservationResponseLabel("count", "doors_2027_readiness"), "Count");
+  assert.equal(rentalObservationResponseLabel("count"), "Count");
+});
+
+test("historical and retained wall vent observations preserve their values in the same clear order", () => {
+  const historical = { checkKey: "vents_2027_readiness", outcome: "not_applicable", historicalObservation: true,
+    response: { count: 5, ventType: "Air brick" } };
+  const corrected = { checkKey: "vents_2027_readiness", outcome: "not_applicable", response: {},
+    retainedResponse: { count: 5, ventType: "Air brick" } };
+  const before = structuredClone({ historical, corrected });
+  assert.deepEqual(rentalReportObservationEntries(historical), [["ventType", "Air brick"], ["count", 5]]);
+  assert.deepEqual(rentalReportObservationEntries(corrected), []);
+  assert.deepEqual(rentalReportRetainedObservationEntries(corrected), [["ventType", "Air brick"], ["count", 5]]);
+  assert.deepEqual({ historical, corrected }, before);
+});
+
+test("the showerhead rating label describes the recorded equipment rather than the standard", () => {
+  for (const checkKey of ["showerhead_rating", "shower_2027_readiness", ""]) {
+    assert.equal(rentalObservationResponseLabel("welsRating", checkKey), "Existing showerhead WELS rating");
+  }
+  const item = { checkKey: "shower_2027_readiness", outcome: "does_not_meet", response: { welsRating: "3 stars" } };
+  const before = structuredClone(item);
+  assert.equal(Object.fromEntries(rentalReportObservationEntries(item)).welsRating, "3 stars");
+  assert.deepEqual(item, before);
+});
+
+test("the PDF describes wall vents before printing their saved count", async () => {
+  const snapshot = reportWithModule({ key: "minimum_standards", title: "Rental energy readiness", assessmentScope: "energy_readiness",
+    sections: [{ key: "draughtproofing", title: "Draughtproofing", summary: "Wall vent observations",
+      items: [{ id: "vents", checkKey: "vents_2027_readiness", prompt: "Are there wall vents that need sealing?",
+        outcome: "does_not_meet", response: { count: 5, limitationStatus: "No limitation", ventType: "Wall grille" } }] }] });
+  const before = structuredClone(snapshot);
+  const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  const drawText = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]);
+  const typeIndex = drawText.indexOf("Wall vent type");
+  const countIndex = drawText.findIndex((line) => line.startsWith("Number of wall vents"));
+  assert.ok(typeIndex >= 0 && countIndex > typeIndex, "The type appears before the quantity with a wall-vent-specific label");
+  assert.equal(drawText[typeIndex + 1], "Wall grille");
+  const countValueIndex = drawText.indexOf("5", countIndex);
+  assert.ok(countValueIndex > countIndex, "The saved quantity follows its full label");
+  assert.equal(drawText.slice(countIndex, countValueIndex).join(" "), "Number of wall vents needing sealing");
+  assert.deepEqual(snapshot, before);
+});
 
 test("the licensed-electrician video-reviewed switchboard stands alone as a complete assessed standard", async () => {
   const assessmentModule = completedModule();
@@ -112,10 +201,21 @@ test("RCAC reports distinguish both proposed quote distances and retain an earli
     else assert.equal(Object.hasOwn(entries, "airconTotalCableMetres"), false, "An old combined total is not invented for new capture");
     const content = pdfText(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
     const drawn = [...content.matchAll(/^(.+) Tj$/gm)].map((match) => match[1]).join(" ");
+    const positionedText = [...content.matchAll(/1 0 0 1 ([\d.]+) ([\d.]+) Tm\s*(.+) Tj/g)]
+      .map((match) => ({ x: Number(match[1]), y: Number(match[2]), text: match[3] }));
+    const labelColumnText = positionedText.filter((entry) => entry.x === 40).map((entry) => entry.text).join(" ");
     for (const [key, label] of [
       ["airconSwitchboardToOutdoorMetres", "Switchboard to proposed outdoor RCAC unit cable run (m)"],
       ["airconOutdoorToIndoorMetres", "Proposed outdoor RCAC unit to indoor unit distance (m)"],
-    ]) assert.ok(drawn.includes(`${label} ${String(entries[key])}`), `${label} has its own actual or explicitly missing value in the rendered PDF`);
+    ]) {
+      assert.ok(labelColumnText.includes(label), `${label} remains complete when wrapped in the label column`);
+      const labelIndex = positionedText.findIndex((entry) => entry.x === 40 && label.startsWith(entry.text));
+      assert.ok(labelIndex >= 0, `${label} starts a labelled row`);
+      const value = positionedText[labelIndex + 1];
+      assert.equal(value.text, String(entries[key]), `${label} has its own actual or explicitly missing value`);
+      assert.equal(value.y, positionedText[labelIndex].y, "The value aligns with the first line of its label");
+      assert.ok(value.x > positionedText[labelIndex].x, "The value remains in the separate value column");
+    }
     if (Object.hasOwn(response, "airconTotalCableMetres")) {
       assert.ok(drawn.includes("Earlier combined RCAC"));
       assert.ok(drawn.includes("22.5"));

@@ -414,6 +414,10 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   keyValue("Assessment provider", branding.issuerLabel);
   if (branding.homestar) keyValue("Commissioned by", branding.commissionerLabel);
   keyValue("Report reference", snapshot.report.number);
+  if (snapshot.report.answerCorrection) {
+    const correction = snapshot.report.answerCorrection;
+    text(`Owner correction: Cooling access changed from ${correction.fromValue} to ${correction.toValue} on ${dateTime(correction.correctedAt)}. The original ${correction.sourceReportNumber} is retained.`, { size: 8.5, lineHeight: 12, after: 8 });
+  }
   keyValue("Prepared for", brief(snapshot.property?.customerName, 85));
   keyValue("New energy standards begin", "1 March 2027; draughtproofing from 1 July 2027");
   rule(7);
@@ -492,7 +496,7 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
     const legacyValues = new Set(Object.values(quotation).map((value) => safe(value).trim()).filter(Boolean));
     for (const [key, value] of rentalReportObservationEntries(assessedItem)) {
       const printable = typeof value === "boolean" ? (value ? "Yes" : "No") : safe(value);
-      if (Object.hasOwn(RENTAL_OBSERVATION_NUMBER_FIELDS, key) || !legacyValues.has(printable.trim())) keyValue(rentalObservationResponseLabel(key), printable, { keyWidth: rentalObservationResponseLabel(key).length > 36 ? 250 : 145 });
+      if (Object.hasOwn(RENTAL_OBSERVATION_NUMBER_FIELDS, key) || !legacyValues.has(printable.trim())) keyValue(rentalObservationResponseLabel(key, assessedItem?.checkKey), printable);
     }
     if (assessedItem?.trigger) keyValue("Future requirement trigger", assessedItem.trigger);
     if (Number(finding.quantityMilli) > 0) keyValue("Quantity", `${Number(finding.quantityMilli) / 1000} ${finding.unitLabel || "each"}`);
@@ -556,12 +560,12 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
         if (item.locationLabel) keyValue("Location", item.locationLabel);
         if (item.publicNotes) keyValue("Assessor comments", item.publicNotes);
         for (const [key, value] of rentalReportObservationEntries(item)) {
-          keyValue(rentalObservationResponseLabel(key), typeof value === "boolean" ? (value ? "Yes" : "No") : value, { keyWidth: rentalObservationResponseLabel(key).length > 36 ? 250 : 145 });
+          keyValue(rentalObservationResponseLabel(key, item.checkKey), typeof value === "boolean" ? (value ? "Yes" : "No") : value);
         }
         const retained = rentalReportRetainedObservationEntries(item);
         if (retained.length) {
           text("Earlier answers retained; these do not apply to the current selection.", { size: 8.3, color: palette.muted });
-          for (const [key, value] of retained) keyValue(`Earlier: ${rentalObservationResponseLabel(key)}`, typeof value === "boolean" ? (value ? "Yes" : "No") : value);
+          for (const [key, value] of retained) keyValue(`Earlier: ${rentalObservationResponseLabel(key, item.checkKey)}`, typeof value === "boolean" ? (value ? "Yes" : "No") : value);
         }
         await evidenceBlock((snapshot.evidence || []).filter((entry) => entry.itemId === item.id));
         y -= 4;

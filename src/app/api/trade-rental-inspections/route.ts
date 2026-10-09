@@ -43,6 +43,8 @@ import {
 } from "@/lib/bounded-json-request";
 import {
   issueRentalAssessmentReport,
+  correctRentalAssessmentReportFormatting,
+  correctRentalAssessmentCoolingAccess,
   recoverRentalAssessmentReport,
   ownerRentalReportPresentation,
   renewRentalReportLink,
@@ -217,6 +219,11 @@ function inspectionError(error: unknown) {
   if (code === "REPORT_DELIVERY_OWNER_REQUIRED") return adminJson({ ok: false, error: "Only the business owner can pause or approve the report email." }, 403);
   if (code === "REPORT_DELIVERY_ALREADY_SENDING") return adminJson({ ok: false, error: "The report email has already started or was sent. It cannot be paused now." }, 409);
   if (code === "REPORT_DELIVERY_REVIEW_CHANGED") return adminJson({ ok: false, error: "The report email review changed. Refresh the assessment before trying again." }, 409);
+  if (code === "RENTAL_REPORT_FORMATTING_OWNER_REQUIRED") return adminJson({ ok: false, error: "Only the business owner can correct the issued report formatting." }, 403);
+  if (code === "REPORT_DELIVERY_REVIEW_REQUIRED") return adminJson({ ok: false, error: "Pause the report email for review before correcting its formatting." }, 409);
+  if (code === "RENTAL_REPORT_FORMATTING_PENDING" || code === "RENTAL_REPORT_FORMATTING_IN_PROGRESS") return adminJson({ ok: false, code, error: "The corrected PDF is being prepared. Refresh shortly to open it; the email is still paused." }, 503);
+  if (code === "RENTAL_REPORT_FORMATTING_CONFLICT") return adminJson({ ok: false, error: "This report changed. Refresh before correcting its formatting." }, 409);
+  if (code === "RENTAL_REPORT_COOLING_ACCESS_INVALID") return adminJson({ ok: false, error: "This report has no single cooling access answer of Not accessed to correct. Refresh and check its saved cooling answer." }, 409);
   if (code === "RENTAL_INSPECTION_LOCKED") return adminJson({ ok: false, error: "This issued assessment is locked and remains in the report history. Start a replacement assessment job if a correction is required." }, 409);
   if (code === "RENTAL_MODULE_NOT_FOUND" || code === "RENTAL_ITEM_NOT_FOUND") return adminJson({ ok: false, error: "The assessment item could not be found." }, 404);
   if (code === "RENTAL_ASSESSMENT_SCOPE_INVALID") return adminJson({ ok: false, error: "Choose a valid rental assessment scope." }, 400);
@@ -458,10 +465,14 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     },
     completion,
     reports,
+    formattingRevisionPending: reports.some((report) => report.status === "staged"),
     deliveryRecipient: context.access.canRunReports ? await rentalReportDeliveryRecipient(context.access.ownerUid, context.workOrderId) : null,
     reportDelivery: context.access.canRunReports ? await rentalReportDeliveryState(context.access.ownerUid, inspectionId) : null,
     deliveryReview: context.access.canRunReports ? await rentalReportDeliveryReview(context.access.ownerUid, inspectionId) : null,
     permissions: {
+      canCorrectReportFormatting: context.access.isOwner && context.access.actorUid === context.access.ownerUid
+        && context.access.canRunReports && context.access.canManageFieldEvidence
+        && String(context.inspection.status) === "issued",
       canManageDeliveryReview: context.access.isOwner && context.access.canRunReports,
       canEdit: context.access.canManageFieldEvidence && !TERMINAL_INSPECTION_STATUSES.has(String(context.inspection.status)),
       canIssue: context.access.memberId === String(context.inspection.assessor_member_id || "")
@@ -1153,11 +1164,31 @@ export async function POST(request: Request) {
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     let context = await contextFor(access, workOrderId);
     const action = cleanAdminText(body.action, 40);
+    if (action === "correct_report_formatting" || action === "correct_cooling_access") {
+      if (!access.isOwner || access.actorUid !== access.ownerUid || !access.canRunReports) throw new Error("RENTAL_REPORT_FORMATTING_OWNER_REQUIRED");
+      const reportId = cleanAdminText(body.reportId, 180);
+      const expectedInspectionRevision = body.expectedInspectionRevision;
+      if (!reportId || typeof expectedInspectionRevision !== "number"
+        || !Number.isInteger(expectedInspectionRevision) || expectedInspectionRevision < 0) {
+        return adminJson({ ok: false, error: "Choose the issued report and refresh its assessment before correcting formatting." }, 400);
+      }
+      if (expectedInspectionRevision !== integer(context.inspection.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
+      const correction = (async () => {
+        const correctReport = action === "correct_cooling_access" ? correctRentalAssessmentCoolingAccess : correctRentalAssessmentReportFormatting;
+        const correctedReport = await correctReport({ access, workOrderId, reportId,
+          expectedInspectionRevision, origin: new URL(request.url).origin });
+        const correctedContext = await contextFor(access, workOrderId);
+        return adminJson({ ok: true, correctedReport, ...(await assessmentPayload(correctedContext, new URL(request.url).origin)) });
+      })();
+      waitUntil(correction);
+      return await correction;
+    }
     if (action === "set_report_delivery_review") {
       if (!access.isOwner || !access.canRunReports) throw new Error("REPORT_DELIVERY_OWNER_REQUIRED");
       if (typeof body.hold !== "boolean") return adminJson({ ok: false, error: "Choose whether to pause or approve the report email." }, 400);
       if (body.expectedInspectionRevision !== integer(context.inspection.revision)) throw new Error("RENTAL_MUTATION_CONFLICT");
-      await setRentalReportDeliveryReview({ access, workOrderId, inspectionId: String(context.inspection.id), hold: body.hold });
+      await setRentalReportDeliveryReview({ access, workOrderId, inspectionId: String(context.inspection.id),
+        expectedInspectionRevision: integer(context.inspection.revision), hold: body.hold });
       return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)) });
     }
     if (action === "revoke_report_link") {

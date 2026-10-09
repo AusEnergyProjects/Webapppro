@@ -1426,8 +1426,8 @@ test('delivery review hold and release use the owner identity and current inspec
         assert.equal(payload.permissions.canIssue, false);
       }
       assert.deepEqual(inputs.map(({ access, ...input }) => ({ ...input, ownerUid: access.ownerUid, actorUid: access.actorUid, memberId: access.memberId, isOwner: access.isOwner })), [
-        { workOrderId: 'job', inspectionId: 'inspection', hold: true, ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true },
-        { workOrderId: 'job', inspectionId: 'inspection', hold: false, ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true },
+        { workOrderId: 'job', inspectionId: 'inspection', expectedInspectionRevision: 1, hold: true, ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true },
+        { workOrderId: 'job', inspectionId: 'inspection', expectedInspectionRevision: 1, hold: false, ownerUid: 'owner', actorUid: 'owner', memberId: 'owner-member', isOwner: true },
       ]);
       assert.equal(issuanceCalls, 0);
       assert.equal(reconciliationCalls, 0);

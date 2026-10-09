@@ -93,7 +93,8 @@ type ReportModule = {
 };
 
 type RentalReport = {
-  report: { number: string; revision: number; issuedAt: string; branding?: string };
+  report: { number: string; revision: number; issuedAt: string; branding?: string;
+    answerCorrection?: { sourceReportNumber: string; field: string; fromValue: string; toValue: string; correctedAt: string } };
   business: { name: string; abn: string; contactName: string; email: string; phone: string; address: string };
   property: { address: string; customerName: string; customerEmail: string; customerPhone: string; buildingType: string };
   inspection: { number: string; rulesEffectiveFrom: string; assessmentDate: string; templateVersion: number; title?: string; assessmentScope?: string; reportBoundary?: string; applicabilityLimitation?: string };
@@ -234,6 +235,7 @@ export function RentalReportViewer({ token }: { token: string }) {
         <h1>{report.property.address}</h1>
         <p>{report.report.number} | revision {report.report.revision}</p>
         <p>{rentalReportScopeText(report)}</p>
+        {report.report.answerCorrection && <p><strong>Owner correction:</strong> Cooling access changed from {report.report.answerCorrection.fromValue} to {report.report.answerCorrection.toValue} on {dateLabel(report.report.answerCorrection.correctedAt, true)}. The original {report.report.answerCorrection.sourceReportNumber} is retained.</p>}
         {branding.homestar && <p className={styles.commissioner}>Assessed by {branding.issuerLabel}. Commissioned by {branding.commissionerLabel}.</p>}
         {report.inspection.applicabilityLimitation && <p><strong>{report.inspection.applicabilityLimitation}</strong></p>}
       </div>
@@ -291,7 +293,9 @@ export function RentalReportViewer({ token }: { token: string }) {
         ...(historicalFindings.length ? [{ trade: "Earlier observations", findings: historicalFindings, historical: true }] : []),
       ].map(({ trade, findings, historical }) => <section className={styles.tradeGroup} key={`${historical}:${trade}`}>
           <header><h3>{trade}</h3><strong>{findings.length} item{findings.length === 1 ? "" : "s"}</strong></header>
-          {findings.map((finding) => <article className={styles.finding} key={finding.id}>
+          {findings.map((finding) => {
+            const assessedItem = report.modules.flatMap((module) => module.sections.flatMap((section) => section.items)).find((item) => item.id === finding.itemId);
+            return <article className={styles.finding} key={finding.id}>
             <div className={styles.findingHeading}><span>{String(findingNumbers.get(finding.id)).padStart(2, "0")}</span><div><small>{historical ? "Earlier observation | Recorded " : ""}{severityLabels[finding.severity] || displayLabel(finding.severity)} | {finding.locationLabel || "Location in assessment"}</small><h4>{finding.title}</h4></div></div>
             <dl>
               <div><dt>{historical ? "Recorded status" : "Status"}</dt><dd>{displayLabel(finding.status)}</dd></div>
@@ -301,7 +305,7 @@ export function RentalReportViewer({ token }: { token: string }) {
               <div className={styles.scopeRow}><dt>{historical ? "Recorded work scope" : "Work required"}</dt><dd>{finding.scopeSummary}</dd></div>
               {RENTAL_QUOTATION_FIELDS.map((field) => rentalQuotation(finding.details.quotation)[field.key] ? <div key={field.key}><dt>{field.label}</dt><dd>{rentalQuotation(finding.details.quotation)[field.key]}</dd></div> : null)}
               {finding.quantityMilli > 0 && <div><dt>Quantity</dt><dd>{finding.quantityMilli / 1000} {finding.unitLabel}</dd></div>}
-              {rentalReportObservationEntries(report.modules.flatMap((module) => module.sections.flatMap((section) => section.items)).find((item) => item.id === finding.itemId)).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}
+              {rentalReportObservationEntries(assessedItem).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key, assessedItem?.checkKey)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}
               {finding.standardReference && <div><dt>Reference</dt><dd>{finding.standardReference}</dd></div>}
               {finding.severity === "immediate_safety_risk" && <>
                 <div className={styles.dangerRow}><dt>Immediate action</dt><dd>{String(finding.details.immediateAction || "Not recorded")}</dd></div>
@@ -310,7 +314,7 @@ export function RentalReportViewer({ token }: { token: string }) {
               </>}
             </dl>
             <EvidenceGallery entries={report.evidence.filter((entry) => entry.findingId === finding.id || entry.itemId === finding.itemId)} standards={itemStandards} />
-          </article>)}
+          </article>; })}
         </section>)}
       {resolvedFindings.length > 0 && <section className={styles.tradeGroup}>
         <header><h3>Resolved finding history</h3><strong>{resolvedFindings.length} item{resolvedFindings.length === 1 ? "" : "s"}</strong></header>
@@ -351,8 +355,8 @@ export function RentalReportViewer({ token }: { token: string }) {
               {answer.context && <p>{answer.context}</p>}
               {item.trigger && <p>Applies when: {item.trigger}</p>}
               {item.publicNotes && <p className={styles.assessorComment}><strong>Assessor comments: </strong>{item.publicNotes}</p>}
-              {rentalReportObservationEntries(item).length > 0 && <dl>{rentalReportObservationEntries(item).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>}
-              {rentalReportRetainedObservationEntries(item).length > 0 && <details><summary>Earlier answers retained</summary><p>These answers do not apply to the current selection.</p><dl>{rentalReportRetainedObservationEntries(item).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl></details>}
+              {rentalReportObservationEntries(item).length > 0 && <dl>{rentalReportObservationEntries(item).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key, item.checkKey)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl>}
+              {rentalReportRetainedObservationEntries(item).length > 0 && <details><summary>Earlier answers retained</summary><p>These answers do not apply to the current selection.</p><dl>{rentalReportRetainedObservationEntries(item).map(([key, value]) => <div key={key}><dt>{rentalObservationResponseLabel(key, item.checkKey)}</dt><dd>{typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>)}</dl></details>}
               <EvidenceGallery entries={report.evidence.filter((entry) => entry.itemId === item.id)} standards={itemStandards} />
             </article>; })}</div>
           </details>)}

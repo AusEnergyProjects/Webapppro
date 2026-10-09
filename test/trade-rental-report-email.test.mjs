@@ -39,6 +39,9 @@ class TestD1Statement {
   }
 
   async run() {
+    const before = this.hooks.beforeRun;
+    this.hooks.beforeRun = null;
+    if (before) await before();
     const result = this.runSync();
     const callback = this.hooks.afterRun;
     this.hooks.afterRun = null;
@@ -49,12 +52,13 @@ class TestD1Statement {
 
 function testD1(database) {
   let beforeBatch = null;
-  const hooks = { afterRun: null };
+  const hooks = { beforeRun: null, afterRun: null };
   return {
     prepare(sql) {
       return new TestD1Statement(database, sql, [], hooks);
     },
     setAfterRun(callback) { hooks.afterRun = callback; },
+    setBeforeRun(callback) { hooks.beforeRun = callback; },
     setBeforeBatch(callback) {
       beforeBatch = callback;
     },
@@ -98,11 +102,11 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active", provi
  CREATE TABLE trade_crm_job_details(work_order_id text,firebase_uid text,crm_customer_id text,customer_source text);
  CREATE TABLE trade_crm_customers(id text,firebase_uid text,email text,first_name text,last_name text,business_name text,record_status text);
  CREATE TABLE trade_rental_reports(id text,firebase_uid text,inspection_id text,status text,report_number text,pdf_sha256 text);
- CREATE TABLE trade_rental_inspections(id text PRIMARY KEY,firebase_uid text,work_order_id text,status text,issued_report_id text,assessor_member_id text);
+ CREATE TABLE trade_rental_inspections(id text PRIMARY KEY,firebase_uid text,work_order_id text,status text,issued_report_id text,assessor_member_id text,revision integer DEFAULT 1);
  INSERT INTO trade_work_orders VALUES('job','owner','installer','active','internal');
  INSERT INTO trade_crm_job_details VALUES('job','owner','customer','trade_owned');
  INSERT INTO trade_crm_customers VALUES('customer','owner','jane@example.test','Jane','Smith','','active');
- INSERT INTO trade_rental_inspections VALUES('inspection','owner','job','issued','report','worker');
+ INSERT INTO trade_rental_inspections VALUES('inspection','owner','job','issued','report','worker',1);
  INSERT INTO trade_rental_reports VALUES('report','owner','inspection','issued','RMS-123','hash');`);
  const migration = read('../drizzle/0160_trade_rental_inspections.sql');
  database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
@@ -115,7 +119,7 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active", provi
  '@/lib/trade-email-server':{tradeCustomerEmailReadiness:async(ownerUid)=>{assert.equal(ownerUid,'owner');return{configured,provider,from:'team@trade.example'};},sendTradeCustomerEmail:async(ownerUid,actorUid,input,options)=>{assert.equal(ownerUid,'owner');assert.equal(actorUid,'actor');sent.push(input);sendOptions.push(options);await hooks.beforeSend?.();if(shouldFail)throw indeterminate ? new ReminderProviderDeliveryError('indeterminate','unknown') : new Error('rejected');return{provider,providerMessageId:'message'};}},
  });
  const input={access:{ownerUid:'owner',actorUid:'actor',memberId:'worker',canRunReports:true,isOwner:false},workOrderId:'job',inspectionId:'inspection',reportId:'report',expectedRecipientEmail:'JANE@EXAMPLE.TEST',origin:'https://example.test'};
- const reviewInput={access:{...input.access,isOwner:true,actorUid:'owner'},workOrderId:'job',inspectionId:'inspection',hold:true};
+ const reviewInput={access:{...input.access,isOwner:true,actorUid:'owner'},workOrderId:'job',inspectionId:'inspection',hold:true,expectedInspectionRevision:1};
  return{database,db,sent,sendOptions,hooks,assignedCalls,input,reviewInput,api,send:()=>api.emailRentalAssessmentReport(input),allowSend:()=>{shouldFail=false;},hold:(hold=true)=>api.setRentalReportDeliveryReview({...reviewInput,hold})};
 }
 
@@ -152,8 +156,56 @@ test('explicit owner approval releases the review and emails the exact issued re
  const receipt=await f.api.rentalReportDeliveryState('owner','inspection');assert.equal(receipt.status,'accepted');assert.equal(receipt.reportId,'report');
 });
 
+test('owner approval keeps delivery held while this inspection has a staged formatting revision',async()=>{
+ const f=fixture();await f.hold();
+ f.database.exec("INSERT INTO trade_rental_reports VALUES('corrected-report','owner','inspection','staged','RMS-123-R2','corrected-hash')");
+ await assert.rejects(()=>f.hold(false),/RENTAL_REPORT_FORMATTING_IN_PROGRESS/);
+ assert.equal((await f.api.rentalReportDeliveryReview('owner','inspection')).status,'held');
+ assert.equal(f.database.prepare("SELECT count(*) n FROM trade_rental_inspection_events WHERE event_type='report_email_review_released'").get().n,0);
+ assert.equal((await f.send()).status,'held');assert.equal(f.sent.length,0);
+});
+
+test('owner review requires a strict current inspection revision before accessing or changing review state',async()=>{
+ for(const expectedInspectionRevision of [undefined,null,'1',0,-1,1.5,Number.MAX_SAFE_INTEGER+1,2]){
+  const f=fixture();
+  await assert.rejects(()=>f.api.setRentalReportDeliveryReview({...f.reviewInput,expectedInspectionRevision}),/REPORT_DELIVERY_REVIEW_CHANGED/);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_events').get().n,0);
+  assert.equal(f.sent.length,0);
+  if(!Number.isSafeInteger(expectedInspectionRevision)||expectedInspectionRevision<1)assert.equal(f.assignedCalls.length,0);
+ }
+});
+
+test('a correction committing immediately before owner approval cannot release email for an unreviewed PDF revision',async()=>{
+ const f=fixture();await f.hold();
+ f.database.exec("INSERT INTO trade_rental_reports VALUES('corrected-report','owner','inspection','issued','RMS-123-R2','corrected-hash')");
+ f.db.setBeforeRun(()=>f.database.exec("UPDATE trade_rental_inspections SET issued_report_id='corrected-report',revision=2 WHERE id='inspection'"));
+ await assert.rejects(()=>f.hold(false),/REPORT_DELIVERY_REVIEW_CHANGED/);
+ assert.equal((await f.api.rentalReportDeliveryReview('owner','inspection')).status,'held');
+ assert.equal(f.database.prepare("SELECT count(*) n FROM trade_rental_inspection_events WHERE event_type='report_email_review_released'").get().n,0);
+ f.input.reportId='corrected-report';
+ assert.equal((await f.send()).status,'held');assert.equal(f.sent.length,0);
+});
+
+test('a stale idempotent review cannot return a matching old held or released state after the revision changes',async()=>{
+ for(const hold of [true,false]){
+  const f=fixture();await f.hold();if(!hold)await f.hold(false);
+  const eventsBefore=f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_events').get().n;
+  f.db.setBeforeRun(()=>f.database.exec("UPDATE trade_rental_inspections SET revision=2 WHERE id='inspection'"));
+  await assert.rejects(()=>f.hold(hold),/REPORT_DELIVERY_REVIEW_CHANGED/);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_events').get().n,eventsBefore);
+  assert.equal((await f.api.rentalReportDeliveryReview('owner','inspection')).status,hold?'held':'released');
+ }
+});
+
+test('a staged revision for another inspection does not block owner approval of this report',async()=>{
+ const f=fixture();await f.hold();
+ f.database.exec("INSERT INTO trade_rental_reports VALUES('other-corrected-report','owner','other-inspection','staged','OTHER-R2','other-hash')");
+ assert.equal((await f.hold(false)).status,'released');
+ assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,1);
+});
+
 test('review does not become a default hold for another inspection or business',async()=>{
- const f=fixture();f.database.exec("INSERT INTO trade_rental_inspections VALUES('other-inspection','owner','other-job','issued','other-report','worker')");
+ const f=fixture();f.database.exec("INSERT INTO trade_rental_inspections VALUES('other-inspection','owner','other-job','issued','other-report','worker',1)");
  await f.hold();assert.equal(await f.api.rentalReportDeliveryReview('owner','other-inspection'),null);
  assert.equal(await f.api.rentalReportDeliveryReview('other-owner','inspection'),null);
 });
@@ -235,7 +287,7 @@ test('report email stays within the production 50-byte LIKE pattern limit', asyn
 
 test('delivery history ignores adjacent prefixes and different owner, inspection or report identities', async () => {
  const f=fixture();
- f.database.exec("INSERT INTO trade_rental_inspections VALUES('other-inspection','owner','other-job','issued','report','worker')");
+ f.database.exec("INSERT INTO trade_rental_inspections VALUES('other-inspection','owner','other-job','issued','report','worker',1)");
  const hash=(value)=>createHash('sha256').update(value).digest('hex');
  const prefix=`report-email:${hash(`rental-report-email|owner|report|hash|${hash('jane@example.test')}`)}`;
  const insert=f.database.prepare(`INSERT INTO trade_rental_inspection_events
