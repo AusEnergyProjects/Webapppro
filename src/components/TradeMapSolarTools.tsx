@@ -21,6 +21,7 @@ const EMPTY_LAYOUT: SolarLayout = { panels: [], selectedId: null, selectionMode:
 export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDesign, api, map, active, disabled, onActivate, onClose, onCapturing, onQuote }: Props) {
   const fetch = useTradeBusinessFetch();
   const controller = useRef<ReturnType<typeof createTradeMapSolarLayout> | null>(null);
+  const startedDesign = useRef(false);
   const capture = useRef<AbortController | null>(null);
   const [layout, setLayout] = useState<SolarLayout>(EMPTY_LAYOUT);
   const [width, setWidth] = useState(String(DEFAULT_SOLAR_EQUIPMENT.widthM));
@@ -86,6 +87,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
   }, [fetch, user, onQuote]);
 
   const restoreDesign = useCallback((design: SolarDesign) => {
+    startedDesign.current = true;
     accept(design); setTitle(design.title); setLinks({ customerId: design.customerId, workOrderId: design.workOrderId });
     setEquipment(design.equipment); setNotes(design.installationNotes); setPanelModel(design.panels[0]?.equipment ?? null);
     controller.current?.restore(design.panels); map.setCenter(design.center); map.setZoom(design.zoom);
@@ -97,7 +99,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
   }
   useEffect(() => {
     // An empty started design still needs saving if its first autosave is pending.
-    if (!layout.panels.length && !persistence.design && !title) return;
+    if (!layout.panels.length && !persistence.design && !startedDesign.current) return;
     const center = map.getCenter()?.toJSON();
     if (!center) return;
     update({ title: title.trim() || context?.title.slice(0, 180) || "Roof design", panels: layout.panels, equipment,
@@ -115,6 +117,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
     if (!validSolarPanelSize(size)) { setMessage("Use a panel width and length between 0.2 and 4 metres."); return; }
     if (!validSolarPanelTilt(size)) { setMessage("Use a length and width tilt between 0° and 85°."); return; }
     if (layout.panels.length >= 500) { setMessage("This design has reached 500 panels. Start another design for the next roof."); return; }
+    startedDesign.current = true;
     if (!layout.panels.length && !persistence.design) {
       setTitle(context?.title.slice(0, 180) || `Roof design ${new Date().toLocaleDateString("en-AU")}`);
       setLinks({ customerId: context?.customerId ?? "", workOrderId: context?.workOrderId ?? "" });
@@ -160,7 +163,7 @@ export function TradeMapSolarTools({ user, onRegisterMapSave, context, linkedDes
   async function newDesign() {
     setSavedLoading(true);
     try {
-      await ensureSaved(); accept(null); setTitle(""); setLinks({ customerId: "", workOrderId: "" }); setNotes(""); setEquipment([]);
+      await ensureSaved(); startedDesign.current = false; accept(null); setTitle(""); setLinks({ customerId: "", workOrderId: "" }); setNotes(""); setEquipment([]);
       controller.current?.restore([]); setSavedOpen(false); setMessage("");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Save this design before starting another."); }
     finally { setSavedLoading(false); }

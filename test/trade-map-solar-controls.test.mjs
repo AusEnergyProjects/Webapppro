@@ -75,10 +75,14 @@ test("deleting the last panel updates the saved design with empty geometry", t =
   assert.deepEqual(h.saves.at(-1).panels, []); assert.equal(button(h.render(), "Delete panel").props.disabled, true);
 });
 
-test("a new design cleared before its first autosave still saves the empty layout", t => {
+for (const clearName of [false, true]) test(`a new design cleared before its first autosave saves empty geometry${clearName ? " even without a name" : ""}`, t => {
   const h = harness(t, {}, null); assert.equal(h.saves.length, 0, "untouched empty maps create no record");
   button(h.render(), "Add solar panel").props.onClick(); h.setLayout(layout("one", [1], [panel(1)])); h.render();
   assert.equal(h.saves.at(-1).panels.length, 1);
+  if (clearName) {
+    const nameLabel = nodes(h.render(), node => node.type === "label" && text(node).startsWith("Design name"))[0];
+    nodes(nameLabel, node => node.type === "input")[0].props.onChange({ target: { value: "" } }); h.render();
+  }
   button(h.render(), "Delete panel").props.onClick(); h.setLayout(layout("one", [], [])); h.render();
   assert.deepEqual(h.saves.at(-1).panels, []);
 });
