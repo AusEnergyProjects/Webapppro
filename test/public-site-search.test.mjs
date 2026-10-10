@@ -55,6 +55,16 @@ test("predictive search ranks common customer wording and misspellings", () => {
     ["home energy journey", "/platform"],
     ["trade crm", "/direct-trade/for-trades"],
     ["council dashboard", "/direct-trade/for-councils"],
+    ["dmegc", "/guides/products/solar"],
+    ["tongwei", "/guides/products/solar"],
+    ["sunpower", "/guides/products/solar"],
+    ["istore", "/guides/products/hot-water"],
+    ["econova", "/guides/products/hot-water"],
+    ["heat pump noise", "/guides/products/hot-water"],
+    ["evnex", "/guides/products/ev-chargers"],
+    ["ocular", "/guides/products/ev-chargers"],
+    ["schneider charge", "/guides/products/ev-chargers"],
+    ["tesla wall connector", "/guides/products/ev-chargers"],
   ];
 
   for (const [query, expectedPath] of cases) {

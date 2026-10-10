@@ -37,14 +37,22 @@
     },
     "measurements": {
       "cost": null,
-      "efficiency": null,
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
         "variant": "Emerald Multi Pro 12.6 kW",
         "basis": "Pro/Ultra included seven-year goods/parts cover across the system, before optional registration extension; labour five years.",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 12.6,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "ACR126U",
+        "basis": "Manufacturer rated outdoor cooling, not the sum of connected room-unit capacity labels. Actual room combinations must be approved.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf",
         "checkedAt": "2026-10-10"
       }
     },
@@ -107,7 +115,13 @@
     ],
     "cons": [
       "Phone control requires the optional AC Link accessory."
-    ]
+    ],
+    "measurementGaps": {
+      "cost": {
+        "reason": "Indoor units are not specified as a complete package, and a public before-rebate equipment price was not confirmed.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
+      }
+    }
   },
   {
     "id": "emerald-multi-ultra-18",
@@ -147,14 +161,22 @@
     },
     "measurements": {
       "cost": null,
-      "efficiency": null,
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
         "variant": "Emerald Multi Ultra 18.1 kW",
         "basis": "Pro/Ultra included seven-year goods/parts cover across the system, before optional registration extension; labour five years.",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 18.1,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "ACV180U",
+        "basis": "Manufacturer rated outdoor cooling, not the sum of connected room-unit capacity labels. Actual room combinations must be approved.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf",
         "checkedAt": "2026-10-10"
       }
     },
@@ -218,7 +240,13 @@
     "cons": [
       "Needs at least two indoor units, so it cannot serve just one room.",
       "Phone control requires the optional AC Link accessory."
-    ]
+    ],
+    "measurementGaps": {
+      "cost": {
+        "reason": "Indoor units are not specified as a complete package, and a public before-rebate equipment price was not confirmed.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
+      }
+    }
   },
   {
     "id": "emerald-multi-ultra-20",
@@ -258,14 +286,22 @@
     },
     "measurements": {
       "cost": null,
-      "efficiency": null,
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
         "variant": "Emerald Multi Ultra 20 kW",
         "basis": "Pro/Ultra included seven-year goods/parts cover across the system, before optional registration extension; labour five years.",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/12/2025.12-Air-Con-Warranty-Document.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 20,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "ACV200U",
+        "basis": "Manufacturer rated outdoor cooling, not the sum of connected room-unit capacity labels. Actual room combinations must be approved.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf",
         "checkedAt": "2026-10-10"
       }
     },
@@ -329,11 +365,17 @@
     "cons": [
       "The outdoor box is 1.65 metres tall and 1.25 metres wide.",
       "Phone control requires the optional AC Link accessory."
-    ]
+    ],
+    "measurementGaps": {
+      "cost": {
+        "reason": "Indoor units are not specified as a complete package, and a public before-rebate equipment price was not confirmed.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
+      }
+    }
   },
   {
     "id": "rinnai-multi-px",
-    "name": "Rinnai Multi with PX room units",
+    "name": "Rinnai PX three-room kit, MON3H07B1LA + 3 HINRPX25M",
     "brand": "Rinnai",
     "checkedAt": "2026-10-10",
     "sources": [
@@ -354,73 +396,121 @@
         "url": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf",
         "kind": "Australian Government energy-rating guidance",
         "revision": "October 2022"
+      },
+      {
+        "title": "Public Australian equipment listing",
+        "url": "https://gphvac.com.au/product/rin-mon3h07b1la/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current public equipment listing checked 10 October 2026"
+      },
+      {
+        "title": "Approved exact PX room-unit combination table",
+        "url": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current manufacturer linked table; exact three-room rated simultaneous output"
+      },
+      {
+        "title": "Current residential main equipment warranty",
+        "url": "https://a.storyblok.com/f/293064688899482/e2c0c3efaa/ac-all-models-2512-war.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Printed April 2025; current linked 2512 filename"
+      },
+      {
+        "title": "Exact indoor equipment component listing",
+        "url": "https://gphvac.com.au/product/rin-hinrpx25m/",
+        "kind": "Australian public retailer component listing",
+        "revision": "Current HINRPX25M equipment-only listing, inclusive and exclusive GST shown"
       }
     ],
     "image": {
       "src": "/products/multi-split/rinnai-multi-px.webp",
-      "alt": "Rinnai PX indoor wall unit for the current multi-split range; outdoor unit and additional room units supplied separately",
+      "alt": "Rinnai PX wall-mounted indoor unit, representative range photo; selected kit has three HINRPX25M heads and one MON3H07B1LA outdoor unit.",
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/e7913b544b/ac-split-px-series-front-ima.png"
     },
     "measurements": {
-      "cost": null,
-      "efficiency": null,
-      "warranty": null
+      "cost": {
+        "value": 2673,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "MON3H07B1LA outdoor + 3 x HINRPX25M indoor units with standard supplied controllers",
+        "basis": "Complete manufacturer-approved combination equipment cost including GST, before rebates and excluding installation, piping and separately sold accessories. Bill of materials sums the exact public GST-inclusive outdoor listing and three exact indoor-unit listings; mandatory standard controllers are supplied with the heads.",
+        "sourceUrl": "https://gphvac.com.au/product/rin-mon3h07b1la/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MON3H07B1LA + 3 x HINRPX25M",
+        "basis": "Seven-year residential main refrigerated air-conditioning parts and labour term. Wi-Fi devices have a separate one-year warranty; installation and misuse exclusions remain applicable.",
+        "sourceUrl": "https://a.storyblok.com/f/293064688899482/e2c0c3efaa/ac-all-models-2512-war.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 7.1,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "MON3H07B1LA + 3 x HINRPX25M",
+        "basis": "Manufacturer approved three-room combination table rated simultaneous cooling output, not the sum of room-unit labels or a generic outdoor maximum.",
+        "sourceUrl": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf",
+        "checkedAt": "2026-10-10"
+      }
     },
     "freshness": {
-      "generation": "MON outdoor systems with HINRPX current PX wall heads",
+      "generation": "MON3H07B1LA outdoor with three HINRPX25M wall-mounted indoor units",
       "released": null,
       "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf",
       "note": "Currently listed by the Australian manufacturer. First release date is unverified; document revision is not launch evidence."
     },
     "technicalSpecs": [
       {
-        "label": "Outdoor choices",
-        "value": "MON2H05B1LA through MON6H19B1TA; two to six heads",
-        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+        "label": "Exact complete equipment combination",
+        "value": "MON3H07B1LA outdoor + 3 HINRPX25M wall-mounted indoor units.",
+        "sourceUrl": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf"
       },
       {
-        "label": "Outdoor example",
-        "value": "MON3H07B1LA: three heads, 7.2 kW cooling / 7.3 kW heating",
-        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+        "label": "Rooms served",
+        "value": "Three indoor units; each room has its own control.",
+        "sourceUrl": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf"
       },
       {
-        "label": "Current indoor heads",
-        "value": "HINRPX20M / 25M / 35M / 50M / 60M / 70M / 80M",
-        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+        "label": "Simultaneous cooling / heating",
+        "value": "7.10 / 7.24 kW in the approved three-room combination table.",
+        "sourceUrl": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf"
+      },
+      {
+        "label": "Room-unit labels",
+        "value": "Three HINRPX25M units; shared simultaneous output differs from adding their individual size labels.",
+        "sourceUrl": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf"
       },
       {
         "label": "Refrigerant",
-        "value": "R32",
+        "value": "R32.",
         "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
       },
       {
-        "label": "Controls",
-        "value": "PX wall heads: built-in Wi-Fi; other head styles differ",
+        "label": "Phone control",
+        "value": "Built-in Wi-Fi on the selected PX wall units.",
         "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
       },
       {
-        "label": "Matching requirement",
-        "value": "Complete indoor/outdoor combination must be approved for the design",
-        "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+        "label": "Main equipment fault cover",
+        "value": "Seven years residential parts and labour.",
+        "sourceUrl": "https://a.storyblok.com/f/293064688899482/e2c0c3efaa/ac-all-models-2512-war.pdf"
       },
       {
-        "label": "System parts / labour",
-        "value": "Seven years residential",
-        "sourceUrl": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf"
+        "label": "Separate Wi-Fi cover",
+        "value": "Wi-Fi devices have a one-year term; confirm built-in module scope.",
+        "sourceUrl": "https://a.storyblok.com/f/293064688899482/e2c0c3efaa/ac-all-models-2512-war.pdf"
       },
       {
-        "label": "Shorter control cover",
-        "value": "Wi-Fi devices listed at one year; built-in module scope needs confirmation",
-        "sourceUrl": "https://www.rinnai.com.au/documents/e2c0c3efaa/ac-all-models-2512-war.pdf"
-      },
-      {
-        "label": "Efficiency boundary",
-        "value": "No complete matched-head climate rating verified; outdoor figures are not scored",
-        "sourceUrl": "https://www.energyrating.gov.au/sites/default/files/2022-12/fact_sheet_ac_multi-split_unit.pdf"
+        "label": "Equipment price scope",
+        "value": "Outdoor unit plus all three exact room units and standard controllers; installation and piping excluded.",
+        "sourceUrl": "https://gphvac.com.au/product/rin-mon3h07b1la/"
       }
     ],
     "pros": [
-      "Up to six room units share one outdoor box.",
+      "Three rooms share one outdoor box.",
       "Separate room controls let you condition only the rooms you are using.",
       "PX wall units include phone control without a separate Wi-Fi accessory."
     ],
@@ -454,6 +544,30 @@
         "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
         "kind": "Manufacturer Australian information",
         "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MXZ-2F52VF-A1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-5-2kw-multi-head-outdoor-unit-only-mxz-2f52vf-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP25VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-2-5kw-multi-indoor-unit-only-msz-ap25vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current AU outdoor variant specifications",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/04/Multi-Split-Systems-Air-Conditioning-Brochure-2023.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current maker AU brochure lists VF-A1 and VGD-A1 alternatives"
       }
     ],
     "brand": "Mitsubishi Electric",
@@ -472,14 +586,31 @@
       "Outdoor quiet mode reduces the heating or cooling power available."
     ],
     "measurements": {
-      "cost": null,
-      "efficiency": null,
+      "cost": {
+        "value": 2573.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x MXZ-2F52VF-A1 + 2 x MSZ-AP25VGKD2-A2",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Same-generation range cost reference; this selected outdoor variant may cost differently.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-5-2kw-multi-head-outdoor-unit-only-mxz-2f52vf-a1",
+        "checkedAt": "2026-10-10",
+        "referenceFor": "1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2"
+      },
+      "capacity": {
+        "value": 5.2,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "checkedAt": "2026-10-10"
+      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
-        "basisId": "included-all-parts",
-        "variant": "MXZFAPVGKDKIT52A: MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
-        "basis": "Five-year residential manufacturing-defect parts cover across the listed indoor and outdoor units; labour is separately five years.",
+        "basisId": "main-product-parts",
+        "variant": "1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
         "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
         "checkedAt": "2026-10-10"
       }
@@ -487,48 +618,43 @@
     "technicalSpecs": [
       {
         "label": "Exact equipment combination",
-        "value": "MXZFAPVGKDKIT52A: 1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
+        "value": "1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
       },
       {
-        "label": "Number of rooms",
-        "value": "Two selected high-wall room units",
+        "label": "Selected room units",
+        "value": "2 high-wall room units, with handheld controls",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
       },
       {
-        "label": "Cooling in this selected combination",
-        "value": "2.6 kW per room; not the standalone rating of each head",
+        "label": "Rated system cooling output",
+        "value": "5.2 kW; shared outdoor output, not the sum of room labels",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
       },
       {
-        "label": "Outdoor rated cooling output",
-        "value": "5.2 kW",
-        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/"
-      },
-      {
-        "label": "Phone and handheld controls",
-        "value": "Built-in Wi-Fi and remote controllers included in this kit",
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld remote in each selected AP room unit",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
       },
       {
-        "label": "Room settings",
-        "value": "Individual temperatures; all operating rooms must use the same heat/cool mode",
-        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/"
-      },
-      {
-        "label": "Outdoor quiet mode",
-        "value": "Available; reduces heating/cooling output",
+        "label": "Refrigerant",
+        "value": "R32",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
       },
       {
-        "label": "Outdoor size, height x width x depth",
-        "value": "710 x 840 x 330 mm",
-        "sourceUrl": "https://www.mitsubishielectric.com.au/product/mxz-2f52vgd-a1-2-port-multi-split-air-conditioner/"
-      },
-      {
-        "label": "Parts cover",
-        "value": "Five years residential manufacturing-defect cover; installation is separate",
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
         "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      },
+      {
+        "label": "Manufacturer kit code",
+        "value": "MXZFAPVGKDKIT52A",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Range cost reference",
+        "value": "1 x MXZ-2F52VF-A1 + 2 x MSZ-AP25VGKD2-A2; the selected outdoor variant may cost differently.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-5-2kw-multi-head-outdoor-unit-only-mxz-2f52vf-a1"
       }
     ],
     "freshness": {
@@ -554,6 +680,24 @@
         "url": "https://www.mhiaa.com.au/latest-news/page/2/",
         "kind": "Manufacturer Australian information",
         "revision": "8 November 2024; dated maker news index remains indexed, current GET unavailable"
+      },
+      {
+        "title": "Current equipment component: SCM40ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-4kw-multi-head-outdoor-unit-only-scm40zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK06ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-2kw-multi-head-avanti-indoor-unit-only-srk20zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
       }
     ],
     "brand": "Mitsubishi Heavy Industries",
@@ -572,14 +716,30 @@
       "The special allergen-cleaning cycle does not work in this multi-room combination."
     ],
     "measurements": {
-      "cost": null,
-      "efficiency": null,
+      "cost": {
+        "value": 2481.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM40ZS-W + 2 x DXK06ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-4kw-multi-head-outdoor-unit-only-scm40zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 4,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM40ZS-W + 2 x DXK06ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
-        "basisId": "included-all-parts",
-        "variant": "SCM40ZS-W + 2 x DXK06ZSA-WF1",
-        "basis": "Manufacturer multi-split brochure lists five-year parts and labour cover for the indoor and outdoor product.",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM40ZS-W + 2 x DXK06ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
         "checkedAt": "2026-10-10"
       }
@@ -591,43 +751,33 @@
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
       },
       {
-        "label": "Number of rooms",
-        "value": "Two room units; this outdoor unit accepts two only",
+        "label": "Selected room units",
+        "value": "2 high-wall room units, with handheld controls",
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
       },
       {
-        "label": "Outdoor rated cooling/heating output",
-        "value": "4.0 / 4.5 kW; room output changes with the selected combination",
+        "label": "Rated system cooling output",
+        "value": "4 kW; shared outdoor output, not the sum of room labels",
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
       },
       {
-        "label": "Selected indoor size, height x width x depth",
-        "value": "290 x 870 x 230 mm per room unit",
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
       },
       {
-        "label": "Phone control",
-        "value": "Built-in Wi-Fi in both selected WF1 room units",
+        "label": "Refrigerant",
+        "value": "R32",
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
       },
       {
-        "label": "Household supply",
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
         "value": "Single-phase 240 V, 50 Hz",
-        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
-      },
-      {
-        "label": "Pipe length limit",
-        "value": "25 m to one room; 30 m total for SCM40ZS-W",
-        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
-      },
-      {
-        "label": "Allergen-cleaning cycle",
-        "value": "Invalid in SCM multi-split operation; pressing that button stops the receiving room unit",
-        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
-      },
-      {
-        "label": "Parts and labour",
-        "value": "Five years; installation is separate",
         "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
       }
     ],
@@ -636,6 +786,2380 @@
       "released": "2024-11-08",
       "sourceUrl": "https://www.mhiaa.com.au/latest-news/page/2/",
       "note": "The indexed maker news dates the Avanti WF1 control update. SCM40ZS-W is the existing compatible outdoor unit, not a newly launched 2024 outdoor generation."
+    }
+  },
+  {
+    "id": "me-ap-multi-kit-71a",
+    "name": "Mitsubishi Electric AP 3-room 7.1 kW kit 71A",
+    "brand": "Mitsubishi Electric",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "April2025 exact named kit flyer; selected updated built-in Wi-Fi AP room units"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MXZ-4F71VGD-A1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-7-1kw-multi-head-outdoor-unit-only-mxz-4f71vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP25VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-2-5kw-multi-indoor-unit-only-msz-ap25vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current AU outdoor variant specifications",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/04/Multi-Split-Systems-Air-Conditioning-Brochure-2023.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current maker AU brochure lists VF-A1 and VGD-A1 alternatives"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ap.webp",
+      "alt": "Mitsubishi Electric AP room unit; representative AP range photograph, outdoor unit and other selected room units not pictured",
+      "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4046.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x MXZ-4F71VGD-A1 + 3 x MSZ-AP25VGKD2-A2",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-7-1kw-multi-head-outdoor-unit-only-mxz-4f71vgd-a1",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 7.1,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x MXZ-4F71VGD-A1 + 3 x MSZ-AP25VGKD2-A2",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x MXZ-4F71VGD-A1 + 3 x MSZ-AP25VGKD2-A2",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x MXZ-4F71VGD-A1 + 3 x MSZ-AP25VGKD2-A2",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "3 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "7.1 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld remote in each selected AP room unit",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      },
+      {
+        "label": "Manufacturer kit code",
+        "value": "MXZFAPVGKDKIT71A",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      }
+    ],
+    "pros": [
+      "3 rooms share one outdoor unit, reducing equipment outside your home.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "Operating rooms must all heat or all cool at the same time."
+    ],
+    "freshness": {
+      "generation": "MXZ-4F71VGD-A1 with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "me-ap-multi-kit-80a",
+    "name": "Mitsubishi Electric AP 4-room 8 kW kit 80A",
+    "brand": "Mitsubishi Electric",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "April2025 exact named kit flyer; selected updated built-in Wi-Fi AP room units"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MXZ-4F80VGD-A1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-8kw-multi-head-outdoor-unit-only-mxz-4f80vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP25VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-2-5kw-multi-indoor-unit-only-msz-ap25vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current AU outdoor variant specifications",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/04/Multi-Split-Systems-Air-Conditioning-Brochure-2023.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current maker AU brochure lists VF-A1 and VGD-A1 alternatives"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ap.webp",
+      "alt": "Mitsubishi Electric AP room unit; representative AP range photograph, outdoor unit and other selected room units not pictured",
+      "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4736.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x MXZ-4F80VGD-A1 + 4 x MSZ-AP25VGKD2-A2",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-8kw-multi-head-outdoor-unit-only-mxz-4f80vgd-a1",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 8,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x MXZ-4F80VGD-A1 + 4 x MSZ-AP25VGKD2-A2",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x MXZ-4F80VGD-A1 + 4 x MSZ-AP25VGKD2-A2",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x MXZ-4F80VGD-A1 + 4 x MSZ-AP25VGKD2-A2",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "8 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld remote in each selected AP room unit",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      },
+      {
+        "label": "Manufacturer kit code",
+        "value": "MXZFAPVGKDKIT80A",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      }
+    ],
+    "pros": [
+      "4 rooms share one outdoor unit, reducing equipment outside your home.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "Operating rooms must all heat or all cool at the same time."
+    ],
+    "freshness": {
+      "generation": "MXZ-4F80VGD-A1 with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "me-ap-multi-kit-80b",
+    "name": "Mitsubishi Electric AP 3-room 8 kW kit 80B",
+    "brand": "Mitsubishi Electric",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "April2025 exact named kit flyer; selected updated built-in Wi-Fi AP room units"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MXZ-4F80VGD-A1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-8kw-multi-head-outdoor-unit-only-mxz-4f80vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP25VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-2-5kw-multi-indoor-unit-only-msz-ap25vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP35VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-multi-indoor-unit-only-msz-ap35vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current AU outdoor variant specifications",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/04/Multi-Split-Systems-Air-Conditioning-Brochure-2023.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current maker AU brochure lists VF-A1 and VGD-A1 alternatives"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ap.webp",
+      "alt": "Mitsubishi Electric AP room unit; representative AP range photograph, outdoor unit and other selected room units not pictured",
+      "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4347.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x MXZ-4F80VGD-A1 + 2 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP35VGKD2-A2",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-8kw-multi-head-outdoor-unit-only-mxz-4f80vgd-a1",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 8,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x MXZ-4F80VGD-A1 + 2 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP35VGKD2-A2",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x MXZ-4F80VGD-A1 + 2 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP35VGKD2-A2",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x MXZ-4F80VGD-A1 + 2 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP35VGKD2-A2",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "3 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "8 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld remote in each selected AP room unit",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      },
+      {
+        "label": "Manufacturer kit code",
+        "value": "MXZFAPVGKDKIT80B",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      }
+    ],
+    "pros": [
+      "3 rooms share one outdoor unit, reducing equipment outside your home.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "Operating rooms must all heat or all cool at the same time."
+    ],
+    "freshness": {
+      "generation": "MXZ-4F80VGD-A1 with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "me-ap-multi-kit-100a",
+    "name": "Mitsubishi Electric AP 4-room 10 kW kit 100A",
+    "brand": "Mitsubishi Electric",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "April2025 exact named kit flyer; selected updated built-in Wi-Fi AP room units"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MXZ-5F100VGD-A1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-10kw-multi-head-outdoor-unit-only-mxz-5f100vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP25VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-2-5kw-multi-indoor-unit-only-msz-ap25vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: MSZ-AP50VGKD2-A2",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-electric-5kw-multi-indoor-unit-only-msz-ap50vgd-a1",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current AU outdoor variant specifications",
+        "url": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/04/Multi-Split-Systems-Air-Conditioning-Brochure-2023.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current maker AU brochure lists VF-A1 and VGD-A1 alternatives"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/mitsubishi-electric-ap.webp",
+      "alt": "Mitsubishi Electric AP room unit; representative AP range photograph, outdoor unit and other selected room units not pictured",
+      "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
+    },
+    "measurements": {
+      "cost": {
+        "value": 5439.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x MXZ-5F100VGD-A1 + 3 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP50VGKD2-A2",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-10kw-multi-head-outdoor-unit-only-mxz-5f100vgd-a1",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 10,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x MXZ-5F100VGD-A1 + 3 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP50VGKD2-A2",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x MXZ-5F100VGD-A1 + 3 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP50VGKD2-A2",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x MXZ-5F100VGD-A1 + 3 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP50VGKD2-A2",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "10 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld remote in each selected AP room unit",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/homeowner/support/"
+      },
+      {
+        "label": "Manufacturer kit code",
+        "value": "MXZFAPVGKDKIT100A",
+        "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
+      }
+    ],
+    "pros": [
+      "4 rooms share one outdoor unit, reducing equipment outside your home.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "Operating rooms must all heat or all cool at the same time."
+    ],
+    "freshness": {
+      "generation": "MXZ-5F100VGD-A1 with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "mhi-multi-scm45zs-w-2-avanti",
+    "name": "MHI Avanti Wi-Fi 2-room 4.5 kW combination",
+    "brand": "Mitsubishi Heavy Industries",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current AU combination and specification table"
+      },
+      {
+        "title": "Current equipment component: SCM45ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-4-5kw-multi-head-outdoor-unit-only-scm45zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK09ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-2-5kw-multi-head-avanti-indoor-unit-only-srk25zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "MHI Avanti WF1 indoor unit; representative same-range photo, other selected room units and outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "measurements": {
+      "cost": {
+        "value": 2872.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM45ZS-W + 2 x DXK09ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-4-5kw-multi-head-outdoor-unit-only-scm45zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 4.5,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM45ZS-W + 2 x DXK09ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM45ZS-W + 2 x DXK09ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM45ZS-W + 2 x DXK09ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected room units",
+        "value": "2 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "4.5 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "pros": [
+      "2 room units share one outdoor box.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "freshness": {
+      "generation": "SCM45ZS-W with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "mhi-multi-scm50zs-w-2-avanti",
+    "name": "MHI Avanti Wi-Fi 2-room 5 kW combination",
+    "brand": "Mitsubishi Heavy Industries",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current AU combination and specification table"
+      },
+      {
+        "title": "Current equipment component: SCM50ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-5kw-multi-head-outdoor-unit-only-scm50zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK12ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-3-5kw-multi-head-avanti-indoor-unit-only-srk35zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "MHI Avanti WF1 indoor unit; representative same-range photo, other selected room units and outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "measurements": {
+      "cost": {
+        "value": 3248.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM50ZS-W + 2 x DXK12ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-5kw-multi-head-outdoor-unit-only-scm50zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 5,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM50ZS-W + 2 x DXK12ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM50ZS-W + 2 x DXK12ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM50ZS-W + 2 x DXK12ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected room units",
+        "value": "2 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "5 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "pros": [
+      "2 room units share one outdoor box.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "freshness": {
+      "generation": "SCM50ZS-W with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "mhi-multi-scm60zs-w-3-avanti",
+    "name": "MHI Avanti Wi-Fi 3-room 6 kW combination",
+    "brand": "Mitsubishi Heavy Industries",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current AU combination and specification table"
+      },
+      {
+        "title": "Current equipment component: SCM60ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-6kw-multi-head-outdoor-unit-only-scm60zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK06ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-2kw-multi-head-avanti-indoor-unit-only-srk20zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "MHI Avanti WF1 indoor unit; representative same-range photo, other selected room units and outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "measurements": {
+      "cost": {
+        "value": 3634.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM60ZS-W + 3 x DXK06ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-6kw-multi-head-outdoor-unit-only-scm60zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 6,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM60ZS-W + 3 x DXK06ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM60ZS-W + 3 x DXK06ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM60ZS-W + 3 x DXK06ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected room units",
+        "value": "3 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "6 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "pros": [
+      "3 room units share one outdoor box.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "freshness": {
+      "generation": "SCM60ZS-W with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "mhi-multi-scm71zs-w-3-avanti",
+    "name": "MHI Avanti Wi-Fi 3-room 7.1 kW combination",
+    "brand": "Mitsubishi Heavy Industries",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current AU combination and specification table"
+      },
+      {
+        "title": "Current equipment component: SCM71ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-7-1kw-multi-head-outdoor-unit-only-scm71zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK09ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-2-5kw-multi-head-avanti-indoor-unit-only-srk25zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "MHI Avanti WF1 indoor unit; representative same-range photo, other selected room units and outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4189.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM71ZS-W + 3 x DXK09ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-7-1kw-multi-head-outdoor-unit-only-scm71zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 7.1,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM71ZS-W + 3 x DXK09ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM71ZS-W + 3 x DXK09ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM71ZS-W + 3 x DXK09ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected room units",
+        "value": "3 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "7.1 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "pros": [
+      "3 room units share one outdoor box.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "freshness": {
+      "generation": "SCM71ZS-W with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "mhi-multi-scm80zs-w-4-avanti",
+    "name": "MHI Avanti Wi-Fi 4-room 8 kW combination",
+    "brand": "Mitsubishi Heavy Industries",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current AU combination and specification table"
+      },
+      {
+        "title": "Current equipment component: SCM80ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-8kw-multi-head-outdoor-unit-only-scm80zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK06ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-2kw-multi-head-avanti-indoor-unit-only-srk20zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "MHI Avanti WF1 indoor unit; representative same-range photo, other selected room units and outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4720.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM80ZS-W + 4 x DXK06ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-8kw-multi-head-outdoor-unit-only-scm80zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 8,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM80ZS-W + 4 x DXK06ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM80ZS-W + 4 x DXK06ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM80ZS-W + 4 x DXK06ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "8 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "pros": [
+      "4 room units share one outdoor box.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "freshness": {
+      "generation": "SCM80ZS-W with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "mhi-multi-scm100zs-w-4-avanti",
+    "name": "MHI Avanti Wi-Fi 4-room 10 kW combination",
+    "brand": "Mitsubishi Heavy Industries",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current AU combination and specification table"
+      },
+      {
+        "title": "Current equipment component: SCM100ZS-W",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-10kw-multi-head-outdoor-unit-only-scm100zs-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: DXK09ZSA-WF1",
+        "url": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-2-5kw-multi-head-avanti-indoor-unit-only-srk25zsa-w",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/mhi-avanti-wf1-two-room-scm40.webp",
+      "alt": "MHI Avanti WF1 indoor unit; representative same-range photo, other selected room units and outdoor unit not pictured",
+      "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
+    },
+    "measurements": {
+      "cost": {
+        "value": 5535.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x SCM100ZS-W + 4 x DXK09ZSA-WF1",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-10kw-multi-head-outdoor-unit-only-scm100zs-w",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 10,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x SCM100ZS-W + 4 x DXK09ZSA-WF1",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x SCM100ZS-W + 4 x DXK09ZSA-WF1",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x SCM100ZS-W + 4 x DXK09ZSA-WF1",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "10 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Built-in Wi-Fi and handheld controls in every selected WF1 room unit",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 240 V, 50 Hz",
+        "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/"
+      }
+    ],
+    "pros": [
+      "4 room units share one outdoor box.",
+      "Phone control is built into every selected room unit."
+    ],
+    "cons": [
+      "The special allergen-cleaning cycle does not work in this multi-room combination."
+    ],
+    "freshness": {
+      "generation": "SCM100ZS-W with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "panasonic-multi-cu-2z52vbr-2-mrz",
+    "name": "Panasonic MRZ 2-room 5.2 kW combination",
+    "brand": "Panasonic",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CU-2Z52VBR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-5-2kw-multi-head-outdoor-unit-only-cu-2z52vbr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CS-MRZ25WKR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/panasonic-mrz-25-20261010.webp",
+      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
+    },
+    "measurements": {
+      "cost": {
+        "value": 2778.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-2kw-multi-head-outdoor-unit-only-cu-2z52vbr",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 5.2,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "2 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "5.2 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase household supply",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      }
+    ],
+    "pros": [
+      "2 rooms share one outdoor box.",
+      "Set each room temperature and timer separately."
+    ],
+    "cons": [
+      "Phone control requires a separate adapter for each room unit."
+    ],
+    "freshness": {
+      "generation": "CU-2Z52VBR with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "panasonic-multi-cu-3z54vbr-3-mrz",
+    "name": "Panasonic MRZ 3-room 5.4 kW combination",
+    "brand": "Panasonic",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CU-3Z54VBR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-5-4kw-multi-head-outdoor-unit-only-cu-3z54vbr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CS-MRZ20WKR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/panasonic-mrz-20-20261010.webp",
+      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr"
+    },
+    "measurements": {
+      "cost": {
+        "value": 3432.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-4kw-multi-head-outdoor-unit-only-cu-3z54vbr",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 5.4,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "3 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "5.4 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase household supply",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      }
+    ],
+    "pros": [
+      "3 rooms share one outdoor box.",
+      "Set each room temperature and timer separately."
+    ],
+    "cons": [
+      "Phone control requires a separate adapter for each room unit."
+    ],
+    "freshness": {
+      "generation": "CU-3Z54VBR with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "panasonic-multi-cu-4z71vbr-4-mrz",
+    "name": "Panasonic MRZ 4-room 7.1 kW combination",
+    "brand": "Panasonic",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CU-4Z71VBR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-7-1kw-multi-head-outdoor-unit-only-cu-4z71vbr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CS-MRZ25WKR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/panasonic-mrz-25-20261010.webp",
+      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4085.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-7-1kw-multi-head-outdoor-unit-only-cu-4z71vbr",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 7.1,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "7.1 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase household supply",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      }
+    ],
+    "pros": [
+      "4 rooms share one outdoor box.",
+      "Set each room temperature and timer separately."
+    ],
+    "cons": [
+      "Phone control requires a separate adapter for each room unit."
+    ],
+    "freshness": {
+      "generation": "CU-4Z71VBR with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "panasonic-multi-cu-4z80vbr-4-mrz",
+    "name": "Panasonic MRZ 4-room 8 kW combination",
+    "brand": "Panasonic",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CU-4Z80VBR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-8kw-multi-head-outdoor-unit-only-cu-4z80vbr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CS-MRZ25WKR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/panasonic-mrz-25-20261010.webp",
+      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4642.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-8kw-multi-head-outdoor-unit-only-cu-4z80vbr",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 8,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "8 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase household supply",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      }
+    ],
+    "pros": [
+      "4 rooms share one outdoor box.",
+      "Set each room temperature and timer separately."
+    ],
+    "cons": [
+      "Phone control requires a separate adapter for each room unit."
+    ],
+    "freshness": {
+      "generation": "CU-4Z80VBR with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "panasonic-multi-cu-5z100vbr-5-mrz",
+    "name": "Panasonic MRZ 5-room 10 kW combination",
+    "brand": "Panasonic",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CU-5Z100VBR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-10kw-multi-head-outdoor-unit-only-cu-5z100vbr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CS-MRZ20WKR",
+        "url": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/panasonic-mrz-20-20261010.webp",
+      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr"
+    },
+    "measurements": {
+      "cost": {
+        "value": 5796.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-10kw-multi-head-outdoor-unit-only-cu-5z100vbr",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 10,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "5 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "10 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase household supply",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+      }
+    ],
+    "pros": [
+      "5 rooms share one outdoor box.",
+      "Set each room temperature and timer separately."
+    ],
+    "cons": [
+      "Phone control requires a separate adapter for each room unit."
+    ],
+    "freshness": {
+      "generation": "CU-5Z100VBR with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "daikin-multi-3mxm52rvma-cora-rated",
+    "name": "Daikin Cora 3-room 5.2 kW rated combination",
+    "brand": "Daikin",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Currently linked Australian PCRAU1729B; exact rated combinations page7 and CTXM-R table page19"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: 3MXM52RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-5-2kw-super-multi-nx-outdoor-unit-only-3mxm52rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM20RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM50RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-5kw-multi-cora-series-indoor-unit-only-ctxm50rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/daikin-ctxm-r-20-20261010.webp",
+      "alt": "Daikin CTXM-R Cora indoor unit; representative same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
+    },
+    "measurements": {
+      "cost": {
+        "value": 3517.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x 3MXM52RVMA + 2 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-5-2kw-super-multi-nx-outdoor-unit-only-3mxm52rvma",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 5.2,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x 3MXM52RVMA + 2 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x 3MXM52RVMA + 2 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x 3MXM52RVMA + 2 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "3 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "5.2 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote and weekly timer per room; optional wireless LAN adapter for CTXM-R phone control",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 220-240 V, 50 Hz",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Outdoor heating operating range",
+        "value": "-15 to 18 C outside",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      }
+    ],
+    "pros": [
+      "3 rooms share one outdoor unit.",
+      "Weekly timers can follow a separate routine in each room."
+    ],
+    "cons": [
+      "Phone control needs an optional adapter for every selected room unit."
+    ],
+    "freshness": {
+      "generation": "3MXM52RVMA with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "daikin-multi-4mxm68rvma-cora-rated",
+    "name": "Daikin Cora 4-room 6.8 kW rated combination",
+    "brand": "Daikin",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Currently linked Australian PCRAU1729B; exact rated combinations page7 and CTXM-R table page19"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: 4MXM68RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-6-8kw-super-multi-nx-outdoor-unit-only-4mxm68rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM20RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM50RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-5kw-multi-cora-series-indoor-unit-only-ctxm50rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/daikin-ctxm-r-20-20261010.webp",
+      "alt": "Daikin CTXM-R Cora indoor unit; representative same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
+    },
+    "measurements": {
+      "cost": {
+        "value": 4428.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x 4MXM68RVMA + 3 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-6-8kw-super-multi-nx-outdoor-unit-only-4mxm68rvma",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 6.8,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x 4MXM68RVMA + 3 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x 4MXM68RVMA + 3 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x 4MXM68RVMA + 3 x CTXM20RVMA + 1 x CTXM50RVMA",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "6.8 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote and weekly timer per room; optional wireless LAN adapter for CTXM-R phone control",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 220-240 V, 50 Hz",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Outdoor heating operating range",
+        "value": "-15 to 18 C outside",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      }
+    ],
+    "pros": [
+      "4 rooms share one outdoor unit.",
+      "Weekly timers can follow a separate routine in each room."
+    ],
+    "cons": [
+      "Phone control needs an optional adapter for every selected room unit."
+    ],
+    "freshness": {
+      "generation": "4MXM68RVMA with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "daikin-multi-4mxm80rvma-cora-rated",
+    "name": "Daikin Cora 4-room 8 kW rated combination",
+    "brand": "Daikin",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Currently linked Australian PCRAU1729B; exact rated combinations page7 and CTXM-R table page19"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: 4MXM80RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-8kw-super-multi-nx-outdoor-unit-only-4mxm80rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM25RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-2-5kw-multi-cora-series-indoor-unit-only-ctxm25rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM35RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-3-5kw-multi-cora-series-indoor-unit-only-ctxm35rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM50RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-5kw-multi-cora-series-indoor-unit-only-ctxm50rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/daikin-ctxm-r-25-20261010.webp",
+      "alt": "Daikin CTXM-R Cora indoor unit; representative same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2-5kw-multi-cora-series-indoor-unit-only-ctxm25rvma"
+    },
+    "measurements": {
+      "cost": {
+        "value": 5002.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x 4MXM80RVMA + 1 x CTXM25RVMA + 2 x CTXM35RVMA + 1 x CTXM50RVMA",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-8kw-super-multi-nx-outdoor-unit-only-4mxm80rvma",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 8,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x 4MXM80RVMA + 1 x CTXM25RVMA + 2 x CTXM35RVMA + 1 x CTXM50RVMA",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x 4MXM80RVMA + 1 x CTXM25RVMA + 2 x CTXM35RVMA + 1 x CTXM50RVMA",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x 4MXM80RVMA + 1 x CTXM25RVMA + 2 x CTXM35RVMA + 1 x CTXM50RVMA",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "4 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "8 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote and weekly timer per room; optional wireless LAN adapter for CTXM-R phone control",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 220-240 V, 50 Hz",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Outdoor heating operating range",
+        "value": "-15 to 18 C outside",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      }
+    ],
+    "pros": [
+      "4 rooms share one outdoor unit.",
+      "Weekly timers can follow a separate routine in each room."
+    ],
+    "cons": [
+      "Phone control needs an optional adapter for every selected room unit."
+    ],
+    "freshness": {
+      "generation": "4MXM80RVMA with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+    }
+  },
+  {
+    "id": "daikin-multi-5mxm100rvma-cora-rated",
+    "name": "Daikin Cora 5-room 10 kW rated combination",
+    "brand": "Daikin",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian model and supported combinations",
+        "url": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Currently linked Australian PCRAU1729B; exact rated combinations page7 and CTXM-R table page19"
+      },
+      {
+        "title": "Included residential product warranty",
+        "url": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: 5MXM100RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-10kw-super-multi-nx-outdoor-unit-only-5mxm100rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM20RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM25RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-2-5kw-multi-cora-series-indoor-unit-only-ctxm25rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Current equipment component: CTXM60RVMA",
+        "url": "https://www.ozaironline.com.au/products/daikin-6kw-multi-cora-series-indoor-unit-only-ctxm60rvma",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian information checked 10 October 2026"
+      },
+      {
+        "title": "Retailer GST and delivery terms",
+        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
+        "kind": "Australian public retailer price terms",
+        "revision": "Current Australian information checked 10 October 2026"
+      }
+    ],
+    "image": {
+      "src": "/products/multi-split/daikin-ctxm-r-20-20261010.webp",
+      "alt": "Daikin CTXM-R Cora indoor unit; representative same-range photograph, outdoor unit and other selected heads not pictured",
+      "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
+    },
+    "measurements": {
+      "cost": {
+        "value": 6145.0,
+        "unit": "aud-system",
+        "basisId": "multi-split-kit-gst",
+        "variant": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
+        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
+        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-10kw-super-multi-nx-outdoor-unit-only-5mxm100rvma",
+        "checkedAt": "2026-10-10"
+      },
+      "capacity": {
+        "value": 10,
+        "unit": "cooling-kw",
+        "basisId": "multi-split-rated-cooling",
+        "variant": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
+        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 5,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
+        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact equipment combination",
+        "value": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Selected room units",
+        "value": "5 high-wall room units, with handheld controls",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Rated system cooling output",
+        "value": "10 kW; shared outdoor output, not the sum of room labels",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Phone and room controls",
+        "value": "Handheld remote and weekly timer per room; optional wireless LAN adapter for CTXM-R phone control",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
+      },
+      {
+        "label": "Household power supply",
+        "value": "Single-phase 220-240 V, 50 Hz",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      },
+      {
+        "label": "Outdoor heating operating range",
+        "value": "-15 to 18 C outside",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+      }
+    ],
+    "pros": [
+      "5 rooms share one outdoor unit.",
+      "Weekly timers can follow a separate routine in each room."
+    ],
+    "cons": [
+      "Phone control needs an optional adapter for every selected room unit."
+    ],
+    "freshness": {
+      "generation": "5MXM100RVMA with selected current AU room units",
+      "released": null,
+      "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
     }
   }
 ]

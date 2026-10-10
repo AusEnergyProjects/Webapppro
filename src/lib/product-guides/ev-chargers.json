@@ -8,7 +8,7 @@
         "title": "zappi GLO Australian product listing",
         "url": "https://www.myenergi.com/au/product/zappi-glo/",
         "kind": "Manufacturer AU product page",
-        "revision": "Current listing checked 10 October 2026; 7 kW, 6.5 m cable, $999 including GST."
+        "revision": "Current AU listing checked 10 October 2026; 7 kW charger with attached 6.5 m cable."
       },
       {
         "title": "zappi GLO generation datasheet",
@@ -27,6 +27,12 @@
         "url": "https://www.myenergi.com/au/wp-content/uploads/2023/11/myenergi-LTD-Product-Warranty-v2.0-AUS63.pdf",
         "kind": "Manufacturer AU warranty",
         "revision": "v2.0; active current AU warranty page link, not its superseded policy. Zappi is listed for 36 months, but GLO is not explicitly named."
+      },
+      {
+        "title": "Current maker Australian zappi and GLO warranty statement",
+        "url": "https://app.opensolar.com/expo/myenergi/au",
+        "kind": "Manufacturer-authored Australian product information",
+        "revision": "Current Australian listing checked 10 October 2026"
       }
     ],
     "brand": "myenergi",
@@ -62,7 +68,15 @@
         "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/",
         "checkedAt": "2026-10-10"
       },
-      "warranty": null
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "zappi GLO 7 kW",
+        "basis": "Current myenergi-authored Australian exhibition page explicitly gives a three-year warranty for both zappi and GLO. Main charger fault cover; installation and separate sensor accessories are not included.",
+        "sourceUrl": "https://app.opensolar.com/expo/myenergi/au",
+        "checkedAt": "2026-10-10"
+      }
     },
     "technicalSpecs": [
       {
@@ -101,14 +115,9 @@
         "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
       },
       {
-        "label": "Warranty boundary",
-        "value": "Current AU policy lists Zappi at 36 months; the exact GLO term is not confirmed.",
-        "sourceUrl": "https://www.myenergi.com/au/wp-content/uploads/2023/11/myenergi-LTD-Product-Warranty-v2.0-AUS63.pdf"
-      },
-      {
-        "label": "Equipment price",
-        "value": "$999 including GST for the charger with attached cable; installation and monitoring extras are excluded.",
-        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/"
+        "label": "Main charger fault cover",
+        "value": "Three-year Australian product warranty; installation and separate accessories are separate.",
+        "sourceUrl": "https://app.opensolar.com/expo/myenergi/au"
       }
     ],
     "freshness": {
@@ -146,6 +155,12 @@
         "url": "https://www.fronius.com/en/about-us/updates/news-and-press/fronius-wattpilot-flex",
         "kind": "Manufacturer announcement",
         "revision": "28 November 2024 announcement before official market launch; exact first Australian launch day not established."
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
       }
     ],
     "brand": "Fronius",
@@ -165,7 +180,16 @@
       "Cannot send the car's stored energy back into your home."
     ],
     "measurements": {
-      "cost": null,
+      "cost": {
+        "value": 2390.3,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "Fronius Wattpilot Flex Home 22 C6, MPN 4,240,187",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Same-generation range reference; selected configuration may cost differently.",
+        "sourceUrl": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22",
+        "checkedAt": "2026-10-10",
+        "referenceFor": "Fronius Wattpilot Flex Home 11 C6"
+      },
       "chargingPower": {
         "value": 11,
         "unit": "ev-ac-kw",
@@ -178,7 +202,7 @@
       "warranty": {
         "value": 3,
         "unit": "included-product-years",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "variant": "Wattpilot Flex Home 11 C6",
         "basis": "Current AU maker FAQ gives three years for the charger product from August 2024. Separate meters, controls and installation are outside this selected charger unit.",
         "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot",
@@ -232,9 +256,9 @@
         "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
       },
       {
-        "label": "Car-to-home power",
-        "value": "Does not currently support sending car battery energy into the home or grid.",
-        "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
+        "label": "Range cost reference",
+        "value": "Fronius Wattpilot Flex Home 22 C6, MPN 4,240,187; this selected version may cost differently.",
+        "sourceUrl": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22"
       }
     ],
     "freshness": {
@@ -272,6 +296,12 @@
         "url": "https://www.fronius.com/en/about-us/updates/news-and-press/fronius-wattpilot-flex",
         "kind": "Manufacturer announcement",
         "revision": "28 November 2024 announcement before official market launch; exact first Australian launch day not established."
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
       }
     ],
     "brand": "Fronius",
@@ -291,7 +321,15 @@
       "Cannot send the car's stored energy back into your home."
     ],
     "measurements": {
-      "cost": null,
+      "cost": {
+        "value": 2390.3,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "Fronius Wattpilot Flex Home 22 C6, MPN 4,240,187",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22",
+        "checkedAt": "2026-10-10"
+      },
       "chargingPower": {
         "value": 22,
         "unit": "ev-ac-kw",
@@ -304,7 +342,7 @@
       "warranty": {
         "value": 3,
         "unit": "included-product-years",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "variant": "Wattpilot Flex Home 22 C6",
         "basis": "Current AU maker FAQ gives three years for the charger product from August 2024. Separate meters, controls and installation are outside this selected charger unit.",
         "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot",
@@ -398,6 +436,12 @@
         "url": "https://ohme-ev.com/au/news-and-press/ohme-ev-chargers-australia/",
         "kind": "Manufacturer Australian information",
         "revision": "20 May 2024"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.sparkydirect.com.au/p/ohme-ep0-07au-wi-blstd-01-epod-7-4kw-ev-charger-type-1-2-vehicles-untethered",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
       }
     ],
     "brand": "Ohme",
@@ -416,7 +460,15 @@
       "Charging information uses status lights and the app rather than a screen."
     ],
     "measurements": {
-      "cost": null,
+      "cost": {
+        "value": 1199,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "EP0-07AU-WI-BLSTD-01",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.sparkydirect.com.au/p/ohme-ep0-07au-wi-blstd-01-epod-7-4kw-ev-charger-type-1-2-vehicles-untethered",
+        "checkedAt": "2026-10-10"
+      },
       "chargingPower": {
         "value": 7.4,
         "unit": "ev-ac-kw",
@@ -429,7 +481,7 @@
       "warranty": {
         "value": 3,
         "unit": "included-product-years",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "variant": "EP0-07AU-WI-BLSTD-01",
         "basis": "36 months from installation for manufacturing-defect parts and labour on the listed Australian device; separate charging cable is not included.",
         "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Ohme-ePod-Wifi-Product-Manual-v0.2.pdf",
@@ -512,6 +564,12 @@
         "url": "https://ohme-ev.com/au/news-and-press/ohme-home-pro-australia/",
         "kind": "Manufacturer Australian information",
         "revision": "15 October 2024"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.sparkydirect.com.au/p/ohme-hp5-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-5m-cable-wifi",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
       }
     ],
     "brand": "Ohme",
@@ -529,7 +587,15 @@
       "Solar charging is unavailable in Bluetooth-only mode."
     ],
     "measurements": {
-      "cost": null,
+      "cost": {
+        "value": 1394.8,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "HP5-07AU-WI-BLSTD-01",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.sparkydirect.com.au/p/ohme-hp5-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-5m-cable-wifi",
+        "checkedAt": "2026-10-10"
+      },
       "chargingPower": {
         "value": 7.4,
         "unit": "ev-ac-kw",
@@ -542,7 +608,7 @@
       "warranty": {
         "value": 3,
         "unit": "included-product-years",
-        "basisId": "included-all-parts",
+        "basisId": "main-product-parts",
         "variant": "HP5-07AU-WI-BLSTD-01",
         "basis": "Current manufacturer Australian installer listing states three-year standard product cover; installation is separate.",
         "sourceUrl": "https://ohme-ev.com/au/installer-resources/",
@@ -606,6 +672,1907 @@
       "released": "2024-10-15",
       "sourceUrl": "https://ohme-ev.com/au/news-and-press/ohme-home-pro-australia/",
       "note": "This dates the Australian Home Pro introduction. The exact October 2024 AU Wi-Fi/Bluetooth sheet is authoritative over the generic resources page Wi-Fi-only wording."
+    }
+  },
+  {
+    "id": "ohme-home-pro-au-74-8m",
+    "name": "Ohme Home Pro AU 7.4 kW, 8 m cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Exact Australian Home Pro Wi-Fi/Bluetooth specifications",
+        "url": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2024 AU datasheet"
+      },
+      {
+        "title": "Included cable, sensor and standard warranty",
+        "url": "https://ohme-ev.com/au/installer-resources/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian information; checked 10 October 2026"
+      },
+      {
+        "title": "Australian Home Pro introduction",
+        "url": "https://ohme-ev.com/au/news-and-press/ohme-home-pro-australia/",
+        "kind": "Manufacturer Australian information",
+        "revision": "15 October 2024"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.sparkydirect.com.au/p/ohme-hp5-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-5m-cable-wifi",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.sparkydirect.com.au/p/ohme-hp8-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-8m-cable-wifi",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Ohme",
+    "image": {
+      "src": "/products/ev-chargers/ohme-home-pro-au-74-5m.webp",
+      "alt": "Ohme Australian Home Pro housing; representative range photo with only part of the cable shown; selected cable is 8 m.",
+      "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+    },
+    "pros": [
+      "The screen and buttons let you set charging schedules at the charger.",
+      "The included 8-metre cable reaches farther than the 5-metre Home Pro version.",
+      "The included power sensor adjusts charging around your home's other electricity use."
+    ],
+    "cons": [
+      "Solar charging is unavailable in Bluetooth-only mode."
+    ],
+    "measurements": {
+      "cost": {
+        "value": 1494.9,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "HP8-07AU-WI-BLSTD-01",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.sparkydirect.com.au/p/ohme-hp8-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-8m-cable-wifi",
+        "checkedAt": "2026-10-10"
+      },
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "HP8-07AU-WI-BLSTD-01, 8 m cable",
+        "basis": "Maximum specified AC charging output at 32 A on single-phase supply; car and installation can limit actual output.",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "HP8-07AU-WI-BLSTD-01",
+        "basis": "Current manufacturer Australian installer listing states three-year standard product cover; installation is separate.",
+        "sourceUrl": "https://ohme-ev.com/au/installer-resources/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian order code",
+        "value": "HP8-07AU-WI-BLSTD-01; 8 m cable version",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Rated charging output and supply",
+        "value": "7.4 kW / 32 A; single-phase 230/240 V AC, 50 Hz",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "Fixed Type 2 cable, 8 m; 5 m is a different order code",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "On-unit control",
+        "value": "Colour screen and three buttons",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Phone connection",
+        "value": "Wi-Fi or Bluetooth for the exact AU version",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Solar charging boundary",
+        "value": "Requires Wi-Fi and internet; unavailable in Bluetooth-only mode",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Household power sensor",
+        "value": "Current-sensor clamp included for load balancing",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "170 x 200 x 100 mm",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Weather protection and operating temperature",
+        "value": "IP55; -25 to 45 degrees C",
+        "sourceUrl": "https://ohme-ev.com/au/wp-content/uploads/sites/22/2023/07/Technical-Datasheet-Ohme-Home-Pro-7.4kW.pdf"
+      },
+      {
+        "label": "Standard product warranty",
+        "value": "Three years; installation is separate",
+        "sourceUrl": "https://ohme-ev.com/au/installer-resources/"
+      }
+    ],
+    "freshness": {
+      "generation": "Australian Home Pro Wi-Fi/Bluetooth HP8 model",
+      "released": "2024-10-15",
+      "sourceUrl": "https://ohme-ev.com/au/news-and-press/ohme-home-pro-australia/",
+      "note": "This dates the Australian Home Pro introduction. The exact October 2024 AU Wi-Fi/Bluetooth sheet is authoritative over the generic resources page Wi-Fi-only wording."
+    }
+  },
+  {
+    "id": "evnex-e2-flex",
+    "name": "Evnex E2 Flex 7.4 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://store.evnex.com/products/evnex-e2-flex",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Evnex",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-evnex-e2-flex.webp",
+      "alt": "Evnex E2 Flex charger, exact selected store housing and cable variant.",
+      "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+    },
+    "pros": [
+      "Schedules charging for your chosen off-peak hours.",
+      "The included power sensor helps protect the home from electrical overload."
+    ],
+    "cons": [
+      "Solar charging is a paid software upgrade."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "E2 Flex 10384",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 4,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "E2 Flex 10384",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 799,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "E2 Flex 10384",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian store SKU",
+        "value": "10384",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.4 kW maximum; single-phase 32 A.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Car connection",
+        "value": "5 m attached Type 2 cable.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Connectivity",
+        "value": "Wi-Fi.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Solar charging",
+        "value": "Paid software upgrade on Flex; enabled on Core and Plus. Correct power-sensor installation is required.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Power sensor package",
+        "value": "Core sensor is sold separately; the selected Flex and Plus store packages list a sensor included.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Offline operation",
+        "value": "After 28 days offline, smart scheduling and solar features pause; basic charging remains available.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Four years; commercial installations have three years.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex"
+      }
+    ],
+    "freshness": {
+      "generation": "E2 Flex 10384",
+      "released": null,
+      "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "evnex-e2-core",
+    "name": "Evnex E2 Core 7.4 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://store.evnex.com/products/evnex-e2-core",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Evnex",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-evnex-e2-core.webp",
+      "alt": "Evnex E2 Core charger, exact selected store housing and cable variant.",
+      "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+    },
+    "pros": [
+      "Can direct spare solar power into the car.",
+      "The included 5-metre charging cable avoids buying a separate car lead."
+    ],
+    "cons": [
+      "The power sensor needed for solar charging is sold separately."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "E2 Core 10391",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 4,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "E2 Core 10391",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1099,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "E2 Core 10391",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian store SKU",
+        "value": "10391",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.4 kW maximum; single-phase 32 A.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Car connection",
+        "value": "5 m attached Type 2 cable.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Connectivity",
+        "value": "Wi-Fi.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Solar charging",
+        "value": "Paid software upgrade on Flex; enabled on Core and Plus. Correct power-sensor installation is required.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Power sensor package",
+        "value": "Core sensor is sold separately; the selected Flex and Plus store packages list a sensor included.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Offline operation",
+        "value": "After 28 days offline, smart scheduling and solar features pause; basic charging remains available.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Four years; commercial installations have three years.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core"
+      }
+    ],
+    "freshness": {
+      "generation": "E2 Core 10391",
+      "released": null,
+      "sourceUrl": "https://store.evnex.com/products/evnex-e2-core",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "evnex-e2-plus",
+    "name": "Evnex E2 Plus 7.4 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://store.evnex.com/products/evnex-e2-plus",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Evnex",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-evnex-e2-plus.webp",
+      "alt": "Evnex E2 Plus charger, exact selected store housing and cable variant.",
+      "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+    },
+    "pros": [
+      "The included 8-metre cable gives more parking flexibility.",
+      "Built-in mobile connectivity backs up the home Wi-Fi connection.",
+      "Can direct spare solar power into the car."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "E2 Plus 10576",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 4,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "E2 Plus 10576",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1399,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "E2 Plus 10576",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian store SKU",
+        "value": "10576",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.4 kW maximum; single-phase 32 A.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Car connection",
+        "value": "8 m attached Type 2 cable.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Connectivity",
+        "value": "Wi-Fi and built-in 4G.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Solar charging",
+        "value": "Paid software upgrade on Flex; enabled on Core and Plus. Correct power-sensor installation is required.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Power sensor package",
+        "value": "Core sensor is sold separately; the selected Flex and Plus store packages list a sensor included.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Offline operation",
+        "value": "After 28 days offline, smart scheduling and solar features pause; basic charging remains available.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Four years; commercial installations have three years.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus"
+      }
+    ],
+    "freshness": {
+      "generation": "E2 Plus 10576",
+      "released": null,
+      "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "evnex-x22-tethered",
+    "name": "Evnex X22 5 m cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://store.evnex.com/products/evnex-x22",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Australian X22 specification table",
+        "url": "https://www.evnex.com/au/chargers/x-series",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Evnex",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-evnex-x22-tethered.webp",
+      "alt": "Evnex X22 Stone 5 m cable variant from the exact maker store listing.",
+      "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+    },
+    "pros": [
+      "Can charge at up to 22 kW with a compatible car and three-phase supply.",
+      "Included power sensors support spare-solar charging and household overload protection."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "X22 10184PN",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 4,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "X22 10184PN",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1699,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "X22 10184PN",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian store SKU",
+        "value": "10184PN",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "22 kW maximum three-phase; 7.4 kW on single-phase supply.",
+        "sourceUrl": "https://www.evnex.com/au/chargers/x-series"
+      },
+      {
+        "label": "Car connection",
+        "value": "5 m attached Type 2 cable.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Connectivity",
+        "value": "Wi-Fi, built-in 4G and Ethernet.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Solar and power monitoring",
+        "value": "Selected store kit includes three current sensors and onboard power sensing.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "373 x 212 x 142 mm.",
+        "sourceUrl": "https://www.evnex.com/au/chargers/x-series"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP54; -25 to 55 degrees Celsius.",
+        "sourceUrl": "https://www.evnex.com/au/chargers/x-series"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Four years; commercial installations have three years.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      }
+    ],
+    "freshness": {
+      "generation": "X22 10184PN",
+      "released": null,
+      "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "evnex-x22-socket",
+    "name": "Evnex X22 socket",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://store.evnex.com/products/evnex-x22",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Australian X22 specification table",
+        "url": "https://www.evnex.com/au/chargers/x-series",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Evnex",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-evnex-x22-socket.webp",
+      "alt": "Evnex X22 Stone socket variant from the exact maker store listing.",
+      "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+    },
+    "pros": [
+      "Can charge at up to 22 kW with a compatible car and three-phase supply.",
+      "Included power sensors support spare-solar charging and household overload protection."
+    ],
+    "cons": [
+      "A separate Type 2 car charging cable is required."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "X22 10143PN",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 4,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "X22 10143PN",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1699,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "X22 10143PN",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian store SKU",
+        "value": "10143PN",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "22 kW maximum three-phase; 7.4 kW on single-phase supply.",
+        "sourceUrl": "https://www.evnex.com/au/chargers/x-series"
+      },
+      {
+        "label": "Car connection",
+        "value": "Type 2 socket; vehicle cable is not included.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Connectivity",
+        "value": "Wi-Fi, built-in 4G and Ethernet.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Solar and power monitoring",
+        "value": "Selected store kit includes three current sensors and onboard power sensing.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "373 x 212 x 142 mm.",
+        "sourceUrl": "https://www.evnex.com/au/chargers/x-series"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP54; -25 to 55 degrees Celsius.",
+        "sourceUrl": "https://www.evnex.com/au/chargers/x-series"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Four years; commercial installations have three years.",
+        "sourceUrl": "https://store.evnex.com/products/evnex-x22"
+      }
+    ],
+    "freshness": {
+      "generation": "X22 10143PN",
+      "released": null,
+      "sourceUrl": "https://store.evnex.com/products/evnex-x22",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "ocular-iq-home-solar-7te",
+    "name": "Ocular IQ Home Solar 7.2 kW cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Current maker IQ Home Solar advertising and photo identity",
+        "url": "https://ocularcharging.com.au/product/ocular-iq-home-7-kw-w-5m-cable-ct-clamp/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current exact RW model listing; undated three-year advertising conflicts with the linked Version 2.7 manual"
+      }
+    ],
+    "brand": "Ocular",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-ocular-iq-7te.webp",
+      "alt": "Ocular IQ Home Solar black housing, cropped from the verified range photograph; cable and socket fittings vary by selected model.",
+      "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/"
+    },
+    "pros": [
+      "Included power sensors let charging follow your spare solar generation.",
+      "Supplied charging cable avoids buying a separate car lead."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.2,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "IOCAH30-7TE-RW",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "IOCAH30-7TE-RW",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1147,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "IOCAH30-7TE-RW",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian model",
+        "value": "IOCAH30-7TE-RW",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.2 kW single-phase, 32 A.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "5 m attached Type 2 cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Power sensors are included: one for single-phase, three for three-phase, with signal cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Network connection",
+        "value": "Wi-Fi and Ethernet; cellular availability is model-dependent and not confirmed for the selected RW code.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "398 x 285 x 226 mm.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Outdoor and impact protection",
+        "value": "IP55 and IK10.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Manual product fault cover",
+        "value": "Two years in Version 2.7; undated current maker product pages advertise three. Confirm the supplied written term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "IOCAH30-7TE-RW",
+      "released": null,
+      "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+      "note": "Exact RW Australian hardware is listed by current manufacturer guidance and retailer; first launch date is unverified. Manual Version 2.7 takes precedence for the warranty figure; marketing conflict remains explicit."
+    }
+  },
+  {
+    "id": "ocular-iq-home-solar-7se",
+    "name": "Ocular IQ Home Solar 7.2 kW socket",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-socket-ev-charger/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Current maker IQ Home Solar advertising and photo identity",
+        "url": "https://ocularcharging.com.au/product/ocular-iq-home-7-kw-w-5m-cable-ct-clamp/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current exact RW model listing; undated three-year advertising conflicts with the linked Version 2.7 manual"
+      }
+    ],
+    "brand": "Ocular",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-ocular-iq-7se.webp",
+      "alt": "Ocular IQ Home Solar black housing, cropped from the verified range photograph; cable and socket fittings vary by selected model.",
+      "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/"
+    },
+    "pros": [
+      "Included power sensors let charging follow your spare solar generation.",
+      "The socket lets you choose a separate charging cable length."
+    ],
+    "cons": [
+      "A separate Type 2 car charging cable is required."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.2,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "IOCAH30-7SE-RW",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "IOCAH30-7SE-RW",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1147,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "IOCAH30-7SE-RW",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-socket-ev-charger/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian model",
+        "value": "IOCAH30-7SE-RW",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.2 kW single-phase, 32 A.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "Type 2 socket; separate car cable required.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Power sensors are included: one for single-phase, three for three-phase, with signal cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Network connection",
+        "value": "Wi-Fi and Ethernet; cellular availability is model-dependent and not confirmed for the selected RW code.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "398 x 285 x 226 mm.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Outdoor and impact protection",
+        "value": "IP55 and IK10.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Manual product fault cover",
+        "value": "Two years in Version 2.7; undated current maker product pages advertise three. Confirm the supplied written term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "IOCAH30-7SE-RW",
+      "released": null,
+      "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+      "note": "Exact RW Australian hardware is listed by current manufacturer guidance and retailer; first launch date is unverified. Manual Version 2.7 takes precedence for the warranty figure; marketing conflict remains explicit."
+    }
+  },
+  {
+    "id": "ocular-iq-home-solar-22te",
+    "name": "Ocular IQ Home Solar 22 kW cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-22kw-ev-charger/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Current maker IQ Home Solar advertising and photo identity",
+        "url": "https://ocularcharging.com.au/product/ocular-iq-home-7-kw-w-5m-cable-ct-clamp/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current exact RW model listing; undated three-year advertising conflicts with the linked Version 2.7 manual"
+      }
+    ],
+    "brand": "Ocular",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-ocular-iq-22te.webp",
+      "alt": "Ocular IQ Home Solar black housing, cropped from the verified range photograph; cable and socket fittings vary by selected model.",
+      "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/"
+    },
+    "pros": [
+      "Included power sensors let charging follow your spare solar generation.",
+      "Supplied charging cable avoids buying a separate car lead."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "IOCAH30-22TE-RW",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "IOCAH30-22TE-RW",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1378,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "IOCAH30-22TE-RW",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-22kw-ev-charger/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian model",
+        "value": "IOCAH30-22TE-RW",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "22 kW three-phase, 32 A.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "5 m attached Type 2 cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Power sensors are included: one for single-phase, three for three-phase, with signal cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Network connection",
+        "value": "Wi-Fi and Ethernet; cellular availability is model-dependent and not confirmed for the selected RW code.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "398 x 285 x 226 mm.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Outdoor and impact protection",
+        "value": "IP55 and IK10.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Manual product fault cover",
+        "value": "Two years in Version 2.7; undated current maker product pages advertise three. Confirm the supplied written term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "IOCAH30-22TE-RW",
+      "released": null,
+      "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+      "note": "Exact RW Australian hardware is listed by current manufacturer guidance and retailer; first launch date is unverified. Manual Version 2.7 takes precedence for the warranty figure; marketing conflict remains explicit."
+    }
+  },
+  {
+    "id": "ocular-iq-home-solar-22se",
+    "name": "Ocular IQ Home Solar 22 kW socket",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-22kw-socket-ev-charger/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Current maker IQ Home Solar advertising and photo identity",
+        "url": "https://ocularcharging.com.au/product/ocular-iq-home-7-kw-w-5m-cable-ct-clamp/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current exact RW model listing; undated three-year advertising conflicts with the linked Version 2.7 manual"
+      }
+    ],
+    "brand": "Ocular",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-ocular-iq-22se.webp",
+      "alt": "Ocular IQ Home Solar black housing, cropped from the verified range photograph; cable and socket fittings vary by selected model.",
+      "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/"
+    },
+    "pros": [
+      "Included power sensors let charging follow your spare solar generation.",
+      "The socket lets you choose a separate charging cable length."
+    ],
+    "cons": [
+      "A separate Type 2 car charging cable is required."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "IOCAH30-22SE-RW",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "IOCAH30-22SE-RW",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1378,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "IOCAH30-22SE-RW",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-22kw-socket-ev-charger/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian model",
+        "value": "IOCAH30-22SE-RW",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "22 kW three-phase, 32 A.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "Type 2 socket; separate car cable required.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Power sensors are included: one for single-phase, three for three-phase, with signal cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Network connection",
+        "value": "Wi-Fi and Ethernet; cellular availability is model-dependent and not confirmed for the selected RW code.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "398 x 285 x 226 mm.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Outdoor and impact protection",
+        "value": "IP55 and IK10.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      },
+      {
+        "label": "Manual product fault cover",
+        "value": "Two years in Version 2.7; undated current maker product pages advertise three. Confirm the supplied written term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "IOCAH30-22SE-RW",
+      "released": null,
+      "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
+      "note": "Exact RW Australian hardware is listed by current manufacturer guidance and retailer; first launch date is unverified. Manual Version 2.7 takes precedence for the warranty figure; marketing conflict remains explicit."
+    }
+  },
+  {
+    "id": "ocular-lte-plus-v3-7kw",
+    "name": "Ocular LTE Plus V3 7.2 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-7kw-ev-charger/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Ocular",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-ocular-lte-7kw.webp",
+      "alt": "Ocular LTE Plus V3 charger with its attached cable; exact AU retailer product photograph.",
+      "sourceUrl": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-7kw-ev-charger/"
+    },
+    "pros": [
+      "The screen and start button allow control at the charger.",
+      "The included 6-metre cable avoids buying a separate charging lead."
+    ],
+    "cons": [
+      "App control uses Bluetooth; this model does not include Wi-Fi."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.2,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "OC20-BC-7KW-PLUS-V3",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "OC20-BC-7KW-PLUS-V3",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 689,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "OC20-BC-7KW-PLUS-V3",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-7kw-ev-charger/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian model",
+        "value": "OC20-BC-7KW-PLUS-V3",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.2 kW single-phase, 32 A.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "6 m attached Type 2 cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "3.5-inch colour display, start button and Bluetooth app.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Network boundary",
+        "value": "Bluetooth controls; Ethernet requires additional OCPP configuration. LTE in the name does not confirm cellular hardware.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "318 x 200 x 80 mm.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP55; -30 to 55 degrees Celsius.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Manual product fault cover",
+        "value": "Two years in the current linked V3 manual; undated current maker pages advertise three. Confirm written supplied terms.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "OC20-BC-7KW-PLUS-V3",
+      "released": null,
+      "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "ocular-lte-plus-v3-22kw",
+    "name": "Ocular LTE Plus V3 22 kW",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-22kw-ev-charger/",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Ocular",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-ocular-lte-22kw.webp",
+      "alt": "Ocular LTE Plus V3 charger with its attached cable; exact AU retailer product photograph.",
+      "sourceUrl": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-22kw-ev-charger/"
+    },
+    "pros": [
+      "The screen and start button allow control at the charger.",
+      "The included 6-metre cable avoids buying a separate charging lead."
+    ],
+    "cons": [
+      "App control uses Bluetooth; this model does not include Wi-Fi."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "OC20-BC-22KW-PLUS-V3",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "OC20-BC-22KW-PLUS-V3",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 788,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "OC20-BC-22KW-PLUS-V3",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-22kw-ev-charger/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian model",
+        "value": "OC20-BC-22KW-PLUS-V3",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "22 kW three-phase, 32 A.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Car connection",
+        "value": "6 m attached Type 2 cable.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "3.5-inch colour display, start button and Bluetooth app.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Network boundary",
+        "value": "Bluetooth controls; Ethernet requires additional OCPP configuration. LTE in the name does not confirm cellular hardware.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "318 x 200 x 80 mm.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP55; -30 to 55 degrees Celsius.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      },
+      {
+        "label": "Manual product fault cover",
+        "value": "Two years in the current linked V3 manual; undated current maker pages advertise three. Confirm written supplied terms.",
+        "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "OC20-BC-22KW-PLUS-V3",
+      "released": null,
+      "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "tesla-gen3-wall-connector-73m",
+    "name": "Tesla Gen 3 Wall Connector, 7.3 m",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://www.tesla.com/en_au/home-charging",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.perkinelec.com.au/bmw-ev-charger-installation",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Current Australian Wall Connector equipment listing",
+        "url": "https://shop.tesla.com/en_au/product/gen-3-wall-connector---7_3m",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Current AU/NZ Gen 3 installation manual",
+        "url": "https://energylibrary.tesla.com/docs/Public/Charging/WallConnector/Gen3/Install/3PT2/APAC/AUSNZ/g3_wc_install_ausnz.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Australian vehicle limits and warranty",
+        "url": "https://www.tesla.com/en_au/support/charging/wall-connector",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "Tesla",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-tesla-gen3-73m.webp",
+      "alt": "Tesla Gen 3 Wall Connector with its 7.3 m attached cable; actual AU maker shop photograph.",
+      "sourceUrl": "https://www.tesla.com/en_au/home-charging"
+    },
+    "pros": [
+      "The included 7.3-metre cable reaches farther than many standard charging leads.",
+      "Multiple Wall Connectors can share a household charging-power limit.",
+      "Tesla app control includes schedules and charging history."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "Gen 3 Wall Connector 7.3 m",
+        "basis": "Explicit manufacturer Australian Wall Connector hardware specification: up to 22 kW, 32 A. The matching AU/NZ manual confirms the same part-number family and housing. Actual vehicle acceptance and supply limits can be lower.",
+        "sourceUrl": "https://www.tesla.com/en_au/home-charging",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 4,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "Gen 3 Wall Connector 7.3 m",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://www.tesla.com/en_au/home-charging",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 800,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "Gen 3 Wall Connector 7.3 m",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.perkinelec.com.au/bmw-ev-charger-installation",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Australian hardware",
+        "value": "Gen 3, part-number family 1529455; 7.3 m Type 2 cable.",
+        "sourceUrl": "https://energylibrary.tesla.com/docs/Public/Charging/WallConnector/Gen3/Install/3PT2/APAC/AUSNZ/g3_wc_install_ausnz.pdf"
+      },
+      {
+        "label": "Rated charger output",
+        "value": "Up to 22 kW, 32 A, in the maker AU Wall Connector specifications.",
+        "sourceUrl": "https://www.tesla.com/en_au/home-charging"
+      },
+      {
+        "label": "Vehicle and supply limits",
+        "value": "Tesla AU vehicle table gives 11 kW three-phase and 7.4 kW single-phase; other cars have their own limits.",
+        "sourceUrl": "https://www.tesla.com/en_au/support/charging/wall-connector"
+      },
+      {
+        "label": "Included cable",
+        "value": "7.3 m attached Type 2 cable.",
+        "sourceUrl": "https://shop.tesla.com/en_au/product/gen-3-wall-connector---7_3m"
+      },
+      {
+        "label": "Controls and network",
+        "value": "Tesla app scheduling and monitoring; 2.4 GHz Wi-Fi.",
+        "sourceUrl": "https://shop.tesla.com/en_au/product/gen-3-wall-connector---7_3m"
+      },
+      {
+        "label": "Shared household supply",
+        "value": "Up to six Wall Connectors can share the available charging power.",
+        "sourceUrl": "https://shop.tesla.com/en_au/product/gen-3-wall-connector---7_3m"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "345 x 155 x 110 mm in the current AU installation manual.",
+        "sourceUrl": "https://energylibrary.tesla.com/docs/Public/Charging/WallConnector/Gen3/Install/3PT2/APAC/AUSNZ/g3_wc_install_ausnz.pdf"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP55; -30 to 50 degrees Celsius.",
+        "sourceUrl": "https://energylibrary.tesla.com/docs/Public/Charging/WallConnector/Gen3/Install/3PT2/APAC/AUSNZ/g3_wc_install_ausnz.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "Four years from invoice; commercial use is one year.",
+        "sourceUrl": "https://www.tesla.com/en_au/support/charging/wall-connector"
+      }
+    ],
+    "freshness": {
+      "generation": "Gen 3 Wall Connector 7.3 m",
+      "released": null,
+      "sourceUrl": "https://www.tesla.com/en_au/home-charging",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "myenergi-zappi-2h22-socket",
+    "name": "myenergi zappi 22 kW socket",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://www.myenergi.com/au/product/zappi/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Australian zappi and GLO warranty statement",
+        "url": "https://app.opensolar.com/expo/myenergi/au",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "myenergi",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-zappi-socket.webp",
+      "alt": "myenergi ZAPPI-2H22UW white socket charger, exact manufacturer variant photograph.",
+      "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+    },
+    "pros": [
+      "On-unit display and buttons let you control charging without using the phone.",
+      "Can prioritise spare solar power through its ECO charging modes."
+    ],
+    "cons": [
+      "A separate Type 2 car charging cable is required."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "ZAPPI-2H22UW",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "ZAPPI-2H22UW",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1545,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "ZAPPI-2H22UW",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian hardware code",
+        "value": "ZAPPI-2H22UW",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Maximum AC output",
+        "value": "22 kW on three-phase supply; single-phase configuration has a lower power limit.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Car connection",
+        "value": "Type 2 socket; separate car cable required.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Charging controls",
+        "value": "On-unit display and buttons; ECO, ECO+ and FAST modes.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Current-sensor monitoring supports spare-solar charging; included sensor installation is required.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Network connection",
+        "value": "Built-in Wi-Fi and Ethernet.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Main charger fault cover",
+        "value": "Three-year Australian product warranty.",
+        "sourceUrl": "https://app.opensolar.com/expo/myenergi/au"
+      }
+    ],
+    "freshness": {
+      "generation": "ZAPPI-2H22UW",
+      "released": null,
+      "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "myenergi-zappi-2h22-tethered",
+    "name": "myenergi zappi 22 kW cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://www.myenergi.com/au/product/zappi/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Australian zappi and GLO warranty statement",
+        "url": "https://app.opensolar.com/expo/myenergi/au",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      }
+    ],
+    "brand": "myenergi",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-zappi-tethered.webp",
+      "alt": "myenergi ZAPPI-2H22TW white tethered charger, exact manufacturer variant photograph.",
+      "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+    },
+    "pros": [
+      "On-unit display and buttons let you control charging without using the phone.",
+      "Can prioritise spare solar power through its ECO charging modes."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "ZAPPI-2H22TW",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 3,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "ZAPPI-2H22TW",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1595,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "ZAPPI-2H22TW",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian hardware code",
+        "value": "ZAPPI-2H22TW",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Maximum AC output",
+        "value": "22 kW on three-phase supply; single-phase configuration has a lower power limit.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Car connection",
+        "value": "Attached Type 2 cable.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Charging controls",
+        "value": "On-unit display and buttons; ECO, ECO+ and FAST modes.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Solar monitoring",
+        "value": "Current-sensor monitoring supports spare-solar charging; included sensor installation is required.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Network connection",
+        "value": "Built-in Wi-Fi and Ethernet.",
+        "sourceUrl": "https://www.myenergi.com/au/product/zappi/"
+      },
+      {
+        "label": "Main charger fault cover",
+        "value": "Three-year Australian product warranty.",
+        "sourceUrl": "https://app.opensolar.com/expo/myenergi/au"
+      }
+    ],
+    "freshness": {
+      "generation": "ZAPPI-2H22TW",
+      "released": null,
+      "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "schneider-charge-evh5a07n2c7",
+    "name": "Schneider Charge 7.4 kW, 7 m cable",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.switchboardinabox.com.au/evh5a07n2c7-charging-station-schneider-charge-1pn-attached-cable-7m-74kw-32a",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Schneider-authored Australian and New Zealand warranty conditions",
+        "url": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2024 revision 2; 24-month main product fault term"
+      }
+    ],
+    "brand": "Schneider Electric",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-schneider-evh5a07n2c7.webp",
+      "alt": "Schneider Charge EVH5A07N2C7, exact manufacturer hardware photograph.",
+      "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+    },
+    "pros": [
+      "Included 7-metre cable gives more reach than the shorter Charge cable version.",
+      "Wi-Fi and wired network connections support app control."
+    ],
+    "cons": [],
+    "measurements": {
+      "chargingPower": {
+        "value": 7.4,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "EVH5A07N2C7",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "EVH5A07N2C7",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1491.6,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "EVH5A07N2C7",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.switchboardinabox.com.au/evh5a07n2c7-charging-station-schneider-charge-1pn-attached-cable-7m-74kw-32a",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian hardware code",
+        "value": "EVH5A07N2C7",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "7.4 kW single-phase, 32 A.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "Car connection",
+        "value": "7 m attached Type 2 cable.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "Network and app",
+        "value": "Wi-Fi and Ethernet; Wiser ecosystem and supported OCPP connections.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "On-unit controls",
+        "value": "Colour status indicator; charging controls use the app.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "352 x 244 x 117 mm.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP55, IK10; -35 to 50 degrees Celsius.",
+        "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7"
+      },
+      {
+        "label": "Product fault cover",
+        "value": "24 months under the manufacturer-authored Pacific AU/NZ warranty conditions.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "EVH5A07N2C7",
+      "released": null,
+      "sourceUrl": "https://www.clipsal.com/products/electric-vehicle-chargers/schneider-charge/charging-station-1p-n-attached-cable-7m-74kw-32a-evh5a07n2c7?itemno=EVH5A07N2C7",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
+    }
+  },
+  {
+    "id": "schneider-charge-evh5a22n2s",
+    "name": "Schneider Charge 22 kW socket",
+    "checkedAt": "2026-10-10",
+    "sources": [
+      {
+        "title": "Current exact Australian product information",
+        "url": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Public Australian charger equipment listing",
+        "url": "https://www.switchboardinabox.com.au/evh5a22n2s-charging-station-schneider-charge-1pn3pn-1xt2s-741122kw-1632a",
+        "kind": "Australian public retailer equipment listing",
+        "revision": "Current Australian listing checked 10 October 2026"
+      },
+      {
+        "title": "Schneider-authored Australian and New Zealand warranty conditions",
+        "url": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "2024 revision 2; 24-month main product fault term"
+      }
+    ],
+    "brand": "Schneider Electric",
+    "image": {
+      "src": "/products/ev-chargers/au-20261010-schneider-evh5a22n2s.webp",
+      "alt": "Schneider Charge EVH5A22N2S, exact manufacturer hardware photograph.",
+      "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+    },
+    "pros": [
+      "Works with single-phase or three-phase home power.",
+      "Wi-Fi and wired network connections support app control."
+    ],
+    "cons": [
+      "A separate Type 2 car charging cable is required."
+    ],
+    "measurements": {
+      "chargingPower": {
+        "value": 22,
+        "unit": "ev-ac-kw",
+        "basisId": "ev-ac-rated-output",
+        "variant": "EVH5A22N2S",
+        "basis": "Manufacturer specified maximum AC charging output for this exact supply variant; car acceptance and configured home supply can reduce actual output.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/",
+        "checkedAt": "2026-10-10"
+      },
+      "warranty": {
+        "value": 2,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "EVH5A22N2S",
+        "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf",
+        "checkedAt": "2026-10-10"
+      },
+      "cost": {
+        "value": 1485.55,
+        "unit": "aud-system",
+        "basisId": "ev-charger-unit-gst",
+        "variant": "EVH5A22N2S",
+        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
+        "sourceUrl": "https://www.switchboardinabox.com.au/evh5a22n2s-charging-station-schneider-charge-1pn3pn-1xt2s-741122kw-1632a",
+        "checkedAt": "2026-10-10"
+      }
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact Australian hardware code",
+        "value": "EVH5A22N2S",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "Rated output and supply",
+        "value": "22 kW three-phase at 32 A; 11 kW at 16 A, or 7.4 kW single-phase.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "Car connection",
+        "value": "Type 2 socket; separate car cable required.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "Network and app",
+        "value": "Wi-Fi and Ethernet; Wiser ecosystem and supported OCPP connections.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "On-unit controls",
+        "value": "Colour status indicator; charging controls use the app.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "Size, height x width x depth",
+        "value": "352 x 244 x 117 mm.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "Outdoor protection and operating temperature",
+        "value": "IP55, IK10; -35 to 50 degrees Celsius.",
+        "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/"
+      },
+      {
+        "label": "Product fault cover",
+        "value": "24 months under the manufacturer-authored Pacific AU/NZ warranty conditions.",
+        "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf"
+      }
+    ],
+    "freshness": {
+      "generation": "EVH5A22N2S",
+      "released": null,
+      "sourceUrl": "https://www.se.com/au/en/product/EVH5A22N2S/charging-station-schneider-charge-1p%2Bn-3p%2Bn-1xt2s-7-4-11-22kw-16-32a/",
+      "note": "Current exact Australian model and supply variant. A document or image upload date is not treated as its first launch date."
     }
   }
 ]

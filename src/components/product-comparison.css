@@ -12,6 +12,7 @@
 .product-comparison-toolbar input, .product-comparison-toolbar select { background: #fff; border: 1px solid #91b1b5; border-radius: 10px; color: #062f37; font: inherit; font-size: .94rem; min-height: 46px; padding: 10px 12px; width: 100%; }
 .product-comparison-toolbar p { color: #b7d0d7; font-size: .87rem; margin: 0 0 12px; text-align: right; }
 .product-comparison-toolbar-help { text-align: right; }
+.product-comparison-count { color: #bdd0d5; font-size: .85rem; margin: 0 0 8px; }
 .product-comparison-toolbar-help p { margin-bottom: 8px; }
 .product-comparison-toolbar-help button { background: transparent; border: 1px solid #57777b; border-radius: 8px; color: #d1eee5; cursor: pointer; font: inherit; font-size: .8rem; min-height: 44px; padding: 8px 12px; }
 .product-comparison-toolbar-help button:disabled { cursor: wait; opacity: .6; }
@@ -68,6 +69,15 @@
 .product-comparison-comparison-scroll { overflow-x: auto; }
 .product-comparison-comparison-grid { display: grid; column-gap: 16px; grid-template-rows: 180px auto repeat(3, auto) repeat(4, auto) auto; padding: 20px; }
 .product-comparison-comparison-grid article { background: #fff; border: 1px solid #dbe5e5; border-radius: 14px; display: grid; grid-row: span 10; grid-template-rows: subgrid; overflow: hidden; }
+.product-comparison-hot-water { border-top: 1px solid #dce7e7; margin: 14px 0; padding-top: 12px; }
+.product-comparison-hot-water dl { display: grid; gap: 12px; margin: 0; }
+.product-comparison-hot-water dt { color: #043648; font-weight: 700; }
+.product-comparison-hot-water dd { color: #395766; margin: 4px 0 0; }
+.product-comparison-hot-water p { color: #58707b; font-size: .78rem; line-height: 1.5; margin: 12px 0 0; }
+.product-comparison-hot-water a { color: #006d59; }
+.product-comparison-comparison-grid-hot-water { grid-template-rows: 180px auto repeat(3, auto) auto repeat(4, auto) auto; }
+.product-comparison-comparison-grid-hot-water article { grid-row: span 11; }
+.product-comparison-comparison-grid .product-comparison-hot-water { margin: 0 18px 14px; }
 .product-comparison-comparison-grid .product-comparison-photo { height: 180px; }
 .product-comparison-comparison-grid h2 { min-height: 3em; padding: 18px 18px 0; }
 .product-comparison-comparison-grid .product-comparison-ratings { display: contents; }
