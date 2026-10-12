@@ -229,6 +229,7 @@ function workflowFixture() {
     );
     CREATE TABLE trade_work_order_events (
       id text PRIMARY KEY, work_order_id text NOT NULL, firebase_uid text NOT NULL,
+      actor_uid text NOT NULL DEFAULT '',
       event_type text NOT NULL, summary text NOT NULL, created_at text NOT NULL
     );
     CREATE TABLE trade_crm_quotes (
@@ -262,6 +263,7 @@ function workflowFixture() {
       created_at text NOT NULL, updated_at text NOT NULL
     );
     CREATE TABLE trade_team_members (
+      can_view_leads integer NOT NULL DEFAULT 0, can_manage_leads integer NOT NULL DEFAULT 0,
       id text PRIMARY KEY, owner_uid text NOT NULL, member_uid text NOT NULL,
       status text NOT NULL
     );
@@ -329,6 +331,7 @@ const evidenceObjects = new Map();
 const workflowServer = loadTypescriptModule(
   "../src/lib/public-lead-quote-workflow-server.ts",
   {
+    "./trade-lead-access-server": loadTypescriptModule("../src/lib/trade-lead-access-server.ts", {}),
     "@/lib/public-plan-enquiry.mjs": { publicPlanContactReleaseAccessSql },
     "@/lib/public-plan-quote-preparation.mjs": {
       PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,

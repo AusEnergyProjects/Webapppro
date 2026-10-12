@@ -224,7 +224,7 @@ test("quote submission keeps one request identity through retries and atomically
   assert.match(tradeOpportunities, /audience: "customer"/);
   assert.match(
     tradeOpportunities,
-    /await db\.batch\(\[[\s\S]*\.\.\.activity\.statements[\s\S]*\]\)/,
+    /await guardedTradeLeadMutationBatch\(db, access, "quote", \[[\s\S]*\.\.\.activity\.statements[\s\S]*\]\)/,
   );
   assert.match(
     tradeOpportunities,
@@ -416,7 +416,9 @@ test("one project acceptance claim keeps the winning quote and contact release c
   db.close();
 });
 
-test("exact opportunity targeting validates one match id and remains owner scoped", () => {
+test("exact opportunity targeting validates one match id and remains selected-business scoped", () => {
+  assert.match(tradeOpportunities, /requireInstallerTeamAccess\(request\)/);
+  assert.match(tradeOpportunities, /const installerUid = access\.ownerUid/);
   assert.match(tradeOpportunities, /searchParams\.getAll\("matchId"\)/);
   assert.match(tradeOpportunities, /matchParameters\.length > 1/);
   assert.match(tradeOpportunities, /UUID_PATTERN\.test\(matchParameters\[0\]\.trim\(\)\)/);
@@ -430,10 +432,10 @@ test("exact opportunity targeting validates one match id and remains owner scope
   );
   assert.match(
     tradeOpportunities,
-    /\.bind\(user\.uid, requestedMatchId, requestedMatchId\)/,
+    /\.bind\(installerUid, requestedMatchId, requestedMatchId\)/,
   );
   assert.match(tradeOpportunities, /const initiallyAuthorized = await authorizedLeadIdsStatement\.all/);
-  assert.match(tradeOpportunities, /\.bind\(user\.uid, authorizedMatchIdsJson\)/);
+  assert.match(tradeOpportunities, /\.bind\(installerUid, authorizedMatchIdsJson\)/);
   assert.match(tradeOpportunities, /if \(!authorizedMatchIds\.has\(matchId\) \|\| !currentAuthorizedMatchIds\.has\(matchId\)\) return \[\]/);
 });
 

@@ -632,7 +632,10 @@ test("server and trade workspace enforce the allocation-scoped contact boundary"
   assert.match(opportunityServer, /ON CONFLICT\(opportunity_id, firebase_uid\) DO NOTHING/);
   assert.match(tradeRoute, /public_trade_lead_contact_releases public_contact/);
   assert.match(tradeRoute, /WHERE m\.firebase_uid = \?/);
-  assert.match(tradeRoute, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.match(tradeRoute, /requireInstallerTeamAccess\(request\)/);
+  assert.match(tradeRoute, /if \(!canViewLeads\(access\)\)/);
+  assert.match(tradeRoute, /const installerUid = access\.ownerUid/);
+  assert.match(tradeRoute, /currentTradeLeadAccess\(db, access\)/);
   assert.doesNotMatch(tradeRoute, /verifiedTradeAccountPredicate\("current_public_trade_account"\)/);
   assert.doesNotMatch(tradeRoute, /publicPlanContactReleaseAccessSql\("(?:public_contact|active_public_contact)"\)/);
   assert.match(tradeRoute, /JOIN public_trade_lead_contact_releases public_contact[\s\S]*current_release\.opportunity_id = o\.id[\s\S]*current_release\.source_reference = o\.source_reference/);

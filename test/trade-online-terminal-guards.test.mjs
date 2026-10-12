@@ -231,6 +231,7 @@ function fixture(stage = "in_progress", revision = 5) {
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
       firebase_uid text NOT NULL,
+      actor_uid text NOT NULL DEFAULT '',
       event_type text NOT NULL,
       summary text NOT NULL,
       created_at text NOT NULL
@@ -385,6 +386,7 @@ function workOrdersRoute(db, staffAccess = null) {
     "./trade-calendar-sync-server": { cancelAppointmentInConnectedCalendars: async () => { throw new Error("Unexpected external calendar call in terminal job guard test"); } },
   });
   return loadTypescriptModule("../src/app/api/trade-work-orders/route.ts", {
+    "@/lib/trade-lead-access-server": loadTypescriptModule("../src/lib/trade-lead-access-server.ts", {}),
     "@/lib/trade-import-labels": importLabels,
     "@/lib/trade-job-cancellation-server": cancellationServer,
     "../../../../db": { getD1: () => db },

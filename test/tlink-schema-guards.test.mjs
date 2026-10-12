@@ -35,6 +35,7 @@ function schemaDatabase() {
     CREATE TABLE trade_crm_service_sites(id text, firebase_uid text, address_line_1 text,address_line_2 text,suburb text,address_state text,postcode text,record_status text);
     CREATE TABLE trade_team_members (
       id text, owner_uid text, member_uid text, status text,
+      can_view_leads integer NOT NULL DEFAULT 0, can_manage_leads integer NOT NULL DEFAULT 0,
       can_create_jobs integer, can_manage_jobs integer, can_assign_jobs integer,
       can_view_customers integer, can_manage_customers integer,
       can_view_quotes integer, can_manage_quotes integer, can_send_quotes integer,
@@ -306,7 +307,7 @@ test("runtime installer creates and verifies every TLink integrity guard", async
   const installed = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'trigger' ORDER BY name").all();
   assert.deepEqual(installed.map((row) => row.name), ALL_TLINK_GUARDS.map((item) => item.name).sort());
   database.close();
-  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 27);
+  assert.equal(TLINK_SCHEMA_GUARD_DEFINITIONS.length, 29);
 });
 
 test("cold TLink schema checks use one read batch and completed warm checks do no I/O", async () => {

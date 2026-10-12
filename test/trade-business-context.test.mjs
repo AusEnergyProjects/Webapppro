@@ -11,7 +11,8 @@ const permissions = ["can_create_jobs", "can_manage_jobs", "can_assign_jobs", "c
   "can_manage_customers", "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_send_sms",
   "can_view_invoices", "can_manage_invoices", "can_view_price_book", "can_manage_price_book",
   "can_apply_discounts", "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions",
-  "can_view_field_evidence", "can_manage_field_evidence", "can_run_reports", "can_search_customers"];
+  "can_view_field_evidence", "can_manage_field_evidence", "can_run_reports", "can_search_customers",
+  "can_view_leads", "can_manage_leads"];
 
 class Statement {
   constructor(database, sql, values = [], calls = [], beforeRead) { this.database = database; this.sql = sql; this.values = values; this.calls = calls; this.beforeRead = beforeRead; }
@@ -190,10 +191,12 @@ test("owner and staff permissions remain separate for the same identity", async 
   assert.equal(staff.ownerUid, "business-a"); assert.equal(staff.actorUid, f.identity.uid);
   assert.equal(staff.isOwner, false); assert.equal(staff.memberId, "staff-a"); assert.equal(staff.businessName, "Employer");
   assert.equal(staff.canManageJobs, false); assert.equal(staff.canManageTeam, false); assert.equal(staff.canViewQuotes, true);
+  assert.equal(staff.canViewLeads, false); assert.equal(staff.canManageLeads, false);
   assert.equal(staff.canReceiveCustomerQaNotifications, false);
   const owner = await f.teams.requireInstallerTeamAccess(f.request(f.identity.uid));
   assert.equal(owner.ownerUid, f.identity.uid); assert.equal(owner.isOwner, true);
   assert.equal(owner.canManageJobs, true); assert.equal(owner.canManageTeam, true);
+  assert.equal(owner.canViewLeads, true); assert.equal(owner.canManageLeads, true);
   assert.equal(owner.canReceiveCustomerQaNotifications, true);
   assert.notEqual(owner.memberId, staff.memberId);
   assert.equal(f.database.prepare("SELECT can_manage_team FROM trade_team_members WHERE id='staff-a'").get().can_manage_team, 0);

@@ -25,12 +25,16 @@ test("old project links preserve bounded planning choices without carrying ident
 
 test("shared trade evidence remains authorised, consented and audited, with no former customer bypass", () => {
   const source = fs.readFileSync(new URL("../src/app/api/customer-project-evidence/route.ts", import.meta.url), "utf8");
-  assert.match(source, /await installerCanAccess\(user.uid, record\)/);
+  assert.match(source, /requireInstallerTeamAccess\(request\)/);
+  assert.match(source, /if \(!canViewLeads\(user\)\)/);
+  assert.match(source, /await installerCanAccess\(user\.ownerUid, record\)/);
   assert.match(source, /if \(!installerAccess\)/);
   assert.match(source, /record.sharing_scope !== "allocated-installers"/);
   assert.match(source, /consent.withdrawn_at = ''/);
   assert.match(source, /verifiedTradeAccountPredicate/);
   assert.match(source, /INSERT INTO customer_project_evidence_events/);
+  assert.match(source, /record\.customer_uid, user\.ownerUid, user\.actorUid/);
+  assert.match(source, /currentTradeLeadAccess\(getD1\(\), user\)[\s\S]*return new Response\(object\.body/);
   assert.doesNotMatch(source, /ownerAccess|request.formData|object_key\)\.delete/);
 });
 

@@ -20,6 +20,8 @@ function fixture(t) {
     CREATE TABLE trade_mobile_push_outbox(id TEXT PRIMARY KEY,owner_uid TEXT,audience_member_id TEXT,event_key TEXT,event_type TEXT,entity_type TEXT,entity_id TEXT,payload TEXT,status TEXT,attempts INTEGER,next_attempt_at TEXT,created_at TEXT,updated_at TEXT);`);
   for (const file of ["0025_dizzy_spot.sql", "0070_frictionless_team_roster.sql", "0131_trade_team_permissions_and_member_files.sql"]) sqlite.exec(read(`drizzle/${file}`));
   sqlite.exec("ALTER TABLE trade_team_members ADD can_send_sms INTEGER NOT NULL DEFAULT 0;");
+  sqlite.exec(`ALTER TABLE trade_team_members ADD can_view_leads INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE trade_team_members ADD can_manage_leads INTEGER NOT NULL DEFAULT 0;`);
   for (const statement of read("drizzle/0231_trade_crews.sql").split(";")) {
     if (statement.replace(/--[^\n]*/g, "").trim()) sqlite.prepare(statement).run();
   }
@@ -48,7 +50,7 @@ function fixture(t) {
   for(const id of ["lead","worker","other-lead","other-worker"])person(id);person("foreign","another-owner");
   for(const [id,assignee] of [["crew-job","worker"],["outside-job","other-worker"],["lead-job","lead"]])sqlite.prepare("INSERT INTO trade_work_orders(id,firebase_uid,assignee_member_id) VALUES(?,'owner',?)").run(id,assignee);
   const owner={ownerUid:"owner",actorUid:"owner",memberId:"owner-member",isOwner:true};
-  const actor=id=>({ownerUid:"owner",actorUid:`${id}-uid`,memberId:id,isOwner:false,jobScope:"team",scheduleScope:"team",canManageJobs:true,canAssignJobs:true,canRescheduleJobs:true,canManageTeam:true,canViewCustomers:true,canSearchCustomers:true,canViewInvoices:true,canViewQuotes:true,canRunReports:true});
+  const actor=id=>({ownerUid:"owner",actorUid:`${id}-uid`,memberId:id,isOwner:false,jobScope:"team",scheduleScope:"team",canManageJobs:true,canAssignJobs:true,canRescheduleJobs:true,canManageTeam:true,canViewCustomers:true,canViewLeads:true,canManageLeads:true,canSearchCustomers:true,canViewInvoices:true,canViewQuotes:true,canRunReports:true});
   const save=(extra={})=>moduleRecord.exports.saveTradeCrew(owner,{name:"Installers",companyName:"Subcontractor Pty Ltd",leadMemberId:"lead",memberIds:["lead","worker"],...extra},db);
   return {sqlite,db,owner,actor,save,server:moduleRecord.exports,setBeforeBatch:hook=>{beforeBatch=hook;}};
 }
@@ -81,7 +83,7 @@ test("crew access restricts scopes and sensitive grants while preserving qualifi
   const f=fixture(t);await f.save();const access=await f.server.applyTradeCrewAccess(f.actor("lead"),f.db);
   assert.equal(access.crewLead,true);assert.deepEqual(access.crewMemberIds,["lead","worker"]);
   assert.equal(access.jobScope,"own");assert.equal(access.scheduleScope,"own");
-  for(const permission of ["canCreateJobs","canManageTeam","canEditTeamPermissions","canViewCustomers","canSearchCustomers","canViewInvoices","canViewQuotes","canManagePriceBook","canSendSms"])assert.equal(access[permission],false,permission);
+  for(const permission of ["canCreateJobs","canManageTeam","canEditTeamPermissions","canViewCustomers","canViewLeads","canManageLeads","canSearchCustomers","canViewInvoices","canViewQuotes","canManagePriceBook","canSendSms"])assert.equal(access[permission],false,permission);
   assert.equal(access.canRunReports,true);assert.equal(access.canAssignJobs,true);
   const worker=await f.server.applyTradeCrewAccess(f.actor("worker"),f.db);assert.equal(worker.canAssignJobs,false);assert.deepEqual(worker.crewMemberIds,["worker"]);
   const nonCrew=f.actor("other-lead");assert.equal(await f.server.applyTradeCrewAccess(nonCrew,f.db),nonCrew);

@@ -315,7 +315,8 @@ test("trade lead reads split base rows and execute consent authorization within 
   assert.equal((getBlock.match(/await db\.batch<Record<string, unknown>>\(/g) || []).length, 1);
   assert.match(getBlock, /const initiallyAuthorized = await authorizedLeadIdsStatement\.all<Record<string, unknown>>\(\)/);
   assert.match(getBlock, /const authorizedMatchIds = new Set\(initiallyAuthorized\.results\.map/);
-  assert.match(getBlock, /if \(!authorizedMatchIds\.size\) return json\(\{ ok: true, opportunities: \[\] \}\)/);
+  assert.match(getBlock, /if \(!authorizedMatchIds\.size && !await currentTradeLeadAccess\(db, access\)\) return json\(\{ ok: false,[\s\S]*\}, 403\)/);
+  assert.match(getBlock, /if \(!authorizedMatchIds\.size\) return json\(\{ ok: true, permissions: \{ canViewLeads: true, canManageLeads: canManageLeads\(access\) \}, opportunities: \[\] \}\)/);
   assert.match(boundedMatchRead, /bounded_match\.id IN \(SELECT value FROM json_each\(\?\)\)/);
   assert.match(boundedMatchRead, /bounded_match\.firebase_uid = \?/);
   assert.match(getBlock, /if \(!authorizedMatchIds\.has\(matchId\) \|\| !currentAuthorizedMatchIds\.has\(matchId\)\) return \[\]/);
@@ -397,7 +398,7 @@ test("trade lead reads split base rows and execute consent authorization within 
     /D1 projection is too wide|D1 conservative expression budget is too high/,
   );
   assert.equal(
-    (route.match(/requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/g) || []).length,
+    (route.match(/access = await requireInstallerTeamAccess\(request\)/g) || []).length,
     2,
   );
   assert.doesNotMatch(

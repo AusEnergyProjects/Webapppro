@@ -21,6 +21,8 @@ const read = (path) => fs.readFileSync(
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const opportunityPlanRoute = read("../src/app/api/trade-opportunity-plan/route.ts");
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const leadInbox = read("../src/components/TradeLeadInbox.tsx");
+const teamServer = read("../src/lib/trade-team-server.ts");
 const styles = read("../src/app/globals.css");
 
 function sourceBetween(source, startMarker, endMarker) {
@@ -229,8 +231,15 @@ test("complete installer report includes every controlled step and removes profe
 });
 
 test("verified exact-match opportunity API projects the pack and approved file count", () => {
-  assert.match(opportunityRoute, /requireVerifiedTradeAccess\(request, \{ partnerTypes: \["installer"\] \}\)/);
-  assert.match(opportunityRoute, /accountHasFeature\(user\.uid, "installer", "installer_leads"\)/);
+  assert.match(opportunityRoute, /access = await requireInstallerTeamAccess\(request\)/);
+  assert.match(opportunityRoute, /if \(!canViewLeads\(access\)\) return json/);
+  assert.match(opportunityRoute, /const installerUid = access\.ownerUid/);
+  assert.match(opportunityRoute, /accountHasFeature\(installerUid, "installer", "installer_leads"\)/);
+  assert.match(teamServer, /requireVerifiedTradeIdentity\(identity, \{ partnerTypes: \["installer"\] \}\)/);
+  assert.match(teamServer, /selectTradeBusiness\(request, identity\)/);
+  assert.match(teamServer, /\.bind\(identity\.uid, selected\.ownerUid, selected\.memberId\)/);
+  assert.match(teamServer, /const ownerAccount = await tradeAccountProjection\(ownerUid\)/);
+  assert.match(teamServer, /if \(!ownerAccount \|\| ownerAccount\.partnerType !== "installer" \|\| !ownerAccount\.approvedAbnAccess\) \{\s*throw new Error\("ABN_REVIEW_REQUIRED"\)/);
   assert.match(opportunityRoute, /WHERE m\.firebase_uid = \?/);
   assert.match(opportunityRoute, /createInstallerEnquiryPack/);
   assert.match(
@@ -262,8 +271,11 @@ test("verified exact-match opportunity API projects the pack and approved file c
 });
 
 test("complete plan endpoint keeps exact-match and privacy boundaries", () => {
-  assert.match(opportunityPlanRoute, /requireVerifiedTradeAccess\(request, \{[\s\S]*partnerTypes: \["installer"\]/);
-  assert.match(opportunityPlanRoute, /accountHasFeature\([\s\S]*"installer_leads"/);
+  assert.match(opportunityPlanRoute, /access = await requireInstallerTeamAccess\(request\)/);
+  assert.match(opportunityPlanRoute, /if \(!canViewLeads\(access\)\) return json/);
+  assert.match(opportunityPlanRoute, /accountHasFeature\(\s*access\.ownerUid,\s*"installer",\s*"installer_leads"/);
+  assert.match(opportunityPlanRoute, /\.bind\(matchId, access\.ownerUid\)/);
+  assert.match(opportunityPlanRoute, /currentTradeLeadAccess\(db, access\)/);
   assert.match(opportunityPlanRoute, /m\.id = \? AND m\.firebase_uid = \?/);
   assert.match(opportunityPlanRoute, /m\.status IN \('offered', 'viewed', 'interested', 'connected'\)/);
   assert.match(opportunityPlanRoute, /o\.status IN \('open', 'paused'\)/);
@@ -286,7 +298,8 @@ test("lead card opens the complete plan and represents every returned shared fil
 
   assert.ok(packPosition > -1);
   assert.ok(actionPosition > packPosition);
-  assert.match(dashboard, /className="dashboard-lead-list" aria-label="Available leads"/);
+  assert.match(dashboard, /<TradeLeadList[\s\S]*onSelect=\{setSelectedOpportunityMatchId\}/);
+  assert.match(leadInbox, /className="dashboard-lead-list" aria-label="Available leads"/);
   assert.match(leadCard, /const isExpanded = selectedLeadOpportunity\?\.matchId === opportunity\.matchId/);
   assert.match(leadCard, /hidden=\{!isExpanded\}/);
   assert.match(dashboard, /Open complete plan/);

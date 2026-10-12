@@ -6,6 +6,7 @@ const dashboard = fs.readFileSync(
   new URL("../src/components/DirectTradeDashboard.tsx", import.meta.url),
   "utf8",
 );
+const leadInbox = fs.readFileSync(new URL("../src/components/TradeLeadInbox.tsx", import.meta.url), "utf8");
 
 const leadList = dashboard.slice(
   dashboard.indexOf("visibleLeadOpportunities.map"),
@@ -46,7 +47,8 @@ test("authorised customer identity is the first selected lead preview section", 
     leadList,
     /hidden=\{!isExpanded\}[\s\S]*\{isExpanded && \(/,
   );
-  assert.match(leadList, /aria-controls=\{`opportunity-\$\{opportunity\.matchId\}`\}/);
+  assert.match(dashboard, /<TradeLeadList[\s\S]*selectedMatchId=\{selectedLeadOpportunity\?\.matchId \|\| ""\}[\s\S]*onSelect=\{setSelectedOpportunityMatchId\}/);
+  assert.match(leadInbox, /aria-controls=\{`opportunity-\$\{opportunity\.matchId\}`\}/);
   assert.match(
     leadList,
     /id=\{`opportunity-\$\{opportunity\.matchId\}`\}[\s\S]*hidden=\{!isExpanded\}/,
