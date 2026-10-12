@@ -54,7 +54,7 @@ function recoveryRates(performance: HotWaterPerformance): RecoveryRates | null {
     }
     if (estimate.litresPerHour !== undefined) {
       if (!Number.isFinite(estimate.litresPerHour) || estimate.litresPerHour <= 0 || estimate.minutesMinimum !== undefined || estimate.minutesMaximum !== undefined || estimate.heatedLitres !== undefined) throw new Error("Invalid published heat-pump recovery estimate");
-      return { minimum: estimate.litresPerHour, maximum: estimate.litresPerHour, conditions: `Maker's published heating rate. ${estimate.basis}`, sourceUrl: estimate.sourceUrl };
+      return { minimum: estimate.litresPerHour, maximum: estimate.litresPerHour, conditions: `Heating-rate estimate. ${estimate.basis}`, sourceUrl: estimate.sourceUrl };
     }
     if (![estimate.minutesMinimum, estimate.minutesMaximum, estimate.heatedLitres].every(value => Number.isFinite(value) && value > 0)
         || estimate.minutesMaximum < estimate.minutesMinimum) throw new Error("Invalid published heat-pump recovery estimate");

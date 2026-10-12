@@ -56,7 +56,7 @@ test("a published litres-per-hour rate retains its exact figure when water tempe
   const estimate = { litresPerHour: 53, basis: "Published production rate at 20°C air; water temperatures not specified.", sourceUrl: conditions.sourceUrl };
   const facts = hotWaterComparisonFacts({ noise: null, recovery: null, recoveryTimeEstimate: estimate });
   assert.equal(facts.recovery, "About 53 litres per hour");
-  assert.match(facts.conditions, /published heating rate.*water temperatures not specified/);
+  assert.match(facts.conditions, /Heating-rate estimate.*water temperatures not specified/);
   for (const change of [{ litresPerHour: 0 }, { litresPerHour: NaN }, { minutesMinimum: 120 }, { heatedLitres: 200 }]) {
     assert.throws(() => hotWaterComparisonFacts({ noise: null, recovery: null, recoveryTimeEstimate: { ...estimate, ...change } }), /Invalid/);
   }

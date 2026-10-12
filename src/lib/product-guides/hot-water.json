@@ -8902,7 +8902,7 @@
     ],
     "pros": [
       "Stores 160 litres in an Australian-made stainless-steel tank.",
-      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Its shared heating unit has a published 37 dB noise figure.",
       "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
     ],
     "cons": [
@@ -8919,8 +8919,8 @@
       },
       "recovery": null,
       "recoveryTimeEstimate": {
-        "litresPerHour": 78.75,
-        "basis": "Estimated from the maker 315-litre reference test: 17 to63 C water at20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
+        "litresPerHour": 78.8,
+        "basis": "Estimated from the maker 315-litre reference test: 17 to 63 C water at 20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       }
     }
@@ -9073,7 +9073,7 @@
     ],
     "pros": [
       "Stores 250 litres in an Australian-made stainless-steel tank.",
-      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Its shared heating unit has a published 37 dB noise figure.",
       "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
     ],
     "cons": [
@@ -9090,8 +9090,8 @@
       },
       "recovery": null,
       "recoveryTimeEstimate": {
-        "litresPerHour": 78.75,
-        "basis": "Estimated from the maker 315-litre reference test: 17 to63 C water at20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
+        "litresPerHour": 78.8,
+        "basis": "Estimated from the maker 315-litre reference test: 17 to 63 C water at 20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       }
     }
@@ -9244,7 +9244,7 @@
     ],
     "pros": [
       "Stores 300 litres in an Australian-made stainless-steel tank.",
-      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Its shared heating unit has a published 37 dB noise figure.",
       "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
     ],
     "cons": [
@@ -9261,8 +9261,8 @@
       },
       "recovery": null,
       "recoveryTimeEstimate": {
-        "litresPerHour": 78.75,
-        "basis": "Estimated from the maker 315-litre reference test: 17 to63 C water at20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
+        "litresPerHour": 78.8,
+        "basis": "Estimated from the maker 315-litre reference test: 17 to 63 C water at 20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       }
     }
@@ -9415,7 +9415,7 @@
     ],
     "pros": [
       "Stores 315 litres in an Australian-made stainless-steel tank.",
-      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Its shared heating unit has a published 37 dB noise figure.",
       "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
     ],
     "cons": [
