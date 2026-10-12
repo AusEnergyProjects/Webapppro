@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: Product comparison corrections and separate Creditex/business-created form compliance; matching GitHub/Sites publication authorised.
+Status: Site-wide performance, including TLink Jobs, Leads and Customers; matching GitHub/Sites publication authorised.
 Prepared: 12 October 2026
 
 ## Current follow-up, 12 October 2026
+
+Outcome: faster public pages and portal navigation with the existing design, features, account access and customer privacy preserved. Scope is shared server startup/build/cache, public catalogue loading, portal tab boundaries and CRM list/query loading. No new migration, vendor, product facts or pricing formula changes.
+
+Acceptance: preserve saved views and exact authorised rows/cursors, show explicit loading failures with retry, retain all 386 product tiles and full sourced Specs, exclude private/RSC/query-dependent responses from shared page caching, and publish the matching committed build. Validate focused request/query/cancellation boundaries, typecheck, build budgets, full-suite regressions and affected live desktop/mobile flows. Stop before changing permissions, private caching or hosting-provider access outside the existing Sites configuration.
+
+Evidence and exact publication identity: `C:/Webproject/outputs/aea-platform-performance-20261012/release-report.json`. Signed-in Chrome reproduced 20 to 30 second response waits before this release; live timing comparisons must distinguish application/database duration from startup/hosting delay. Existing unrelated suite failures and expired source-review windows remain explicit.
+
+## Retained preceding delivery: product comparisons and form compliance, 12 October 2026
 
 Deliver the corrected product measurements, click sorting, approved multihead rebate matching and separate Creditex/business-created form compliance workflow. Migration 0260 retains immutable questionnaire/review versions and current permission/source checks. Special report/PDF and rental/gas/electrical safety forms are excluded by the user's explicit scope decision. Do not reintroduce them or add questions to installers' quoting workflow.
 

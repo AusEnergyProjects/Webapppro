@@ -58,7 +58,8 @@ function fixture({ mode = "live", user = { uid: "staff-a" }, mismatchedProfile =
   const profile = { councilId: mismatchedProfile ? "other" : "council-a", name: "Fixture Council", state: "VIC", postcodes: ["3805"], logoDataUrl: null,
     theme: { primaryColor: "#032733", accentColor: "#0b765d" } };
   const analytics = Object.fromEntries(["CouncilActivities", "CouncilAttribution", "CouncilEnquiries", "CouncilLocalShare", "CouncilPostcodes", "CouncilReports", "CouncilSummary", "CouncilTrend"].map(name => [name, name]));
-  const dependencies = { react, "react/jsx-runtime": jsx, "next/image": { default: "Image" },
+  const dependencies = { react, "react/jsx-runtime": jsx, "next/image": { default: "Image" }, "next/dynamic": { __esModule: true, default: () => "WattzunToolsWorkspace" },
+    "../PortalWorkspaceLoading": { PortalWorkspaceLoading: "PortalWorkspaceLoading" },
     "@/lib/council-theme": { councilThemeVariables: () => ({}) }, "@/lib/trade-device-client": {},
     "../TLinkChrome": { TLinkMark: "TLinkMark" }, "./CouncilAnalytics": analytics, "./CouncilCampaigns": { CouncilCampaigns: "CouncilCampaigns" },
     "./CouncilPrimitives": { CouncilIcon: "Icon", CouncilPanel: "Panel", councilDateTime: value => value, councilNumber: value => value },

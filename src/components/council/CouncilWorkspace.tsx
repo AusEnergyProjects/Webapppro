@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import NextImage from "next/image";
+import dynamic from "next/dynamic";
+import { PortalWorkspaceLoading } from "../PortalWorkspaceLoading";
 import type { CouncilCampaign } from "@/lib/council-campaigns";
 import type { CouncilProfile, CouncilProfileInput } from "@/lib/council-profile";
 import type { CouncilPeriodKey, CouncilReport } from "@/lib/council-reporting";
@@ -15,7 +17,7 @@ import { CouncilProfileSettings } from "./CouncilProfileSettings";
 import styles from "./CouncilWorkspace.module.css";
 import type { User } from "firebase/auth";
 import { TLinkWorkspaceBar } from "../TLinkWorkspaceBar";
-import { WattzunToolsWorkspace } from "../WattzunToolsWorkspace";
+const WattzunToolsWorkspace = dynamic(() => import("../WattzunToolsWorkspace").then((module) => module.WattzunToolsWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening Wattzun tools..." /> });
 import { TLinkNavigationIcon } from "../TLinkNavigationIcon";
 import { councilWorkspaceFromSearch, councilWorkspaceSearch, type CouncilWorkspaceView as CouncilView } from "@/lib/council-workspace-navigation";
 import { requestWattzunAssistant } from "@/lib/wattzun-appearance";

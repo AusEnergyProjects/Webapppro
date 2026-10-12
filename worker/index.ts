@@ -82,6 +82,7 @@ import {
   shouldApplyCanonicalHostRedirect,
 } from "../src/lib/public-redirects.mjs";
 import { releaseIdentityFromEnvironment } from "../src/lib/release-identity.mjs";
+import { publicPageCacheKey, publicPageCacheResponse } from "../src/lib/public-page-cache.mjs";
 import { removeExpiredIntegrationStates } from "../src/lib/myob-security-audit";
 import { resolveCouncilPublicHost, isCouncilPlatformHost, COUNCIL_PUBLIC_REFERENCE_HEADER, type CouncilPublicHostDecision } from "../src/lib/council-public-branding";
 import { runCouncilMonthlyReports, hasDueCouncilMonthlyReports, drainCouncilMonthlyReportEmails, type CouncilMonthlyArtifactStore } from "../src/lib/council-monthly-report-server";
@@ -511,26 +512,6 @@ function legacyPathRedirect(request: Request) {
     : null;
 }
 
-function isCacheablePageRequest(request: Request) {
-  if (request.method !== "GET") return false;
-  const url = new URL(request.url);
-  // Cached development HTML can reference client modules replaced by hot reload.
-  if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return false;
-  if (url.pathname.startsWith("/api/")) return false;
-  if (url.pathname === "/account" || url.pathname.startsWith("/account/")) {
-    return false;
-  }
-  return (request.headers.get("accept") || "").includes("text/html");
-}
-
-function cacheableHtmlResponse(response: Response) {
-  if (!response.ok) return null;
-  if (!(response.headers.get("content-type") || "").includes("text/html")) return null;
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", HTML_CACHE_CONTROL);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-}
-
 const worker = {
   async fetch(request: Request, env: unknown, ctx: ExecutionContext): Promise<Response> {
     const ingressHeaders = new Headers(request.headers);
@@ -570,23 +551,37 @@ const worker = {
     if (request.method === "GET" && new URL(request.url).pathname === "/api/health") {
       await ensureTlinkSchemaGuards(getD1());
     }
-    if (!isCacheablePageRequest(request)) {
+    const cacheKey = publicPageCacheKey(request, env);
+    if (!cacheKey) {
       const handled = await handler.fetch(request, env as never, ctx as never);
       return secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request, env);
     }
 
     const cache = (globalThis as unknown as { caches?: RuntimeCacheStorage }).caches?.default;
     if (cache) {
-      const cached = await cache.match(request).catch(() => undefined);
-      if (cached) return secureResponse(cached, request);
+      const cached = await cache.match(cacheKey).catch((error) => {
+        console.warn("Public document cache lookup failed.", error instanceof Error ? error.message : "Unknown error");
+        return undefined;
+      });
+      if (cached) {
+        const headers = new Headers(cached.headers);
+        headers.set("Cache-Control", HTML_CACHE_CONTROL);
+        headers.set("X-AEA-Document-Cache", "hit");
+        return secureResponse(new Response(cached.body, { status: cached.status, headers }), request);
+      }
     }
 
     const handled = await handler.fetch(request, env as never, ctx as never);
     const response = secureResponse(queueBackgroundDispatches(handled, ctx, request, env), request);
-    const cacheable = cacheableHtmlResponse(response);
+    const cacheable = publicPageCacheResponse(response.clone());
     if (!cacheable) return response;
-    if (cache) ctx.waitUntil(cache.put(request, cacheable.clone()).catch(() => undefined));
-    return cacheable;
+    if (cache) ctx.waitUntil(cache.put(cacheKey, cacheable).catch((error) => {
+      console.warn("Public document cache write failed.", error instanceof Error ? error.message : "Unknown error");
+    }));
+    const headers = new Headers(response.headers);
+    headers.set("Cache-Control", HTML_CACHE_CONTROL);
+    headers.set("X-AEA-Document-Cache", cache ? "miss" : "unavailable");
+    return new Response(response.body, { status: response.status, headers });
   },
   async scheduled(controller: ScheduledController, workerEnv: unknown, ctx: ExecutionContext) {
     const tasks: Promise<unknown>[] = [];

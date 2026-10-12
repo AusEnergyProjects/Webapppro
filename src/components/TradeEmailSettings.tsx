@@ -22,7 +22,6 @@ type EmailSettingsResponse = {
   error?: string;
 };
 
-export const TRADE_EMAIL_SETTINGS_HREF = "/direct-trade/dashboard?workspace=account#business-settings-email";
 
 export function TradeEmailSettings({ user }: { user: User }) {
   const fetch = useTradeBusinessFetch();

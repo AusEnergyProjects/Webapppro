@@ -5,7 +5,7 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { FOLLOW_UP_FIELDS, followUpEditorText, followUpStoredText, renderFollowUp, type FollowUpSettings, type FollowUpTemplate } from "@/lib/trade-follow-ups";
-import { TRADE_EMAIL_SETTINGS_HREF } from "./TradeEmailSettings";
+import { TRADE_EMAIL_SETTINGS_HREF } from "@/lib/trade-email-navigation";
 import { TradeSmsAutomationPanel } from "./TradeSmsAutomationPanel";
 import styles from "./TradeEmailTemplatesWorkspace.module.css";
 

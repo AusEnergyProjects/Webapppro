@@ -35,7 +35,7 @@ function harness(component, responder, props = {}) {
   const router = { push() {} }, alerts = { refresh() {}, setActiveThread() {} };
   const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "@/lib/trade-sms" ? sms : id === "@/lib/service-reminder-delivery" ? reminders : id === "@/lib/trade-follow-ups" ? followUps
     : id === "next/navigation" ? { useRouter: () => router } : id === "next/dynamic" ? { default: load => { const LazyComponent = () => null; void load().then(component => { assert.ok([fixtureComponents.TradeSmsDashboard, fixtureComponents.TradeCustomerSmsPanel].includes(component)); LazyComponent.resolvedComponent = component; }); return LazyComponent; } } : id === "./TradeMessageAlerts" ? { useTradeMessageAlerts: () => alerts }
-    : id === "./TradeSmsDashboard" || id === "./TradeSmsAutomationPanel" || id === "./TradeCustomerSmsPanel" ? fixtureComponents : id === "./TradeEmailSettings" ? { TRADE_EMAIL_SETTINGS_HREF: "/settings" }
+    : id === "./TradeSmsDashboard" || id === "./TradeSmsAutomationPanel" || id === "./TradeCustomerSmsPanel" ? fixtureComponents : id === "./TradeEmailSettings" || id === "@/lib/trade-email-navigation" ? { TRADE_EMAIL_SETTINGS_HREF: "/settings" }
     : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : {};
   const fetch = async (url, init) => { const payload = init.body ? JSON.parse(init.body) : null; requests.push({ url, init, payload }); return responder(payload, requests); };
   class FormDataFixture { constructor(values) { this.values = values; } get(key) { return this.values[key]; } }

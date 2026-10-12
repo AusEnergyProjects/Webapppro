@@ -1,9 +1,10 @@
 "use client";
 /* Local product photos have fixed dimensions. */
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ProductComparisonItem } from "@/lib/product-guides";
 import type { ProductRatingExplanation } from "@/lib/product-ratings";
+import { readProductComparisonDetails, type ProductComparisonCard } from "./product-comparison-data";
 import { ProductRebateChecker, ProductRebateResult, useProductRebateCheck } from "./ProductRebateChecker";
 import { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons, type ProductComparisonSort } from "./product-comparison-sort";
 import "./product-comparison.css";
@@ -12,11 +13,12 @@ import "./product-comparison.css";
 const subscribeToClient = () => () => {};
 const clientReadySnapshot = () => true;
 const serverReadySnapshot = () => false;
+const measurementNumber = new Intl.NumberFormat("en-AU", { maximumFractionDigits: 2 });
 
-function ProductPhoto({ product, eager = false }: { product: ProductComparisonItem; eager?: boolean }) {
+const ProductPhoto = memo(function ProductPhoto({ product, eager = false }: { product: Pick<ProductComparisonCard, "image">; eager?: boolean }) {
   return <img src={product.image.src} alt={product.image.alt} width="560" height="400" loading={eager ? "eager" : "lazy"} decoding="async" />;
-}
-function VisualRatings({ product }: { product: ProductComparisonItem }) {
+});
+const VisualRatings = memo(function VisualRatings({ product }: { product: ProductComparisonCard }) {
   return <div className="product-comparison-ratings" aria-label="Comparable product ratings">
     {product.ratings.map(rating => <section key={rating.id} className={`product-comparison-rating product-comparison-rating-${rating.id}`} data-rating={rating.id}>
       <div className="product-comparison-rating-label"><h3>{rating.label}</h3><span>{rating.score === null ? "See note" : `${rating.score.toFixed(1)} / 5`}</span></div>
@@ -25,9 +27,9 @@ function VisualRatings({ product }: { product: ProductComparisonItem }) {
       {rating.score === null && <small className="product-comparison-rating-figure">{rating.reason}</small>}
     </section>)}
   </div>;
-}
+});
 function MeasurementValue({ value, valueMaximum, unit }: { value: number; valueMaximum?: number; unit: string }) {
-  const number = value.toLocaleString("en-AU", { maximumFractionDigits: 2 });
+  const number = measurementNumber.format(value);
   if (unit === "included-product-years") return <>{number} {value === 1 ? "year" : "years"} of main-product parts cover</>;
   if (unit === "usable-kwh") return <>{number} kWh usable storage</>;
   if (unit === "tank-litres") return <>{number} litres</>;
@@ -36,40 +38,78 @@ function MeasurementValue({ value, valueMaximum, unit }: { value: number; valueM
   if (unit === "cop-a20-w15-55") return <>{number} units of heat per unit of electricity</>;
   if (unit === "ev-ac-kw") return <>{number} kW rated charging power</>;
   if (unit === "published-noise-db") return <>{number} dB</>;
-  if (unit === "recovery-litres-per-hour") return <>{number}{valueMaximum !== undefined && valueMaximum > value && <> to {valueMaximum.toLocaleString("en-AU", { maximumFractionDigits: 2 })}</>} litres per hour</>;
+  if (unit === "recovery-litres-per-hour") return <>{number}{valueMaximum !== undefined && valueMaximum > value && <> to {measurementNumber.format(valueMaximum)}</>} litres per hour</>;
   return <>{number}%</>;
 }
-function ComparisonFacts({ product }: { product: ProductComparisonItem }) {
+const ComparisonFacts = memo(function ComparisonFacts({ product }: { product: ProductComparisonCard }) {
   if (!product.pros.length) throw new Error("Missing verified benefits for " + product.id);
   return <div className="product-comparison-facts">
     <section className="product-comparison-pros" data-product-fact="pros"><h3>Pros</h3><ul>{product.pros.map(text => <li key={text}>{text}</li>)}</ul></section>
     <section className="product-comparison-cons" data-product-fact="cons"><h3>Cons</h3>{product.cons.length ? <ul>{product.cons.map(text => <li key={text}>{text}</li>)}</ul> : <p className="product-comparison-unknown">No model-specific drawback verified.</p>}</section>
     {product.warning && <p className="product-comparison-warning"><strong>Safety check:</strong> {product.warning}</p>}
   </div>;
-}
-function HotWaterFacts({ product }: { product: ProductComparisonItem }) {
+});
+const HotWaterFacts = memo(function HotWaterFacts({ product }: { product: ProductComparisonCard }) {
   if (!product.hotWaterFacts) return null;
   const facts = product.hotWaterFacts;
   return <div className="product-comparison-hot-water" data-hot-water-facts><p>{facts.conditions}{facts.recoverySourceUrl && <> <a href={facts.recoverySourceUrl} target="_blank" rel="noopener noreferrer">Recovery source ↗</a></>}</p></div>;
-}
-export function ProductComparisonBrowser({ category, products, methods }: { category: string; products: ProductComparisonItem[]; methods: ProductRatingExplanation[] }) {
+});
+export function ProductComparisonBrowser({ category, products, methods }: { category: string; products: ProductComparisonCard[]; methods: ProductRatingExplanation[] }) {
   const ready = useSyncExternalStore(subscribeToClient, clientReadySnapshot, serverReadySnapshot);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<ProductComparisonSort>({ criterion: "name", direction: "ascending" });
   const [selection, setSelection] = useState<string[]>([]);
   const [information, setInformation] = useState<ProductComparisonItem | null>(null);
+  const [requestedInformation, setRequestedInformation] = useState<ProductComparisonCard | null>(null);
+  const [informationError, setInformationError] = useState("");
+  const informationCache = useRef(new Map<string, ProductComparisonItem>());
+  const informationController = useRef<AbortController | null>(null);
   const compareDialog = useRef<HTMLDialogElement>(null);
   const informationDialog = useRef<HTMLDialogElement>(null);
   const methodDialog = useRef<HTMLDialogElement>(null);
   const rebateCategory = category === "hot-water" || category === "air-conditioning" || category === "multi-split" ? category : undefined;
   const rebates = useProductRebateCheck(rebateCategory);
-  const hasHotWater = products.some(product => product.hotWaterFacts);
-  const visible = sortProductComparisons(products, query, sort);
+  const hasHotWater = useMemo(() => products.some(product => product.hotWaterFacts), [products]);
+  const visible = useMemo(() => sortProductComparisons(products, query, sort), [products, query, sort]);
   const activeSortMethod = methods.find(method => method.id === sort.criterion) ?? null;
   const sortLabel = productComparisonSortLabel(activeSortMethod, sort.direction);
   const comparisonRows = 7 + methods.length + (hasHotWater ? 1 : 0) + (rebateCategory ? 1 : 0);
-  const selected = selection.map(id => products.find(p => p.id === id)).filter((p): p is ProductComparisonItem => Boolean(p));
-  useEffect(() => { if (information && !informationDialog.current?.open) informationDialog.current?.showModal(); }, [information]);
+  const selected = useMemo(() => selection.map(id => products.find(p => p.id === id)).filter((p): p is ProductComparisonCard => Boolean(p)), [selection, products]);
+  useEffect(() => () => informationController.current?.abort(), []);
+  function closeInformation() {
+    informationController.current?.abort();
+    informationController.current = null;
+    setRequestedInformation(null);
+    setInformation(null);
+    setInformationError("");
+  }
+  async function showInformation(product: ProductComparisonCard) {
+    informationController.current?.abort();
+    const cached = informationCache.current.get(product.id);
+    setRequestedInformation(product);
+    setInformation(cached ?? null);
+    setInformationError("");
+    if (!informationDialog.current?.open) informationDialog.current?.showModal();
+    if (cached) { informationController.current = null; return; }
+    const controller = new AbortController();
+    informationController.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await fetch(`/api/product-details?productId=${encodeURIComponent(product.id)}`, { signal: controller.signal });
+      if (!response.ok) throw new Error("The product specifications could not be loaded. Try again.");
+      const raw: unknown = await response.json();
+      const result = readProductComparisonDetails(raw, product.id);
+      if (informationController.current !== controller || controller.signal.aborted) return;
+      informationCache.current.set(product.id, result);
+      setInformation(result);
+    } catch (error) {
+      if (informationController.current !== controller) return;
+      setInformationError(controller.signal.aborted ? "Loading specifications took too long. Try again." : error instanceof Error ? error.message : "The product specifications could not be loaded. Try again.");
+    } finally {
+      window.clearTimeout(timeout);
+      if (informationController.current === controller) informationController.current = null;
+    }
+  }
   function toggleSelection(id: string) { setSelection(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 3 ? [...current, id] : current); }
   return <>
     {rebateCategory && <ProductRebateChecker check={rebates} ready={ready} />}
@@ -91,7 +131,7 @@ export function ProductComparisonBrowser({ category, products, methods }: { cate
       return <article key={product.id} id={product.id} className={`product-comparison-card${picked ? " product-comparison-selected" : ""}`}>
         <div className="product-comparison-photo"><ProductPhoto product={product} eager={index < 3} /><span>{product.brand}</span></div>
         <div className="product-comparison-card-body"><h2>{product.name}</h2><VisualRatings product={product} /><HotWaterFacts product={product} />{rebateCategory && <ProductRebateResult product={product} check={rebates} ready={ready} />}<ComparisonFacts product={product} />
-          <div className="product-comparison-card-actions"><button type="button" aria-label={`${picked ? "Remove" : "Select"} ${product.name} ${picked ? "from" : "for"} comparison`} aria-pressed={picked} disabled={!ready || (!picked && selection.length === 3)} onClick={() => toggleSelection(product.id)}>{picked ? "✓ Selected" : "+ Compare"}</button><button type="button" className="product-comparison-info-button" aria-label={`Technical specifications for ${product.name}`} disabled={!ready} onClick={() => setInformation(product)}>Specs ↗</button></div>
+          <div className="product-comparison-card-actions"><button type="button" aria-label={`${picked ? "Remove" : "Select"} ${product.name} ${picked ? "from" : "for"} comparison`} aria-pressed={picked} disabled={!ready || (!picked && selection.length === 3)} onClick={() => toggleSelection(product.id)}>{picked ? "✓ Selected" : "+ Compare"}</button><button type="button" className="product-comparison-info-button" aria-label={`Technical specifications for ${product.name}`} disabled={!ready} onClick={() => showInformation(product)}>Specs ↗</button></div>
         </div>
       </article>;
     })}</div>
@@ -107,8 +147,9 @@ export function ProductComparisonBrowser({ category, products, methods }: { cate
       <div className="product-comparison-comparison-scroll" tabIndex={0} role="region" aria-label="Side-by-side product comparison"><div className="product-comparison-comparison-grid" style={{ gridTemplateColumns: `repeat(${Math.max(selected.length, 1)}, minmax(260px, 1fr))`, gridTemplateRows: `180px repeat(${comparisonRows - 1}, auto)` }}>{selected.map(product => <article key={product.id} style={{ gridRow: `span ${comparisonRows}` }}><div className="product-comparison-photo"><ProductPhoto product={product} eager /><span>{product.brand}</span></div><h2>{product.name}</h2><VisualRatings product={product} /><HotWaterFacts product={product} />{rebateCategory && <ProductRebateResult product={product} check={rebates} ready={ready} />}<ComparisonFacts product={product} /></article>)}</div></div>
       <p className="product-comparison-note">Swipe across on a small screen.</p>
     </dialog>
-    <dialog ref={informationDialog} className="product-comparison-dialog product-comparison-information" aria-labelledby="product-information-title" onClose={() => setInformation(null)}>
-      <header className="product-comparison-dialog-header"><h2 id="product-information-title">{information?.name}</h2><button type="button" autoFocus onClick={() => informationDialog.current?.close()} aria-label="Close technical specifications">Close ×</button></header>
+    <dialog ref={informationDialog} className="product-comparison-dialog product-comparison-information" aria-labelledby="product-information-title" onClose={closeInformation}>
+      <header className="product-comparison-dialog-header"><h2 id="product-information-title">{requestedInformation?.name}</h2><button type="button" autoFocus onClick={() => informationDialog.current?.close()} aria-label="Close technical specifications">Close ×</button></header>
+      {requestedInformation && !information && <div className="product-comparison-information-body">{informationError ? <><p role="alert">{informationError}</p><button type="button" onClick={() => showInformation(requestedInformation)}>Try specifications again</button></> : <p role="status">Loading product specifications...</p>}</div>}
       {information && <div className="product-comparison-information-body">
         {information.warning && <p className="product-comparison-warning"><strong>Safety check:</strong> {information.warning}</p>}
         <p className="product-comparison-generation"><strong>{information.freshness.generation}</strong><br />{information.freshness.note} <a href={information.freshness.sourceUrl} target="_blank" rel="noopener noreferrer">Generation source ↗</a></p>

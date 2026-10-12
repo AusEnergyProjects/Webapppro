@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProductComparisonItem } from "@/lib/product-guides";
 import {
   currentRebateSystemOptions,
@@ -15,6 +15,7 @@ type HomeDetails = { postcode: string; suburb: string; state: string; installati
 type CheckEntry = { profileKey: string } & ({ status: "loading" } | { status: "error"; message: string } | { status: "done"; result: ProductRebateCheckResult });
 type Locality = { suburb: string; state: string };
 type LocalityLookup = { postcode: string; localities: Locality[]; loading: boolean; error: string };
+type ProductRebateItem = Pick<ProductComparisonItem, "id" | "name">;
 
 function todayInAustralia() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -71,7 +72,7 @@ export function useProductRebateCheck(category: ProductRebateCategory = "hot-wat
     setProfile(current => ({ ...current, ...change, ...(change.postcode !== undefined ? { suburb: "", state: "" } : {}) }));
   }
 
-  async function checkProduct(product: ProductComparisonItem) {
+  const checkProduct = useCallback(async (product: ProductRebateItem) => {
     const controller = new AbortController();
     controllers.current.get(product.id)?.abort();
     controllers.current.set(product.id, controller);
@@ -93,7 +94,7 @@ export function useProductRebateCheck(category: ProductRebateCategory = "hot-wat
       window.clearTimeout(timeout);
       if (controllers.current.get(product.id) === controller) controllers.current.delete(product.id);
     }
-  }
+  }, [category, profile, profileKey]);
 
   function entryFor(productId: string) { return entries[productId]?.profileKey === profileKey ? entries[productId] : undefined; }
   return { category, profile, updateProfile, localities, lookup, retryLocalities: () => setLookupVersion(value => value + 1), readyToCheck, checkProduct, entryFor };
@@ -121,11 +122,17 @@ export function ProductRebateChecker({ check, ready }: { check: ProductRebateChe
   </section>;
 }
 
-export function ProductRebateResult({ product, check, ready }: { product: ProductComparisonItem; check: ProductRebateCheck; ready: boolean }) {
+export function ProductRebateResult({ product, check, ready }: { product: ProductRebateItem; check: ProductRebateCheck; ready: boolean }) {
   const entry = check.entryFor(product.id);
+  return <ProductRebateResultContent product={product} entry={entry} readyToCheck={check.readyToCheck} checkProduct={check.checkProduct} ready={ready} />;
+}
+
+const ProductRebateResultContent = memo(function ProductRebateResultContent({ product, entry, readyToCheck, checkProduct, ready }: {
+  product: ProductRebateItem; entry: CheckEntry | undefined; readyToCheck: boolean; checkProduct: ProductRebateCheck["checkProduct"]; ready: boolean;
+}) {
   return <section className="product-rebate-result" data-product-rebates={product.id} aria-label={`Rebates for ${product.name}`}>
     <h3>Rebates for your home</h3>
-    {!check.readyToCheck ? <a href="#rebate-your-home" className="product-rebate-add-home">Add your home details above ↗</a> : <button type="button" disabled={!ready || entry?.status === "loading"} onClick={() => check.checkProduct(product)} aria-label={`Check rebates for ${product.name}`}>{entry?.status === "loading" ? "Checking official product lists..." : entry?.status === "done" ? "Refresh rebate check" : "Check rebates"}</button>}
+    {!readyToCheck ? <a href="#rebate-your-home" className="product-rebate-add-home">Add your home details above ↗</a> : <button type="button" disabled={!ready || entry?.status === "loading"} onClick={() => checkProduct(product)} aria-label={`Check rebates for ${product.name}`}>{entry?.status === "loading" ? "Checking official product lists..." : entry?.status === "done" ? "Refresh rebate check" : "Check rebates"}</button>}
     {entry?.status === "loading" && <p role="status">Checking this exact model for your home.</p>}
     {entry?.status === "error" && <p role="alert">{entry.message}</p>}
     {entry?.status === "done" && <div className="product-rebate-programs" aria-live="polite">{entry.result.results.map(result => <section key={result.program} data-rebate-program={result.program} data-rebate-status={result.status}>
@@ -146,7 +153,7 @@ export function ProductRebateResult({ product, check, ready }: { product: Produc
       {result.sourceCheckedAt && Number.isFinite(Date.parse(result.sourceCheckedAt)) && <small>Product list checked {new Date(result.sourceCheckedAt).toLocaleDateString("en-AU", { timeZone: "Australia/Sydney", day: "numeric", month: "short", year: "numeric" })}.</small>}
     </section>)}<small>Checked for {entry.result.location.suburb}, {entry.result.location.state} {entry.result.location.postcode}, installing {new Date(`${entry.result.installationDate}T00:00:00Z`).toLocaleDateString("en-AU", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" })}.</small></div>}
   </section>;
-}
+});
 
 function money(cents: number | null): string { return cents === null ? "not confirmed" : new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100); }
 function displayDate(value: string | null): string {

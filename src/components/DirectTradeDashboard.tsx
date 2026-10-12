@@ -14,6 +14,7 @@ import {
   type SetStateAction,
 } from "react";
 import dynamic from "next/dynamic";
+import { PortalWorkspaceLoading } from "./PortalWorkspaceLoading";
 import Image from "next/image";
 import { onAuthStateChanged, reload, sendEmailVerification, signOut, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
@@ -21,7 +22,6 @@ import { disableTradeDeviceNotifications } from "@/lib/trade-device-client";
 import { isMfaRequiredResponse, MFA_SETUP_URL } from "@/lib/firebase-mfa";
 import type { FinanceView } from "./TradeFinanceWorkspace";
 import { TLinkNavigationIcon } from "./TLinkNavigationIcon";
-import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
 import { SiteFooter } from "./SiteFooter";
 import { TradeBusinessHub } from "./TradeBusinessHub";
 import {
@@ -31,9 +31,7 @@ import {
 } from "./TLinkChrome";
 import { TLinkCommandCentre, type TLinkCommandTarget } from "./TLinkCommandCentre";
 import { TradeJobNotifications } from "./TradeJobNotifications";
-import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 import { isCalendarIntegration, readIntegrationReturn } from "@/lib/trade-integration-return";
-import { CustomerPlanReportPreviewDialog } from "./CustomerPlanReportPreviewDialog";
 import { downloadCustomerPlanPdf } from "@/lib/customer-plan-pdf-client";
 import type { CustomerPlanReportView } from "@/lib/customer-plan-report";
 import {
@@ -42,11 +40,8 @@ import {
 import { DEFAULT_TRADE_BRAND_THEME } from "@/lib/trade-business-branding";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import { publicLeadQuoteNavigationTarget } from "@/lib/public-lead-quote-workflow.mjs";
-import {
-  TradeBusinessSettingsWorkspace,
-  tradeBusinessThemeGradient,
-  type TradeBusinessSettingsProfile,
-} from "./TradeBusinessSettingsWorkspace";
+import type { TradeBusinessSettingsProfile } from "./TradeBusinessSettingsWorkspace";
+import { tradeBusinessThemeGradient } from "./trade-business-theme";
 import { resetTradeDashboardStateOnUidChange } from "./trade-rebate-calculator-state";
 import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import {
@@ -59,6 +54,10 @@ import {
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
 import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlerts";
 
+const WattzunToolsWorkspace = dynamic(() => import("./WattzunToolsWorkspace").then((module) => module.WattzunToolsWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening Wattzun tools..." /> });
+const TradeCustomerEmailComposer = dynamic(() => import("./TradeCustomerEmailComposer").then((module) => module.TradeCustomerEmailComposer), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening email..." /> });
+const CustomerPlanReportPreviewDialog = dynamic(() => import("./CustomerPlanReportPreviewDialog").then((module) => module.CustomerPlanReportPreviewDialog), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening plan preview..." /> });
+const TradeBusinessSettingsWorkspace = dynamic(() => import("./TradeBusinessSettingsWorkspace").then((module) => module.TradeBusinessSettingsWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening business settings..." /> });
 const SupplierCatalogueWorkspace = dynamic(() => import("./SupplierCatalogueWorkspace").then((module) => module.SupplierCatalogueWorkspace));
 const TradeCustomerHubInterest = dynamic(() => import("./TradeCustomerHubPanel").then((module) => module.TradeCustomerHubInterest));
 const DirectTradePartnerForm = dynamic(() => import("./DirectTradePartnerForm").then((module) => module.DirectTradePartnerForm), { loading: () => <p role="status">Opening business setup...</p> });

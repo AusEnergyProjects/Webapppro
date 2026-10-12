@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { PortalWorkspaceLoading } from "./PortalWorkspaceLoading";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -19,35 +20,33 @@ import {
 import { firebaseAuth } from "@/lib/firebase-client";
 import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
-import {
-  AdminNotificationInbox,
-  type AdminNotification,
-  type AdminNotificationCounts,
-} from "@/components/AdminNotificationInbox";
-import { AdminAccountDirectory } from "@/components/AdminAccountDirectory";
-import { AdminHandoverReview } from "@/components/AdminHandoverReview";
-import { AdminAssetSafety } from "@/components/AdminAssetSafety";
-import { AdminAssetGovernance } from "@/components/AdminAssetGovernance";
-import { AdminFormTemplates } from "@/components/AdminFormTemplates";
+import type { AdminNotification, AdminNotificationCounts } from "@/components/AdminNotificationInbox";
+const AdminNotificationInbox = dynamic(() => import("./AdminNotificationInbox").then((module) => module.AdminNotificationInbox), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening inbox..." /> });
+const AdminAccountDirectory = dynamic(() => import("./AdminAccountDirectory").then((module) => module.AdminAccountDirectory), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening directory..." /> });
+const AdminHandoverReview = dynamic(() => import("./AdminHandoverReview").then((module) => module.AdminHandoverReview), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening handovers..." /> });
+const AdminAssetSafety = dynamic(() => import("./AdminAssetSafety").then((module) => module.AdminAssetSafety), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening asset safety..." /> });
+const AdminAssetGovernance = dynamic(() => import("./AdminAssetGovernance").then((module) => module.AdminAssetGovernance), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening asset records..." /> });
+const AdminFormTemplates = dynamic(() => import("./AdminFormTemplates").then((module) => module.AdminFormTemplates), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening forms..." /> });
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading compliance questions...</p> });
-import { CreditexOutputActions } from "@/components/CreditexOutputActions";
-import { CreditexRegistryWorkspace } from "@/components/CreditexRegistryWorkspace";
-import { AdminUsabilityPilot } from "@/components/AdminUsabilityPilot";
-import { AdminPerformancePanel } from "@/components/AdminPerformancePanel";
-import { AdminOpportunityWorkspace } from "@/components/AdminOpportunityWorkspace";
-import { AdminCatalogueWorkspace } from "@/components/AdminCatalogueWorkspace";
-import { AdminAccountWorkspace } from "@/components/AdminAccountWorkspace";
-import { AdminProductEnquiryWorkspace, summariseProductEnquiries, type ProductEnquirySummary } from "@/components/AdminProductEnquiryWorkspace";
-import { AdminServiceReminderDelivery } from "@/components/AdminServiceReminderDelivery";
-import { AdminJobDirectory } from "@/components/AdminJobDirectory";
-import AdminDemoCleanupPanel from "@/components/AdminDemoCleanupPanel";
-import { AdminDatabaseWorkspace } from "@/components/AdminDatabaseWorkspace";
-import { AdminEnergyAssistantLeads } from "@/components/AdminEnergyAssistantLeads";
-import { AdminSurgeAnswerReviews } from "@/components/AdminSurgeAnswerReviews";
+const CreditexOutputActions = dynamic(() => import("./CreditexOutputActions").then((module) => module.CreditexOutputActions), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening submission actions..." /> });
+const CreditexRegistryWorkspace = dynamic(() => import("./CreditexRegistryWorkspace").then((module) => module.CreditexRegistryWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening submissions..." /> });
+const AdminUsabilityPilot = dynamic(() => import("./AdminUsabilityPilot").then((module) => module.AdminUsabilityPilot), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening field pilot..." /> });
+const AdminPerformancePanel = dynamic(() => import("./AdminPerformancePanel").then((module) => module.AdminPerformancePanel), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening performance..." /> });
+const AdminOpportunityWorkspace = dynamic(() => import("./AdminOpportunityWorkspace").then((module) => module.AdminOpportunityWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening leads..." /> });
+const AdminCatalogueWorkspace = dynamic(() => import("./AdminCatalogueWorkspace").then((module) => module.AdminCatalogueWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening catalogue..." /> });
+const AdminAccountWorkspace = dynamic(() => import("./AdminAccountWorkspace").then((module) => module.AdminAccountWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening accounts..." /> });
+const AdminProductEnquiryWorkspace = dynamic(() => import("./AdminProductEnquiryWorkspace").then((module) => module.AdminProductEnquiryWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening product enquiries..." /> });
+import { summariseProductEnquiries, type ProductEnquirySummary } from "./admin-product-enquiry-summary";
+const AdminServiceReminderDelivery = dynamic(() => import("./AdminServiceReminderDelivery").then((module) => module.AdminServiceReminderDelivery), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening service reminders..." /> });
+const AdminJobDirectory = dynamic(() => import("./AdminJobDirectory").then((module) => module.AdminJobDirectory), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening jobs..." /> });
+const AdminDemoCleanupPanel = dynamic(() => import("./AdminDemoCleanupPanel"), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening demo records..." /> });
+const AdminDatabaseWorkspace = dynamic(() => import("./AdminDatabaseWorkspace").then((module) => module.AdminDatabaseWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening database..." /> });
+const AdminEnergyAssistantLeads = dynamic(() => import("./AdminEnergyAssistantLeads").then((module) => module.AdminEnergyAssistantLeads), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening customer enquiries..." /> });
+const AdminSurgeAnswerReviews = dynamic(() => import("./AdminSurgeAnswerReviews").then((module) => module.AdminSurgeAnswerReviews), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening answer reviews..." /> });
 import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./PortalWorkspacePreferences";
-import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
-import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
+const PortalTeamWorkspace = dynamic(() => import("./PortalTeamWorkspace").then((module) => module.PortalTeamWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening team tasks..." /> });
+const PortalConnectWorkspace = dynamic(() => import("./PortalConnectWorkspace").then((module) => module.PortalConnectWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening Connect..." /> });
 import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
 import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
 
@@ -324,18 +323,15 @@ export function AdminOperationsPortal() {
     async (nextSession: AdminSession) => {
       const datasets = await Promise.allSettled([
         api("/api/admin/product-enquiries"),
+        nextSession.role === "owner" ? api("/api/admin/admins") : Promise.resolve(null),
       ]);
       const failures: string[] = [];
-      const [enquiryResult] = datasets;
+      const [enquiryResult, adminResult] = datasets;
       if (enquiryResult.status === "fulfilled") setProductEnquirySummary(summariseProductEnquiries(enquiryResult.value.enquiries || []));
       else failures.push("product enquiries");
       if (nextSession.role === "owner") {
-        try {
-          const adminResult = await api("/api/admin/admins");
-          setAdmins(adminResult.admins || []);
-        } catch {
-          failures.push("operations users");
-        }
+        if (adminResult.status === "fulfilled" && adminResult.value) setAdmins(adminResult.value.admins || []);
+        else failures.push("operations users");
       }
       if (failures.length) throw new Error(`${failures.join(", ")} could not be loaded.`);
     },

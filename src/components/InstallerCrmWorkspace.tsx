@@ -4,9 +4,7 @@ import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider
 import { requestWattzunAssistant } from "@/lib/wattzun-appearance";
 import { useJobTimeTracking } from "./TradeWorkTimeTracking";
 
-import { TradeInvoicePaymentDialog } from "./TradeInvoicePaymentDialog";
 import { JobRegisterScroll } from "./JobRegisterScroll";
-import { TradeFollowUpDialog } from "./TradeFollowUpDialog";
 import { BookingTrainingLinks, type BookingTrainingModule } from "./BookingTrainingLinks";
 import { TradeCustomerEmailComposer } from "./TradeCustomerEmailComposer";
 
@@ -30,7 +28,6 @@ import type { TradeNewJobInitial } from "./TradeNewJobForm";
 import { recoverableTradeWorkspace } from "./RecoverableTradeWorkspace";
 import type { TradeTeamPermissions } from "./TradeTeamSettings";
 import type { CustomerDocumentDelivery, CustomerDocumentSendResult } from "./TradeCustomerDocumentDeliveryPanel";
-import { TradeCustomerDeliveryExceptions } from "./TradeCustomerDeliveryExceptions";
 import type { DataforceJobCsvRecord } from "@/lib/creditex-dataforce-job-csv";
 import { JOB_REGISTER_COLUMN_KEYS, JOB_REGISTER_OPERATIONAL_STATUSES, type JobRegisterRecord } from "@/lib/trade-crm-job-register";
 import { jobCustomerBillingStatus, jobInvoicePaymentStatus, jobInvoiceSettlementStatus, jobProgressStatusLabel } from "@/lib/trade-job-payment-status";
@@ -45,7 +42,7 @@ import type {
   InstallerJobRegisterSort,
 } from "@/lib/trade-crm-register-sorts";
 import registerStyles from "./InstallerCrmJobRegister.module.css";
-import { TradeJobSalesOutcomeDialog } from "./TradeJobSalesOutcomeDialog";
+import { createCrmListViewLoader, crmIndexRequestDelay } from "@/lib/trade-crm-client-loading";
 import mapWorkspaceStyles from "./TradeMapWorkspace.module.css";
 import {
   ENERGY_SERVICE_LABELS,
@@ -53,6 +50,10 @@ import {
 } from "@/lib/energy-service-catalogue.mjs";
 
 const TradeHandoverHistory = dynamic(() => import("./TradeHandoverHistory").then((module) => module.TradeHandoverHistory));
+const TradeInvoicePaymentDialog = dynamic(() => import("./TradeInvoicePaymentDialog").then((module) => module.TradeInvoicePaymentDialog));
+const TradeFollowUpDialog = dynamic(() => import("./TradeFollowUpDialog").then((module) => module.TradeFollowUpDialog));
+const TradeJobSalesOutcomeDialog = dynamic(() => import("./TradeJobSalesOutcomeDialog").then((module) => module.TradeJobSalesOutcomeDialog));
+const TradeCustomerDeliveryExceptions = dynamic(() => import("./TradeCustomerDeliveryExceptions").then((module) => module.TradeCustomerDeliveryExceptions));
 const TradeIntegrationCentre = dynamic(() => import("./TradeIntegrationCentre").then((module) => module.TradeIntegrationCentre));
 const TradeCommercialHandoffPanel = dynamic(() => import("./TradeCommercialHandoffPanel").then((module) => module.TradeCommercialHandoffPanel));
 const TradeActivityFieldRecords = dynamic(() => import("./TradeActivityFieldRecords").then((module) => module.TradeActivityFieldRecords));
@@ -487,7 +488,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [selectedCustomerJobs, setSelectedCustomerJobs] = useState<Job[]>([]);
   const [selectedCustomerSites, setSelectedCustomerSites] = useState<ServiceSite[]>([]);
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
-  const [indexLoading, setIndexLoading] = useState(false);
+  const [indexRequestLoading, setIndexLoading] = useState(false);
   const [jobExporting, setJobExporting] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [jobViewSaved, setJobViewSaved] = useState(false);
@@ -513,8 +514,13 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [activeJobPresetId, setActiveJobPresetId] = useState("");
   const [activeCustomerPresetId, setActiveCustomerPresetId] = useState("");
   const [viewBusy, setViewBusy] = useState(false);
+  const [savedJobPreferencesReady, setSavedJobPreferencesReady] = useState(false);
   const [savedCustomerPreferencesReady, setSavedCustomerPreferencesReady] = useState(false);
+  const jobPreferencesReady = mapWorkspace || Boolean(staffPermissions) || savedJobPreferencesReady;
   const customerPreferencesReady = mapWorkspace || Boolean(staffPermissions) || savedCustomerPreferencesReady;
+  const indexLoading = indexRequestLoading
+    || (view === "jobs" && !jobPreferencesReady)
+    || (view === "customers" && !customerPreferencesReady);
   const [busy, setBusy] = useState("");
   const { notice, setStatus, dismissStatus } = useWorkspaceNotice(`${view}:${focusedJobId}:${focusedJobTab}:${selectedCustomerId}:${creating}`);
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -524,8 +530,8 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const jobPreferencesLoaded = useRef(false);
   const homeJobStage = useRef<{ stage: string; filter: string } | null>(null);
   const customerPreferencesLoaded = useRef(false);
-  const jobIndexRequested = useRef(false);
-  const customerIndexRequested = useRef(false);
+  const previousJobIndexText = useRef<string | null>(null);
+  const previousCustomerIndexText = useRef<string | null>(null);
   const appliedNavigationTargetNonce = useRef(0);
   const allowedViews = useMemo<View[]>(() => {
     if (!staffPermissions) return ["today", "leads", "jobs", "schedule", "customers", "pricebook", "templates", "reports", "import", "integrations"];
@@ -548,6 +554,28 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   const [quickQuoteBusy, setQuickQuoteBusy] = useState(false);
   const canSearchCustomerFields = true;
   const canSearchCustomerDirectory = !staffPermissions || (staffPermissions.canViewCustomers && staffPermissions.canSearchCustomers);
+  const listViewLoader = useMemo(() => createCrmListViewLoader(async (viewKey, signal) => {
+    const token = await user.getIdToken();
+    if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
+    const response = await fetch(`/api/trade-list-views?view=${viewKey}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
+    const result = await response.json().catch(() => ({})) as {
+      ok?: boolean; error?: string; code?: string; preferences?: Partial<WorkspaceListPreferences>;
+      presets?: NamedWorkspaceListView[]; saved?: boolean;
+    };
+    if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
+    if (isMfaRequiredResponse(result)) setMfaRequired(true);
+    if (!response.ok || !result.ok) throw new Error(result.error || "The saved list view could not be loaded.");
+    return result;
+  }), [fetch, user]);
+
+  useEffect(() => {
+    if (staffPermissions || mapWorkspace) return;
+    // Start the two small saved-view requests together while Home opens. The
+    // selected register consumes the same promise before loading its data.
+    void listViewLoader.load("installer-jobs").catch(() => {});
+    void listViewLoader.load("installer-customers").catch(() => {});
+    return () => listViewLoader.cancel();
+  }, [listViewLoader, mapWorkspace, staffPermissions]);
 
   useEffect(() => {
     if (creating !== "job" && creating !== "quote") return;
@@ -631,15 +659,10 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
     }
     let active = true;
     let applied = false;
-    const controller = new AbortController();
     const viewKey = isJobs ? "installer-jobs" : "installer-customers";
-    void user.getIdToken().then(async (token) => {
-      const response = await fetch(`/api/trade-list-views?view=${viewKey}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal });
-      const result = await response.json().catch(() => ({}));
-      if (isMfaRequiredResponse(result)) setMfaRequired(true);
-      if (!response.ok || !result.ok) throw new Error(result.error || "The saved list view could not be loaded.");
+    void listViewLoader.load(viewKey).then((result) => {
       if (!active) return;
-      const preferences = (result.preferences || {}) as Partial<WorkspaceListPreferences>;
+      const preferences = result.preferences || {};
       if (isJobs) {
         setSearch(preferences.search || ""); setJobFilter(preferences.filter || "all");
         setJobCustomer(preferences.customer || ""); setJobService(preferences.service || "");
@@ -657,6 +680,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
         if (homeJobStage.current !== null) {
           clearJobFilters(); setJobFilter(homeJobStage.current.filter); setJobStage(homeJobStage.current.stage); homeJobStage.current = null;
         }
+        setSavedJobPreferencesReady(true);
       } else {
         setCustomerSearch(preferences.search || ""); setCustomerFirstName(preferences.firstName || ""); setCustomerLastName(preferences.lastName || "");
         setCustomerBusinessName(preferences.businessName || ""); setCustomerEmail(preferences.email || ""); setCustomerStreet(preferences.street || "");
@@ -673,13 +697,14 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       applied = true;
     }).catch((error) => {
       loadedRef.current = false;
-      if (active && !controller.signal.aborted) {
+      if (active) {
+        if (isJobs) setSavedJobPreferencesReady(true);
         if (isCustomers) setSavedCustomerPreferencesReady(true);
         setStatus(error instanceof Error ? error.message : "The saved list view could not be loaded.", "error");
       }
     });
-    return () => { active = false; controller.abort(); if (!applied) loadedRef.current = false; };
-  }, [fetch, mapWorkspace, setStatus, staffPermissions, user, view]);
+    return () => { active = false; if (!applied) loadedRef.current = false; };
+  }, [listViewLoader, mapWorkspace, setStatus, staffPermissions, view]);
 
   const jobIndexParams = useCallback((page: number, pageSize: number, cursor = "", includeTotal = true) => {
     const params = new URLSearchParams({ mode: "index", resource: "jobs", service: jobService,
@@ -703,6 +728,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   }, [jobAppointmentId, jobAssignee, jobCreatedFrom, jobCreatedTo, jobCustomer, jobCustomerReference, jobEmail, jobFilter, jobFirstName, jobId, jobInvoiceStatus, jobLastName, jobLocation, jobOperationalStatus, jobPhone, jobPipeline, jobPostcode, jobQuoteTotalMax, jobQuoteTotalMin, jobScheduledFrom, jobScheduledTo, jobService, jobSort, jobStage, jobState, jobStreet, jobSuburb, search, staffPermissions]);
 
   const jobIndexKey = `${user.uid}:${refreshNonce}:${jobIndexParams(jobPage, jobPageSize)}`;
+  const jobIndexText = JSON.stringify([search, jobCustomer, jobCustomerReference, jobEmail, jobPhone, jobSuburb, jobPostcode, jobFirstName, jobLastName, jobStreet, jobId, jobAssignee, jobLocation, jobQuoteTotalMin, jobQuoteTotalMax]);
   const loadJobIndex = useCallback(async (signal: AbortSignal) => {
     const token = await user.getIdToken();
     const cursor = jobCursors.current[jobPage - 1] || "";
@@ -815,6 +841,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
   }, [customerBusinessName, customerCreatedFrom, customerCreatedTo, customerEmail, customerFirstName, customerJobId, customerLastName, customerPage, customerPageSize, customerPhone, customerPipeline, customerPostcode, customerSearch, customerService, customerSort, customerState, customerStreet, customerSuburb]);
 
   const customerIndexKey = `${user.uid}:${refreshNonce}:${customerIndexParams()}`;
+  const customerIndexText = JSON.stringify([customerSearch, customerFirstName, customerLastName, customerBusinessName, customerEmail, customerStreet, customerPhone, customerPostcode, customerSuburb, customerJobId]);
   const loadCustomerIndex = useCallback(async (signal: AbortSignal) => {
     const token = await user.getIdToken();
     const params = customerIndexParams();
@@ -850,7 +877,7 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
 
   const usesJobIndex = !mapWorkspace && jobLayout === "list";
   useEffect(() => {
-    if (view !== "jobs" || creating === "job" || !usesJobIndex || focusedJobId) return;
+    if (view !== "jobs" || creating === "job" || !jobPreferencesReady || !usesJobIndex || focusedJobId) return;
     let active = true;
     const controller = new AbortController();
     const run = () => {
@@ -862,15 +889,15 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       })
         .finally(() => active && setIndexLoading(false));
     };
-    const delay = jobIndexRequested.current ? 180 : 0;
-    jobIndexRequested.current = true;
+    const delay = crmIndexRequestDelay(previousJobIndexText.current, jobIndexText);
+    previousJobIndexText.current = jobIndexText;
     const timer = delay ? window.setTimeout(run, delay) : 0;
     if (!delay) run();
     return () => { active = false; controller.abort(); if (timer) window.clearTimeout(timer); };
-  }, [creating, focusedJobId, jobIndexKey, loadJobIndex, refreshNonce, setStatus, usesJobIndex, view]);
+  }, [creating, focusedJobId, jobIndexKey, jobIndexText, jobPreferencesReady, loadJobIndex, refreshNonce, setStatus, usesJobIndex, view]);
 
   useEffect(() => {
-    if (view !== "customers" || creating === "customer" || !customerPreferencesReady || mapWorkspace || customerLayout === "map") return;
+    if (view !== "customers" || creating === "customer" || selectedCustomerId || !customerPreferencesReady || mapWorkspace || customerLayout === "map") return;
     let active = true;
     const controller = new AbortController();
     const run = () => {
@@ -882,12 +909,12 @@ function InstallerCrmWorkspaceView({ user, teamAccess, staffPermissions, navigat
       })
         .finally(() => active && setIndexLoading(false));
     };
-    const delay = customerIndexRequested.current ? 180 : 0;
-    customerIndexRequested.current = true;
+    const delay = crmIndexRequestDelay(previousCustomerIndexText.current, customerIndexText);
+    previousCustomerIndexText.current = customerIndexText;
     const timer = delay ? window.setTimeout(run, delay) : 0;
     if (!delay) run();
     return () => { active = false; controller.abort(); if (timer) window.clearTimeout(timer); };
-  }, [creating, customerIndexKey, customerLayout, customerPreferencesReady, loadCustomerIndex, mapWorkspace, refreshNonce, setStatus, view]);
+  }, [creating, customerIndexKey, customerIndexText, customerLayout, customerPreferencesReady, loadCustomerIndex, mapWorkspace, refreshNonce, selectedCustomerId, setStatus, view]);
 
   useEffect(() => {
     if (view !== "jobs" || !focusedJobId) return;

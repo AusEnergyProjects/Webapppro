@@ -5,7 +5,8 @@ import { useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "firebase/auth";
-import { TRADE_EMAIL_SETTINGS_HREF, type TradeEmailConnection } from "./TradeEmailSettings";
+import type { TradeEmailConnection } from "./TradeEmailSettings";
+import { TRADE_EMAIL_SETTINGS_HREF } from "@/lib/trade-email-navigation";
 import styles from "./TradeEmailSettings.module.css";
 
 type RecipientTarget = { customerId: string; enquiryId?: never; workOrderId?: never }

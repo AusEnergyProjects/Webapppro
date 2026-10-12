@@ -83,7 +83,7 @@ test('loader reports partial source coverage without discarding successful plans
   ]);
   const calls = [];
   const fetchImpl = async (url, options) => {
-    calls.push({ url, headers: options.headers });
+    calls.push({ url, headers: options.headers, cf: options.cf, cache: options.cache });
     if (!responses.has(url)) return { ok: false, status: 503, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => responses.get(url) };
   };
@@ -103,6 +103,12 @@ test('loader reports partial source coverage without discarding successful plans
   ]);
   assert.deepEqual(calls.find((call) => call.url.includes('/energy/plans?')).headers, { 'x-v': '1', 'x-min-v': '1' });
   assert.deepEqual(calls.find((call) => call.url.endsWith('/energy/plans/p1')).headers, { 'x-v': '3', 'x-min-v': '3' });
+  for (const call of calls) {
+    assert.equal(call.cache, undefined, 'public CDR fetches must not bypass the edge cache');
+    assert.equal(call.cf.cacheTtlByStatus['200-299'], 300);
+    assert.equal(call.cf.cacheTtlByStatus['300-599'], -1);
+    assert.ok(call.cf.cacheKey.includes('__aea_cdr_version='));
+  }
   assert.match(result.sourceHash, /^sha256:[a-f0-9]{64}$/);
   assert.equal(result.tariffSchemaVersion, 'aea-electricity-tariff-1.2.0');
 });

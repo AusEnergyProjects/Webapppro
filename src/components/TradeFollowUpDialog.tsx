@@ -6,7 +6,7 @@ import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { User } from "firebase/auth";
 import { FOLLOW_UP_FIELDS, followUpJobSubject, type FollowUpTemplate } from "@/lib/trade-follow-ups";
-import { TRADE_EMAIL_SETTINGS_HREF } from "./TradeEmailSettings";
+import { TRADE_EMAIL_SETTINGS_HREF } from "@/lib/trade-email-navigation";
 import styles from "./TradeEmailTemplatesWorkspace.module.css";
 
 type FollowUpData = {

@@ -1055,14 +1055,25 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMa
     const rowConditions = [...conditions]; const rowBindings = [...bindings];
     if (cursor) { const after = keysetAfter(selectedSort.terms, cursor); rowConditions.push(`(${after.sql})`); rowBindings.push(...after.bindings); }
     const rowWhere = rowConditions.join(" AND ");
+    // Updated ordering and ordinary filters do not depend on lifecycle status.
+    // Select the exact authorised page first so a 25-row list does not rebuild
+    // the compliance/form lifecycle for every job in the business.
+    const pageBeforeLifecycle = sort === "updated-desc" && !operationalStatus;
+    const jobPageJoin = pageBeforeLifecycle
+      ? "JOIN job_page_candidates page_candidate ON page_candidate.work_order_id = w.id" : "";
+    const jobPageCte = pageBeforeLifecycle ? `, job_page_candidates AS MATERIALIZED (
+      SELECT w.id work_order_id ${rowJoins} WHERE ${rowWhere}
+      ORDER BY ${selectedSort.orderBy} LIMIT ?
+    )` : "";
+    const jobPageBindings = pageBeforeLifecycle ? [...rowBindings, pageSize + 1] : [];
     const [countRow, rows] = await Promise.all([
       includeTotal ? db.prepare(`SELECT COUNT(*) total ${rowJoins} WHERE ${where}`).bind(...bindings).first<Record<string, unknown>>() : Promise.resolve(null),
       // Materialize once per owned job so filtering, sorting and cursor predicates
       // reuse the status value instead of expanding its correlated plan again.
       db.prepare(`WITH job_lifecycle AS MATERIALIZED (
         SELECT w.id work_order_id, ${JOB_REGISTER_LIFECYCLE_SQL} lifecycle_status
-        ${rowJoins} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = '${recordStatus}'
-      ) SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
+        ${rowJoins} ${jobPageJoin} WHERE w.firebase_uid = ? AND w.partner_type = 'installer' AND w.record_status = '${recordStatus}'
+      )${jobPageCte} SELECT w.*, d.crm_customer_id, d.service_site_id, d.customer_source, d.pipeline_stage, d.building_type,
         d.description, d.customer_reference, df.source_job_id dataforce_source_job_id,
         d.next_action, d.tags job_tags, d.estimated_value_cents, d.quoted_value_cents, d.invoiced_value_cents,
         d.paid_value_cents, d.quote_status, d.invoice_status, d.payment_due_at,
@@ -1098,7 +1109,7 @@ async function crmIndex(identity: CrmIdentity, url: URL, resource: string, forMa
         ${JOB_EFFECTIVE_SCHEDULE_SQL} = '' schedule_empty
         ${rowJoins} JOIN job_lifecycle ON job_lifecycle.work_order_id = w.id
         WHERE ${rowWhere} ORDER BY ${selectedSort.orderBy} LIMIT ?`)
-        .bind(identity.uid, ...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
+        .bind(identity.uid, ...jobPageBindings, ...rowBindings, pageSize + 1).all<Record<string, unknown>>(),
     ]);
     const total = countRow ? Number(countRow.total || 0) : undefined;
     const hasNext = rows.results.length > pageSize; const pageRows = rows.results.slice(0, pageSize);

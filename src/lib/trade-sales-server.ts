@@ -58,10 +58,13 @@ async function settings(db: D1Database, ownerUid: string): Promise<SalesSettings
 }
 export async function loadSalesConfig(db: D1Database, access: TeamAccess): Promise<SalesConfig> {
   const grants = await permissions(db, access);
-  const owners = await db.prepare(`SELECT person.id,person.display_name name FROM trade_team_members person
-    WHERE person.owner_uid=? AND ${OWNER_ELIGIBLE} ORDER BY person.member_uid=person.owner_uid DESC,person.display_name COLLATE NOCASE,person.id`)
-    .bind(access.ownerUid).all<{ id: string; name: string }>();
-  return { settings: await settings(db, access.ownerUid), owners: owners.results, permissions: grants };
+  const [owners, config] = await Promise.all([
+    db.prepare(`SELECT person.id,person.display_name name FROM trade_team_members person
+      WHERE person.owner_uid=? AND ${OWNER_ELIGIBLE} ORDER BY person.member_uid=person.owner_uid DESC,person.display_name COLLATE NOCASE,person.id`)
+      .bind(access.ownerUid).all<{ id: string; name: string }>(),
+    settings(db, access.ownerUid),
+  ]);
+  return { settings: config, owners: owners.results, permissions: grants };
 }
 function projection(row: Row, config: SalesSettings, grants: SalesPermissions): SalesItem {
   const status = string(row.sales_status) as SalesStatus;
@@ -111,13 +114,15 @@ export async function listSales(db: D1Database, access: TeamAccess, params: URLS
   let cursor;
   try { cursor = decodeKeysetCursor(params.get('cursor') || '', scope, 2); } catch { throw new SalesError('This sales page changed. Refresh the list.', 409, 'REVISION_CONFLICT'); }
   const base = salesBase(access, config);
-  const countRows = await db.prepare(`${base.sql} SELECT sales_stage_id,COUNT(*) count FROM sales WHERE ${where} GROUP BY sales_stage_id`)
-    .bind(...base.values,...filters).all<{ sales_stage_id: string; count: number }>();
   const rowWhere = stage ? `${where} AND sales_stage_id=?` : where;
   const rowValues = [...filters,...(stage ? [stage] : [])];
   const after = cursor ? ' AND (updated_at,id)<(?,?)' : '';
-  const rows = await db.prepare(`${base.sql} SELECT * FROM sales WHERE ${rowWhere}${after} ORDER BY updated_at DESC,id DESC LIMIT ?`)
-    .bind(...base.values,...rowValues,...(cursor || []),pageSize+1).all<Row>();
+  const [countRows, rows] = await Promise.all([
+    db.prepare(`${base.sql} SELECT sales_stage_id,COUNT(*) count FROM sales WHERE ${where} GROUP BY sales_stage_id`)
+      .bind(...base.values,...filters).all<{ sales_stage_id: string; count: number }>(),
+    db.prepare(`${base.sql} SELECT * FROM sales WHERE ${rowWhere}${after} ORDER BY updated_at DESC,id DESC LIMIT ?`)
+      .bind(...base.values,...rowValues,...(cursor || []),pageSize+1).all<Row>(),
+  ]);
   const items = rows.results.slice(0,pageSize).map(row => projection(row,config,grants)), hasNext = rows.results.length > pageSize;
   const last = rows.results[pageSize-1];
   const counts = new Map(countRows.results.map(row => [row.sales_stage_id,Number(row.count)]));

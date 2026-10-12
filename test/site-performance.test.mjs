@@ -9,17 +9,14 @@ const gasComparator = read("../src/components/GasComparator.tsx");
 const electricityComparator = read("../src/components/electricity/NativeElectricityComparator.tsx");
 
 test("HTML shell caching is short lived and excludes APIs and private account pages", () => {
-  assert.match(worker, /request\.method !== "GET"/);
-  assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
-  assert.match(worker, /url\.pathname === "\/account"/);
-  assert.match(worker, /url\.pathname\.startsWith\("\/account\/"\)/);
+  assert.match(worker, /publicPageCacheKey\(request, env\)/);
+  assert.match(worker, /if \(!cacheKey\)/);
   assert.match(worker, /private, no-store, max-age=0/);
-  assert.match(worker, /includes\("text\/html"\)/);
   assert.match(worker, /globalThis[\s\S]*caches\?\.default/);
   assert.match(worker, /if \(cache\)/);
   assert.match(worker, /s-maxage=120/);
   assert.match(worker, /stale-while-revalidate=600/);
-  assert.match(worker, /ctx\.waitUntil\(cache\.put/);
+  assert.match(worker, /ctx\.waitUntil\(cache\.put\(cacheKey/);
 });
 
 test("every worker response receives baseline browser security headers", () => {

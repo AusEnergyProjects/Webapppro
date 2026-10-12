@@ -10,6 +10,7 @@ export const CERTIFICATE_PRICE_SOURCE_URL = "https://www.demandmanager.com.au/ce
 const CERTIFICATE_PRICE_DATA_URL = "https://www.demandmanager.com.au/graphs/new_prices.php";
 const SOURCE_NAME = "Demand Manager reported trades";
 const REFRESH_AFTER_MS = 20 * 60 * 60 * 1000;
+const SOURCE_TIMEOUT_MS = 8_000;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -35,6 +36,37 @@ async function recordSyncFailure(db: D1Database, fetchedAt: string, message: str
     .bind(syncId(fetchedAt), SOURCE_NAME, message.slice(0, 300), fetchedAt).run();
 }
 
+async function certificateSourceHtml(fetchImpl: FetchLike, body: URLSearchParams) {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("Certificate price source did not respond in time."));
+      controller.abort();
+    }, SOURCE_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetchImpl(CERTIFICATE_PRICE_DATA_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "User-Agent": "Australian Energy Assessments certificate education tool",
+          },
+          body,
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Certificate source returned HTTP ${response.status}.`);
+        return response.text();
+      })(),
+      deadline,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function syncCertificatePriceHistory(
   db: D1Database,
   options: { fetchImpl?: FetchLike; now?: Date } = {},
@@ -51,16 +83,8 @@ export async function syncCertificatePriceHistory(
   });
 
   try {
-    const response = await fetchImpl(CERTIFICATE_PRICE_DATA_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "User-Agent": "Australian Energy Assessments certificate education tool",
-      },
-      body,
-    });
-    if (!response.ok) throw new Error(`Certificate source returned HTTP ${response.status}.`);
-    const trades = collapseCertificateTradesByDay(parseDemandManagerCertificateHtml(await response.text()));
+    const html = await certificateSourceHtml(fetchImpl, body);
+    const trades = collapseCertificateTradesByDay(parseDemandManagerCertificateHtml(html));
     if (trades.length < 7) throw new Error("The certificate source returned too little history.");
 
     const statements = trades.map((trade) => db.prepare(`INSERT INTO certificate_price_history

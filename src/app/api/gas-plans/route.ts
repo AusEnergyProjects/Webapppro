@@ -5,6 +5,7 @@ import { estimateGasContract, type GasUsageProfile } from "@/lib/gas-tariff-engi
 import { safeCdrBase } from "@/lib/electricity-cdr.mjs";
 import { createOperationalRecorder } from "@/lib/operational-events.mjs";
 import { resolveCustomerPlanUrl, retailerWebsite } from "@/lib/retailer-links.mjs";
+import { energyCdrCacheOptions } from "@/lib/energy-cdr-cache.mjs";
 
 const FEED_URL = "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
 const DETAIL_API_VERSION = "3";
@@ -12,11 +13,12 @@ const UPSTREAM_TIMEOUT_MS = 10_000;
 const MEMORY_TTL_MS = 60 * 60 * 1000;
 const planCache = new Map<string, { createdAt: number; body: unknown }>();
 async function getJson(url: string, version?: string): Promise<any> {
-  const response = await fetch(url, {
+  const options: RequestInit & { cf: ReturnType<typeof energyCdrCacheOptions> } = {
     headers: version ? { "x-v": version, "x-min-v": version } : {},
-    cache: "no-store",
+    cf: energyCdrCacheOptions(url, version),
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-  });
+  };
+  const response = await fetch(url, options);
   if (!response.ok) throw new Error("Retailer returned HTTP " + response.status);
   return response.json();
 }

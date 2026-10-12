@@ -4,6 +4,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import { estimateGasContract } from "../src/lib/gas-tariff-engine.ts";
 import { resolvePublishedPlanReference } from "../src/lib/published-plan-reference.ts";
+import { energyCdrCacheOptions } from "../src/lib/energy-cdr-cache.mjs";
 
 const component = fs.readFileSync(new URL("../src/components/GasComparator.tsx", import.meta.url), "utf8");
 const route = fs.readFileSync(new URL("../src/app/api/gas-plans/route.ts", import.meta.url), "utf8");
@@ -99,6 +100,7 @@ test("gas-plan API preserves identically named IDs from separate retailer bases"
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options.status }) } },
     "@/lib/gas-tariff-engine": { estimateGasContract },
     "@/lib/electricity-cdr.mjs": { safeCdrBase: (base) => base },
+    "@/lib/energy-cdr-cache.mjs": { energyCdrCacheOptions },
     "@/lib/operational-events.mjs": { createOperationalRecorder: () => ({ requestId: "fixture", record() {} }) },
     "@/lib/retailer-links.mjs": { retailerWebsite: (base) => base, resolveCustomerPlanUrl: (links, fallback) => links.find(Boolean) || fallback },
   };

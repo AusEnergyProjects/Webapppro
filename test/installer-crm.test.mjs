@@ -240,7 +240,7 @@ test("saved preferences and job or customer reads cancel stale requests before t
   const effects = [], loaders = new Map();
   function visit(node) {
     if (ts.isCallExpression(node) && node.expression.getText(source) === "useEffect") effects.push(node.arguments[0].getText(source));
-    if (ts.isVariableDeclaration(node) && ["loadJobIndex", "loadCustomerIndex"].includes(node.name.getText(source))) {
+    if (ts.isVariableDeclaration(node) && ["loadJobIndex", "loadCustomerIndex", "listViewLoader"].includes(node.name.getText(source))) {
       loaders.set(node.name.getText(source), node.getText(source));
     }
     ts.forEachChild(node, visit);
@@ -260,12 +260,21 @@ test("saved preferences and job or customer reads cancel stale requests before t
     const effect = effectContaining(`${name}(controller.signal)`);
     assert.match(effect, /controller\.abort\(\); if \(timer\) window\.clearTimeout\(timer\)/);
   }
-  const preferences = effectContaining("/api/trade-list-views?view=");
+  const preferencesMatches = effects.filter(effect => effect.includes("listViewLoader.load(viewKey)"));
+  assert.equal(preferencesMatches.length, 1);
+  const preferences = preferencesMatches[0];
+  assert.match(loaders.get("listViewLoader"), /if \(signal\.aborted\) throw new DOMException/);
+  assert.match(loaders.get("listViewLoader"), /cache: "no-store", signal/);
+  const prefetch = effects.find(effect => effect.includes('listViewLoader.load("installer-jobs")'));
+  assert.ok(prefetch);
+  assert.match(prefetch, /listViewLoader\.load\("installer-customers"\)/);
+  assert.match(prefetch, /return \(\) => listViewLoader\.cancel\(\)/);
   const jobDetail = effectContaining("mode=detail&resource=job&id=");
   const customerDetail = effectContaining("mode=detail&resource=customer&id=");
-  for (const effect of [preferences, jobDetail, customerDetail]) assert.match(effect, /signal: controller\.signal/);
+  for (const effect of [jobDetail, customerDetail]) assert.match(effect, /signal: controller\.signal/);
   assert.match(preferences, /if \(!active\) return;\s+const preferences/);
-  assert.match(preferences, /if \(active && !controller\.signal\.aborted\) \{/);
+  assert.match(preferences, /if \(active\) \{/);
+  assert.match(preferences, /return \(\) => \{ active = false;/);
   assert.match(preferences, /loadedRef\.current = true;\s+applied = true;/);
   assert.match(preferences, /if \(!applied\) loadedRef\.current = false;/);
   assert.match(jobDetail, /if \(active\) \{ setSelectedJobDetail\(result\.job\)/);

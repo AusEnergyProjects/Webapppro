@@ -28,8 +28,9 @@ const rowTemplate = rowQuery[1];
 const statusCondition = route.match(/if \(operationalStatus\) \{[\s\S]*?conditions.push\(("[^"]+")\);/)[1];
 const countWhere = route.match(/const where = (conditions.map\([\s\S]*?\).join\(" AND "\));/)[1];
 const cursorBlock = route.slice(route.indexOf("const rowConditions = [...conditions]"), route.indexOf("const rowWhere = rowConditions.join"));
+const pageWindowBlock = route.slice(route.indexOf("const pageBeforeLifecycle ="), route.indexOf("const [countRow, rows] = await Promise.all(["));
 
-function jobsQuery({ status = "", sort = "updated-desc", cursor = null } = {}) {
+function jobsQuery({ status = "", sort = "updated-desc", cursor = null, pageFirst = true } = {}) {
   const recordStatus = status === "deleted" ? "archived" : "active";
   const conditions = ["w.firebase_uid = ?", "w.partner_type = 'installer'", `w.record_status = '${recordStatus}'`];
   const bindings = ["owner"];
@@ -39,11 +40,13 @@ function jobsQuery({ status = "", sort = "updated-desc", cursor = null } = {}) {
   const selectedSort = constants.JOB_SORTS[sort];
   const { rowConditions, rowBindings } = new Function("conditions", "bindings", "cursor", "selectedSort", "sort", "keysetAfter",
     `${cursorBlock}; return {rowConditions,rowBindings};`)(conditions, bindings, cursor, selectedSort, sort, keysetAfter);
-  const values = { ...constants, ...register, recordStatus,
-    rowJoins: `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`,
-    rowWhere: rowConditions.join(" AND "), selectedSort,
-  };
-  const queryBindings = new Function("identity", "rowBindings", "pageSize", `return [${rowQuery[2]}];`)({ uid: "owner" }, rowBindings, 25);
+  const rowJoins = `${joins} ${TRADE_CRM_CURRENT_APPOINTMENT_JOIN_SQL}`;
+  const rowWhere = rowConditions.join(" AND ");
+  const window = pageFirst ? new Function("sort", "operationalStatus", "rowJoins", "rowWhere", "selectedSort", "rowBindings", "pageSize",
+    `${pageWindowBlock}; return {jobPageJoin,jobPageCte,jobPageBindings};`)(sort, status, rowJoins, rowWhere, selectedSort, rowBindings, 25)
+    : { jobPageJoin: "", jobPageCte: "", jobPageBindings: [] };
+  const values = { ...constants, ...register, recordStatus, rowJoins, rowWhere, selectedSort, ...window };
+  const queryBindings = new Function("identity", "jobPageBindings", "rowBindings", "pageSize", `return [${rowQuery[2]}];`)({ uid: "owner" }, window.jobPageBindings, rowBindings, 25);
   return { sql: new Function(...Object.keys(values), `return \`${rowTemplate}\`;`)(...Object.values(values)), bindings: queryBindings,
     countSql: `SELECT COUNT(*) total ${values.rowJoins} WHERE ${where}`, countBindings };
 }
@@ -63,6 +66,46 @@ function migratedSchema() {
   }
   return sqlite;
 }
+
+test("ordinary job pages evaluate lifecycle only for page rows and retain identical scoped cursor results", () => {
+  const sqlite = migratedSchema();
+  try {
+    const insert = sqlite.prepare(`INSERT INTO trade_work_orders
+      (id,firebase_uid,partner_type,work_number,title,stage,created_at,updated_at)
+      VALUES (?,?,'installer',?,'Synthetic performance job',?, ?, ?)`);
+    const timestamp = "2026-10-12T02:00:00Z";
+    for (let index = 0; index < 1000; index++) {
+      const id = `perf-${String(index).padStart(4, "0")}`;
+      insert.run(id, "owner", `TLJ-PERF-${index}`, index % 3 === 0 ? "scheduled" : "backlog", timestamp, timestamp);
+    }
+    insert.run("foreign", "other-owner", "TLJ-FOREIGN", "backlog", timestamp, timestamp);
+    let evaluations = 0;
+    sqlite.function("measured_lifecycle", (_id, status) => { evaluations++; return status; });
+    function run(input) {
+      evaluations = 0;
+      const query = jobsQuery(input);
+      const sql = query.sql.replace(constants.JOB_REGISTER_LIFECYCLE_SQL,
+        `measured_lifecycle(w.id, (${constants.JOB_REGISTER_LIFECYCLE_SQL}))`);
+      const rows = sqlite.prepare(sql).all(...query.bindings);
+      return { rows, evaluations };
+    }
+    const all = run({ pageFirst: false });
+    const page = run({});
+    assert.deepEqual(page.rows, all.rows);
+    assert.equal(all.evaluations, 1000);
+    assert.equal(page.evaluations, 26, "25 visible rows and one pagination sentinel");
+    assert.ok(page.rows.every(row => row.firebase_uid === "owner"));
+    const cursor = [page.rows[24].updated_at, page.rows[24].id];
+    const next = run({ cursor });
+    const oldNext = run({ cursor, pageFirst: false });
+    assert.deepEqual(next.rows, oldNext.rows);
+    assert.equal(next.evaluations, 26);
+    assert.ok(!next.rows.some(row => page.rows.slice(0, 25).some(first => first.id === row.id)));
+    const status = run({ status: "scheduled" });
+    assert.deepEqual(status.rows, run({ status: "scheduled", pageFirst: false }).rows);
+    assert.equal(status.evaluations, 1000, "status filters retain full lifecycle evaluation");
+  } finally { sqlite.close(); }
+});
 
 test("the complete Trade Jobs query, status filter and status sort fit D1 with populated lifecycle records", async () => {
   const sqlite = migratedSchema();

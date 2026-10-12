@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { PortalWorkspaceLoading } from "./PortalWorkspaceLoading";
 
 import Image from "next/image";
 import {
@@ -34,23 +35,23 @@ import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
-import { CreditexEvidencePolicyGovernance } from "./CreditexEvidencePolicyGovernance";
+const CreditexEvidencePolicyGovernance = dynamic(() => import("./CreditexEvidencePolicyGovernance").then((module) => module.CreditexEvidencePolicyGovernance), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening evidence policies..." /> });
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: () => <p role="status">Loading master forms...</p> });
 const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: () => <p role="status">Loading onboarding reviews...</p> });
 const TrainingQuestionnaireEditor = dynamic(() => import("./TrainingQuestionnaireEditor").then((module) => module.TrainingQuestionnaireEditor), { loading: () => <p role="status">Loading training...</p> });
-import { CreditexOutputActions } from "./CreditexOutputActions";
-import { CreditexRegistryWorkspace } from "./CreditexRegistryWorkspace";
-import { CreditexOfficialSourceWorkbench } from "./CreditexOfficialSourceWorkbench";
-import { CreditexTeamAccess } from "./CreditexOperationsWorkspace";
-import { CreditexPlannedIntakeQueue } from "./CreditexPlannedIntakeQueue";
-import CreditexVoiceSetupPanel from "./CreditexVoiceSetupPanel";
+const CreditexOutputActions = dynamic(() => import("./CreditexOutputActions").then((module) => module.CreditexOutputActions), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening submission actions..." /> });
+const CreditexRegistryWorkspace = dynamic(() => import("./CreditexRegistryWorkspace").then((module) => module.CreditexRegistryWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening submissions..." /> });
+const CreditexOfficialSourceWorkbench = dynamic(() => import("./CreditexOfficialSourceWorkbench").then((module) => module.CreditexOfficialSourceWorkbench), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening official sources..." /> });
+const CreditexTeamAccess = dynamic(() => import("./CreditexOperationsWorkspace").then((module) => module.CreditexTeamAccess), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening team access..." /> });
+const CreditexPlannedIntakeQueue = dynamic(() => import("./CreditexPlannedIntakeQueue").then((module) => module.CreditexPlannedIntakeQueue), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening job register..." /> });
+const CreditexVoiceSetupPanel = dynamic(() => import("./CreditexVoiceSetupPanel"), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening phone setup..." /> });
 import { PortalWorkspacePreferences, usePortalWorkspacePreferences } from "./PortalWorkspacePreferences";
-import { PortalTeamWorkspace } from "./PortalTeamWorkspace";
-import { PortalConnectWorkspace } from "./PortalConnectWorkspace";
+const PortalTeamWorkspace = dynamic(() => import("./PortalTeamWorkspace").then((module) => module.PortalTeamWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening team tasks..." /> });
+const PortalConnectWorkspace = dynamic(() => import("./PortalConnectWorkspace").then((module) => module.PortalConnectWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening Connect..." /> });
 import { PortalWorkspaceHeader } from "./PortalWorkspaceHeader";
 import { TLinkPortalSwitcher } from "./TLinkPortalSwitcher";
 import { CreditexHomeDashboard } from "./CreditexHomeDashboard";
-import { CreditexCustomerDirectory } from './CreditexCustomerDirectory';
+const CreditexCustomerDirectory = dynamic(() => import("./CreditexCustomerDirectory").then((module) => module.CreditexCustomerDirectory), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening customers..." /> });
 import { CreditexNotifications } from './CreditexNotifications';
 import { hasCreditexPermission, type CreditexPermission } from '@/lib/creditex-permissions';
 import type { CreditexNotificationTarget } from '@/lib/creditex-notifications';
@@ -58,7 +59,7 @@ const CreditexCustomerMap = dynamic(() => import('./CreditexCustomerMap').then(m
 const CreditexAllProgramCalculator = dynamic(() => import('./CreditexAllProgramCalculator').then(module => module.CreditexAllProgramCalculator), { loading: () => <p role="status">Loading calculator...</p> });
 const CreditexJobAuditDesk = dynamic(() => import('./CreditexJobAuditDesk').then(module => module.CreditexJobAuditDesk));
 import styles from "./CreditexCompliancePortal.module.css";
-import { WattzunToolsWorkspace } from "./WattzunToolsWorkspace";
+const WattzunToolsWorkspace = dynamic(() => import("./WattzunToolsWorkspace").then((module) => module.WattzunToolsWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening Wattzun tools..." /> });
 import { creditexAuditFromSearch } from "@/lib/creditex-workspace-navigation";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";

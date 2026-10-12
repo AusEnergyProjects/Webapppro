@@ -6,6 +6,7 @@ import {
 } from "./electricity-tariff-validation.mjs";
 import { resolveCustomerPlanUrl, retailerWebsite } from "./retailer-links.mjs";
 import { isElectricityPlanAvailable } from "../../public/electricity-tariff-guards.mjs";
+import { energyCdrCacheOptions } from "./energy-cdr-cache.mjs";
 
 export const ELECTRICITY_CDR_DIRECTORY_URL =
   "https://jxeeno.github.io/energy-cdr-prd-endpoints/energy-prd-endpoints.json";
@@ -177,7 +178,7 @@ async function fetchJson(url, { fetchImpl, version, timeoutMs, operationSignal }
       (async () => {
         const response = await fetchImpl(url, {
           headers: version ? { "x-v": version, "x-min-v": version } : {},
-          cache: "no-store",
+          cf: energyCdrCacheOptions(url, version),
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("Retailer returned HTTP " + response.status);

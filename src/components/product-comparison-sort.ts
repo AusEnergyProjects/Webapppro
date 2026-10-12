@@ -1,5 +1,5 @@
-import type { ProductComparisonItem } from "@/lib/product-guides";
-import type { ProductRatingExplanation, ProductRatingId, ProductVisualRating } from "@/lib/product-ratings";
+import type { ProductRatingExplanation, ProductRatingId } from "@/lib/product-ratings";
+import type { ProductComparisonCard } from "./product-comparison-data";
 
 export type ProductComparisonSort = {
   criterion: "name" | ProductRatingId;
@@ -24,7 +24,7 @@ export function productComparisonSortLabel(method: Pick<ProductRatingExplanation
   return `${method.label}: ${ascending ? "lowest" : "highest"}`;
 }
 
-function verifiedValue(rating: ProductVisualRating | undefined) {
+function verifiedValue(rating: ProductComparisonCard["ratings"][number] | undefined) {
   if (!rating || rating.score === null || !Number.isFinite(rating.score)
     || rating.score < 0 || rating.score > 5 || !rating.measurement
     || !Number.isFinite(rating.measurement.value) || rating.measurement.value < 0) return null;
@@ -32,12 +32,13 @@ function verifiedValue(rating: ProductVisualRating | undefined) {
   return rating.measurement.value;
 }
 
-export function sortProductComparisons(products: readonly ProductComparisonItem[], query: string, sort: ProductComparisonSort) {
+const names = new Intl.Collator("en-AU", { numeric: true, sensitivity: "base" });
+
+export function sortProductComparisons(products: readonly ProductComparisonCard[], query: string, sort: ProductComparisonSort) {
   const search = query.trim().toLocaleLowerCase("en-AU");
-  const names = new Intl.Collator("en-AU", { numeric: true, sensitivity: "base" });
   const direction = sort.direction === "ascending" ? 1 : -1;
   return products.map((product, index) => ({ product, index }))
-    .filter(({ product }) => `${product.name} ${product.brand} ${product.technicalSpecs.map(spec => spec.value).join(" ")}`.toLocaleLowerCase("en-AU").includes(search))
+    .filter(({ product }) => product.searchText.includes(search))
     .sort((a, b) => {
       if (sort.criterion === "name") return names.compare(a.product.name, b.product.name) * direction || a.index - b.index;
       const aValue = verifiedValue(a.product.ratings.find(rating => rating.id === sort.criterion));

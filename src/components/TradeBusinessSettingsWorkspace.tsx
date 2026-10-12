@@ -129,12 +129,6 @@ const sectionOptions: Array<{
   { id: "closure", label: "Close account", detail: "Access and retained records" },
 ];
 
-export function tradeBusinessThemeGradient(
-  themeKey?: TradeBrandThemeKey,
-) {
-  return TRADE_BRAND_THEME_OPTIONS[themeKey || DEFAULT_TRADE_BRAND_THEME].gradient;
-}
-
 const borderOptions: Record<
   TradeBrandBorderStyle,
   { label: string; detail: string; radius: number }

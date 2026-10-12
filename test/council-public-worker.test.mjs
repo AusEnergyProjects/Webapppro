@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import * as branding from "../src/lib/council-public-branding.ts";
 import * as redirects from "../src/lib/public-redirects.mjs";
 import * as release from "../src/lib/release-identity.mjs";
+import * as pageCache from "../src/lib/public-page-cache.mjs";
 
 const code = "1234567890abcdef1234567890abcdef";
 const host = "https://energy.portphillip.vic.gov.au";
@@ -43,6 +44,7 @@ function fixture(t, options = {}) {
   dependencies.set("../src/lib/council-public-branding", branding);
   dependencies.set("../src/lib/public-redirects.mjs", redirects);
   dependencies.set("../src/lib/release-identity.mjs", release);
+  dependencies.set("../src/lib/public-page-cache.mjs", pageCache);
   dependencies.set("../src/lib/council-monthly-report-pdf", { createCouncilMonthlyReportPdf: async bundle => { calls.push({ name: "createCouncilMonthlyReportPdf", args: [bundle] }); return new Uint8Array([1, 2, 3]); } });
   dependencies.get("../src/lib/council-monthly-report-server").hasDueCouncilMonthlyReports = async (...args) => { calls.push({ name: "hasDueCouncilMonthlyReports", args }); return options.reportsDue ?? false; };
   dependencies.get("../db").getD1 = () => { dbCalls++; if (options.dbFailure) throw new Error("Database unavailable"); return db; };
@@ -68,7 +70,7 @@ function fixture(t, options = {}) {
   });
   const ctx = { waitUntil: promise => pending.push(promise) };
   return { sql, db, calls, handled, pending, errors, cacheReads, cacheWrites, loaded, dbCalls: () => dbCalls,
-    fetch: request => record.exports.default.fetch(request, { APEX_CANONICAL_REDIRECTS_ENABLED: "true" }, ctx),
+    fetch: request => record.exports.default.fetch(request, { APEX_CANONICAL_REDIRECTS_ENABLED: "true", AEA_RELEASE_SHA: "a".repeat(40) }, ctx),
     schedule: (cron, env = {}) => record.exports.default.scheduled({ cron }, env, ctx),
   };
 }

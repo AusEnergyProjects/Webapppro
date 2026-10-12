@@ -48,7 +48,7 @@ function component(name, props, fetchImpl) {
     if (id === "react") return hooks;
     if (id === "react-dom") return { createPortal };
     if (id === "react/jsx-runtime") return jsx;
-    if (id === "./TradeEmailSettings") return { TRADE_EMAIL_SETTINGS_HREF: "/direct-trade/dashboard?workspace=account#business-settings-email" };
+    if (id === "./TradeEmailSettings" || id === "@/lib/trade-email-navigation") return { TRADE_EMAIL_SETTINGS_HREF: "/direct-trade/dashboard?workspace=account#business-settings-email" };
     if (id.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
     throw new Error(`Unexpected dependency: ${id}`);
   }, fetchImpl, { location, history: { replaceState() {} } }, { body: documentBody, getElementById() { return null; } });

@@ -63,6 +63,9 @@ function builtEntrySource(entryKey) {
 }
 
 const eagerWorkerEntries = collectStaticEntries(workerEntryKey);
+if (eagerWorkerEntries.size > 6) {
+  throw new Error(`Sites server bundle audit failed: Worker startup resolves ${eagerWorkerEntries.size} modules; budget is 6.`);
+}
 if (eagerWorkerEntries.has(quotePdfEntryKey)) {
   throw new Error(
     "Sites server bundle audit failed: trade quote PDF tooling returned to the eager Worker graph.",
@@ -151,6 +154,9 @@ const eagerWorkerBytes = [...eagerWorkerEntries].reduce(
   (total, entryKey) => total + entryBytes(entryKey),
   0,
 );
+if (eagerWorkerBytes > 16_000_000) {
+  throw new Error(`Sites server bundle audit failed: eager Worker graph is ${eagerWorkerBytes} bytes; budget is 16000000.`);
+}
 const quotePdfModuleBytes = entryBytes(quotePdfEntryKey);
 const deferredPdfRuntimeBytes = [...pdfRuntimeEntries].reduce(
   (total, entryKey) => total + entryBytes(entryKey),

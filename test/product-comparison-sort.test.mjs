@@ -6,12 +6,13 @@ import * as react from "react";
 import * as jsx from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons } from "../src/components/product-comparison-sort.ts";
+import { productComparisonCard, readProductComparisonDetails } from "../src/components/product-comparison-data.ts";
 
 function rating(id, value, unit, score = value === null ? null : 3) {
   return { id, label: id, score, measurement: value === null ? null : { value, unit, basisId: "verified-basis", variant: "Exact model", basis: "Verified test", sourceUrl: "https://example.com/spec", checkedAt: "2026-10-12" }, reason: score === null ? "Not comparable" : null };
 }
 function product(id, capacity, warranty, extra = {}) {
-  return { id, name: id, brand: "Maker", image: { src: "/photo.webp", alt: id, sourceUrl: "https://example.com/photo" }, pros: ["Verified benefit."], cons: [], sources: [], checkedAt: "2026-10-12", technicalSpecs: [{ label: "Connection", value: "Single phase", sourceUrl: "https://example.com/spec" }], freshness: { generation: "Current", released: null, sourceUrl: "https://example.com/model", note: "Current model" }, ratings: [rating("capacity", capacity, "tank-litres"), rating("warranty", warranty, "included-product-years")], ...extra };
+  return productComparisonCard({ id, name: id, brand: "Maker", image: { src: "/photo.webp", alt: id, sourceUrl: "https://example.com/photo" }, pros: ["Verified benefit."], cons: [], sources: [], checkedAt: "2026-10-12", technicalSpecs: [{ label: "Connection", value: "Single phase", sourceUrl: "https://example.com/spec" }], freshness: { generation: "Current", released: null, sourceUrl: "https://example.com/model", note: "Current model" }, ratings: [rating("capacity", capacity, "tank-litres"), rating("warranty", warranty, "included-product-years")], ...extra });
 }
 const ids = values => values.map(value => value.id);
 
@@ -56,6 +57,7 @@ const methods = [{ id: "capacity", label: "Tank size", explanation: "Published t
 const Browser = compile("../src/components/ProductComparisonBrowser.tsx", {
   react, "react/jsx-runtime": jsx, "./product-comparison.css": {},
   "./product-comparison-sort": { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons },
+  "./product-comparison-data": { readProductComparisonDetails },
   "./ProductRebateChecker": {
     useProductRebateCheck: category => ({ category }),
     ProductRebateChecker: ({ check }) => jsx.jsx("section", { "data-rebate-category": check.category }),

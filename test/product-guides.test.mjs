@@ -10,6 +10,7 @@ import { searchPublicSite } from "../src/lib/public-site-search.ts";
 import { calculateProductRating, productRatingMethods } from "../src/lib/product-ratings.ts";
 import { hotWaterComparisonFacts, hotWaterComparisonMeasurements } from "../src/lib/product-hot-water.ts";
 import { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons } from "../src/components/product-comparison-sort.ts";
+import { productComparisonCard, readProductComparisonDetails } from "../src/components/product-comparison-data.ts";
 function compile(relative, dependencies) {
   const compiled = ts.transpileModule(readFileSync(new URL(relative, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const loaded = {};
@@ -19,11 +20,16 @@ function compile(relative, dependencies) {
 const slugs = ["solar", "inverters", "batteries", "hot-water", "air-conditioning", "multi-split", "ev-chargers"];
 const datasets = Object.fromEntries(slugs.map(slug => ["./product-guides/" + slug + ".json", { default: JSON.parse(readFileSync(new URL("../src/lib/product-guides/" + slug + ".json", import.meta.url), "utf8")) }]));
 const guide = compile("../src/lib/product-guides.ts", datasets);
+const comparison = compile("../src/lib/product-comparison-item.ts", {
+  "./product-ratings": { calculateProductRating, productRatingMethods },
+  "./product-hot-water": { hotWaterComparisonFacts, hotWaterComparisonMeasurements },
+});
 const browser = compile("../src/components/ProductComparisonBrowser.tsx", {
   react,
   "react/jsx-runtime": jsx,
   "./product-comparison.css": {},
   "./product-comparison-sort": { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons },
+  "./product-comparison-data": { readProductComparisonDetails },
   "./ProductRebateChecker": {
     useProductRebateCheck: category => ({ category, profile: {}, lookup: {}, readyToCheck: false, entryFor: () => undefined }),
     ProductRebateChecker: () => jsx.jsx("section", { "data-testid": "product-rebate-checker" }),
@@ -36,6 +42,8 @@ const dependencies = {
   "next/navigation": { notFound() { throw new Error("NOT_FOUND"); } },
   "@/lib/product-guides": guide,
   "@/lib/product-ratings": { calculateProductRating, productRatingMethods },
+  "@/lib/product-comparison-item": comparison,
+  "./product-comparison-data": { productComparisonCard },
   "@/lib/product-hot-water": { hotWaterComparisonFacts, hotWaterComparisonMeasurements },
   "@/lib/public-site": { PUBLIC_SITE, buildPlatformMetadata },
   "./ComparatorChrome": { SiteHeader: () => jsx.jsx("nav", { children: "Navigation" }), SiteFooter: ({ children }) => jsx.jsx("footer", { children }) },
@@ -254,7 +262,7 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
       assert.ok(Array.isArray(product.cons));
       assert.equal(product.ratings.length, category.slug === "hot-water" ? 4 : 2);
       assert.ok(product.ratings.every(rating => rating.id !== "cost"));
-      assert.ok(!product.sources.some(source => source.kind === "published_equipment_price"));
+      assert.equal(Object.hasOwn(product, "sources"), false, "document evidence is loaded only when Specs is opened");
       assert.doesNotMatch(JSON.stringify(product), /(?:A?\$|AUD\s*)\s*\d/, product.id + ": public price anchor");
     }
     assert.doesNotMatch(JSON.stringify(listing.props.methods), /maximum|aud-|inverter-unit-gst|\$/, "only plain performance and warranty methods cross the client boundary");
@@ -266,7 +274,7 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
 
 test("missing verified benefits are rejected instead of silently showing an empty card", () => {
   const category = guide.PRODUCT_GUIDE_CATEGORIES[0];
-  const product = { ...category.options[0], ratings: [], pros: [] };
+  const product = productComparisonCard({ ...comparison.buildProductComparisonItem(category.options[0], category.slug), ratings: [], pros: [] });
   assert.throws(() => renderToStaticMarkup(jsx.jsx(browser.ProductComparisonBrowser, { products: [product], methods: productRatingMethods(category.slug) })), /Missing verified benefits/);
 });
 
