@@ -573,6 +573,8 @@ export const tradeTeamMembers = sqliteTable("trade_team_members", {
   canManageJobs: integer("can_manage_jobs", { mode: "boolean" }).notNull().default(false),
   canAssignJobs: integer("can_assign_jobs", { mode: "boolean" }).notNull().default(false),
   jobScope: text("job_scope").notNull().default("own"),
+  canViewLeads: integer("can_view_leads", { mode: "boolean" }).notNull().default(false),
+  canManageLeads: integer("can_manage_leads", { mode: "boolean" }).notNull().default(false),
   canViewCustomers: integer("can_view_customers", { mode: "boolean" }).notNull().default(false),
   canManageCustomers: integer("can_manage_customers", { mode: "boolean" }).notNull().default(false),
   canViewQuotes: integer("can_view_quotes", { mode: "boolean" }).notNull().default(false),
@@ -1019,6 +1021,7 @@ export const tradeWorkOrderTasks = sqliteTable("trade_work_order_tasks", {
 ]);
 
 export const tradeWorkOrderEvents = sqliteTable("trade_work_order_events", {
+  actorUid: text("actor_uid").notNull().default(""),
   id: text("id").primaryKey(),
   workOrderId: text("work_order_id").notNull(),
   firebaseUid: text("firebase_uid").notNull(),
@@ -1686,6 +1689,7 @@ export const publicTradeLeadQuotePhotos = sqliteTable("public_trade_lead_quote_p
 ]);
 
 export const publicTradeLeadQuotePhotoEvents = sqliteTable("public_trade_lead_quote_photo_events", {
+  actorUid: text("actor_uid").notNull().default(""),
   id: text("id").primaryKey(),
   photoId: text("photo_id").notNull(),
   opportunityId: text("opportunity_id").notNull(),

@@ -6,9 +6,14 @@ import {
   createInstallerPlanReportView,
 } from "@/lib/customer-plan-document.mjs";
 import {
-  requireVerifiedTradeAccess,
   TradeAccessError,
 } from "@/lib/trade-access-server";
+
+import { requireInstallerTeamAccess, canViewLeads, type TeamAccess } from "@/lib/trade-team-server";
+
+import { currentTradeLeadAccess } from "@/lib/trade-lead-access-server";
+
+import { mfaErrorResponse } from "@/lib/admin-server";
 
 export const runtime = "edge";
 
@@ -42,12 +47,12 @@ export async function GET(request: Request) {
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
   }
 
-  let access: Awaited<ReturnType<typeof requireVerifiedTradeAccess>>;
+  let access: TeamAccess;
   try {
-    access = await requireVerifiedTradeAccess(request, {
-      partnerTypes: ["installer"],
-    });
+    access = await requireInstallerTeamAccess(request);
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     const code = tradeAccessCode(error);
     if (code === "AUTH_REQUIRED") {
       return json({ ok: false, error: "Sign in to continue." }, 401);
@@ -70,9 +75,10 @@ export async function GET(request: Request) {
     }, 403);
   }
 
+  if (!canViewLeads(access)) return json({ ok: false, error: "Your team access does not include viewing Leads." }, 403);
   if (
     !await accountHasFeature(
-      access.identity.uid,
+      access.ownerUid,
       "installer",
       "installer_leads",
     )
@@ -112,7 +118,7 @@ export async function GET(request: Request) {
           AND consent.withdrawn_at = ''
       )
     LIMIT 1`)
-    .bind(matchId, access.identity.uid)
+    .bind(matchId, access.ownerUid)
     .first<Record<string, unknown>>();
 
   if (!project) {
@@ -138,6 +144,7 @@ export async function GET(request: Request) {
     .bind(String(project.id), String(project.firebase_uid))
     .all<Record<string, unknown>>();
 
+  if (!await currentTradeLeadAccess(db, access)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
   return json({
     ok: true,
     report: createInstallerPlanReportView(project, {

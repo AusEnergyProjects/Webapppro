@@ -74,6 +74,17 @@ test('customer directory requires both existing view and search permissions', ()
   assert.deepEqual(ui.destinations, [['crm', 'customers']]);
 });
 
+test('Leads is a distinct permission-controlled staff destination', () => {
+  assert.equal(render().button('Leads'), undefined);
+  assert.equal(render({ canManageLeads: true }).button('Leads'), undefined);
+  assert.equal(render({ canViewLeads: true, canManageLeads: true }, 'leads', 'jobs', 'crew-1').button('Leads'), undefined);
+  const ui = render({ canViewLeads: true }, 'leads');
+  assert.equal(ui.button('Leads').props['aria-current'], 'page');
+  ui.button('Leads').props.onClick();
+  assert.deepEqual(ui.destinations, [['portal', 'leads']]);
+  assert.equal(context.workspaceLocation('?workspace=leads').view, 'leads');
+});
+
 test('price book shortcut points to the supported staff CRM target and marks selection', () => {
   const ui = render({ canViewPriceBook: true }, 'business', 'pricebook');
   assert.equal(ui.button('Products').props['aria-current'], 'page');

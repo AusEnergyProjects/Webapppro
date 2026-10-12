@@ -822,7 +822,8 @@ test("the private upload boundary rate-limits before multipart parsing and valid
   assert.match(route, /export async function DELETE/);
   assert.match(route, /SET status = 'withdrawn', withdrawn_at = \?, question_answers = '\[\]'/);
   assert.match(route, /status IN \('pending', 'active', 'deleted', 'purged'\)/);
-  assert.match(route, /requireVerifiedTradeAccess/);
+  assert.match(route, /requireInstallerTeamAccess/);
+  assert.match(route, /if \(!canViewLeads\(access\)\)/);
   assert.match(route, /match\.firebase_uid = \?/);
   assert.match(route, /publicPlanQuoteCategoryIntersection\([\s\S]*row\.matched_categories/);
   assert.match(route, /verifiedTradeAccountPredicate/);

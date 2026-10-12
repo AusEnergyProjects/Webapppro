@@ -1,3 +1,4 @@
+import * as leadPermissions from "../src/lib/trade-team-permission-policy.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -58,7 +59,8 @@ function fixture() {
   const recipient = load("../src/lib/trade-email-recipient-server.ts", {
     "../../db": { getD1: () => db }, "./aea-trade-owner-server": aea, "./trade-certificate-leads": certificate,
     "./public-trade-lead-access.mjs": publicContact, "./trade-opportunity-read-projection.mjs": projectContact,
-    "./trade-job-collaboration.ts": collaboration,
+    "./trade-lead-access-server": { currentTradeLeadAccess: async () => true },
+    "./trade-job-collaboration.ts": collaboration, "./trade-team-permission-policy.mjs": leadPermissions,
   });
   const publicRelease = (changes = {}) => insert("public_trade_lead_contact_releases", {
     id: "release", opportunity_id: "opportunity", source_reference: "public:source", status: "active",

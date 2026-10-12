@@ -49,6 +49,52 @@ function value(css, selector, property) {
   return result;
 }
 
+function tokens(css, selector) {
+  const result = {};
+  postcss.parse(css).walkRules((rule) => {
+    if (rule.parent.type === "atrule" || !rule.selectors.includes(selector)) return;
+    rule.walkDecls((decl) => { if (decl.prop.startsWith("--")) result[decl.prop] = decl.value; });
+  });
+  return result;
+}
+
+function resolveToken(colour, style) {
+  assert.equal(typeof colour, "string", "Every compliance surface/control must set its colour pair");
+  const variable = colour.match(/^var\((--[\w-]+)(?:,\s*(.*))?\)$/);
+  if (!variable) return colour.length === 4 ? `#${[...colour.slice(1)].map(char => char.repeat(2)).join("")}` : colour;
+  return resolveToken(style[variable[1]] ?? variable[2], style);
+}
+
+const complianceCss = read("components/FormCompliancePanel.module.css");
+for (const mode of ["day", "night"]) {
+  for (const workspace of ["creditex", "trade"]) {
+    test(`${mode} ${workspace} compliance questions, notes and buttons have readable colour pairs`, () => {
+      const tradeStyle = tokens(read("app/protected-workspaces.css"), ".trade-portal-shell");
+      if (mode === "night") Object.assign(tradeStyle, tokens(read("app/tlink-colour-mode.css"), 'html[data-tlink-colour-mode="night"] .trade-portal-shell'));
+      const style = { ...(workspace === "creditex" ? palette(mode).style : tradeStyle), ...tokens(complianceCss, ".panel") };
+      for (const selector of [".editorQuestion", ".reviewQuestion", ".source", ".linkedAnswer", ".queue article", ".panel header > span", ".panel input:not([type=checkbox])", ".panel textarea", ".panel button", ".panel button:global(.btn)", '.choices button[aria-pressed=true]']) {
+        const foreground = resolveToken(value(complianceCss, selector, "color"), style);
+        const background = resolveToken(value(complianceCss, selector, "background"), style);
+        const ratio = contrast(foreground, background);
+        assert.ok(ratio >= 4.5, `${selector}: ${foreground} on ${background} has ${ratio.toFixed(2)}:1 contrast`);
+      }
+      assert.equal(resolveToken(value(complianceCss, ".panel input:not([type=checkbox])", "background"), style), style[workspace === "creditex" ? "--portal-input" : "--trade-field"]);
+      assert.doesNotMatch(complianceCss, /--tlink-(?:surface|border|text-primary)/, "Unowned theme tokens previously produced white cards with light text");
+    });
+  }
+}
+
+test("compliance inputs retain keyboard focus and the question layout fits narrow screens", () => {
+  assert.equal(value(complianceCss, ".panel textarea", "field-sizing"), "content");
+  assert.ok(parseFloat(value(complianceCss, ".panel button", "min-height")) >= 44);
+  assert.ok(parseFloat(value(complianceCss, ".panel input:not([type=checkbox])", "min-height")) >= 44);
+  assert.equal(value(complianceCss, ".panel label", "min-width"), "0");
+  assert.match(value(complianceCss, ".panel :is(input, textarea, button):focus-visible", "outline"), /^3px solid /);
+  const mobile = postcss.parse(complianceCss).nodes.find(node => node.type === "atrule" && node.name === "media" && node.params === "(max-width: 700px)");
+  assert.ok(mobile);
+  assert.equal(mobile.nodes.find(node => node.selector === ".editorQuestion").nodes.find(node => node.prop === "grid-template-columns").value, "1fr");
+});
+
 for (const mode of ["day", "night"]) {
   test(`${mode} portal text, controls and status messages meet normal-text contrast`, () => {
     const { style, "data-portal-mode": selectedMode } = palette(mode);
@@ -70,6 +116,11 @@ for (const mode of ["day", "night"]) {
       const background = resolveColour(value(queueCss, selector, "background"));
       assert.ok(contrast(foreground, background) >= 4.5, `${mode} ${selector} contrast`);
     }
+    const formCss = read("components/CreditexActivityWorkPackGovernance.module.css");
+    const selectedView = '.masterLibrary .masterViewPicker > button[aria-pressed="true"]';
+    const foreground = resolveToken(value(formCss, selectedView, "color"), style);
+    const background = resolveToken(value(formCss, selectedView, "background"), style);
+    assert.ok(contrast(foreground, background) >= 4.5, `${mode} selected form view contrast`);
   });
 }
 

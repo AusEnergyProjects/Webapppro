@@ -37,7 +37,10 @@ function harness(name, props, handler) {
 test('question editor saves the edited order and requirements using the loaded revision', async () => {
   const h = harness('FormComplianceEditor', { scope: 'business', formKey: 'business:inspection' }, call => call.method === 'GET' ? { ok: true, template: template(), canManage: true } : { ok: true, template: { ...template(), revision: 4, questions: call.body.questions } });
   let tree = await h.mount();
-  nodes(tree, node => node.type === 'input' && node.props['aria-label'] === 'Compliance check 1')[0].props.onChange({ target: { value: 'Does the name match the signed document?' } });
+  const question = nodes(tree, node => node.type === 'textarea' && node.props['aria-label'] === 'Compliance check 1')[0];
+  assert.equal(question.props.rows, 2, 'Long compliance questions wrap instead of disappearing beyond a single-line field');
+  assert.equal(question.props.maxLength, 300);
+  question.props.onChange({ target: { value: 'Does the name match the signed document?' } });
   tree = h.render();
   nodes(tree, node => node.type === 'button' && node.props['aria-label'] === 'Move compliance check 1 down')[0].props.onClick();
   tree = h.render();
@@ -54,7 +57,7 @@ test('question editor saves the edited order and requirements using the loaded r
 test('question editor can add and remove checks without writing installer forms', async () => {
   const h = harness('FormComplianceEditor', { scope: 'creditex', formKey: 'activity:veu-6:', actorMode: 'admin' }, call => call.method === 'GET' ? { ok: true, template: { ...template(), formKey: 'activity:veu-6:' }, canManage: true } : { ok: true, template: { ...template(), formKey: 'activity:veu-6:', questions: call.body.questions } });
   let tree = await h.mount(); button(tree, 'Add check').props.onClick(); tree = h.render();
-  assert.equal(nodes(tree, node => node.type === 'input' && node.props.maxLength === 300).length, 3);
+  assert.equal(nodes(tree, node => node.type === 'textarea' && node.props.maxLength === 300).length, 3);
   button(tree, 'Remove').props.onClick(); tree = h.render(); button(tree, 'Save compliance questions').props.onClick(); await flush(); h.render();
   assert.equal(h.calls[1].body.questions.length, 2); assert.ok(h.calls[1].body.questions.some(q => q.key.startsWith('check_')));
   assert.ok(h.calls.every(call => call.path.startsWith('/api/form-compliance?') && call.path.includes('actorMode=admin'))); h.unmount();

@@ -33,10 +33,15 @@ import {
 } from "@/lib/public-plan-enquiry.mjs";
 import { drainPublicPlanQuotePhotoCleanup } from "@/lib/public-plan-quote-photo-cleanup";
 import {
-  requireVerifiedTradeAccess,
   TradeAccessError,
   verifiedTradeAccountPredicate,
 } from "@/lib/trade-access-server";
+
+import { requireInstallerTeamAccess, canViewLeads, type TeamAccess } from "@/lib/trade-team-server";
+
+import { currentTradeLeadAccess } from "@/lib/trade-lead-access-server";
+
+import { mfaErrorResponse } from "@/lib/admin-server";
 
 export const runtime = "edge";
 
@@ -919,15 +924,18 @@ export async function GET(request: Request) {
   if (!sameOrigin(request)) {
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
   }
-  let access: Awaited<ReturnType<typeof requireVerifiedTradeAccess>>;
+  let access: TeamAccess;
   try {
-    access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+    access = await requireInstallerTeamAccess(request);
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     const code = tradeAccessCode(error);
     if (code === "AUTH_REQUIRED") return json({ ok: false, error: "Sign in to continue." }, 401);
     return json({ ok: false, error: "An active approved installer account is required." }, 403);
   }
-  if (!await accountHasFeature(access.identity.uid, "installer", "installer_leads")) {
+  if (!canViewLeads(access)) return json({ ok: false, error: "Your team access does not include viewing Leads." }, 403);
+  if (!await accountHasFeature(access.ownerUid, "installer", "installer_leads")) {
     return json({ ok: false, error: "Complete trade verification before opening quote photos." }, 403);
   }
   const photoId = new URL(request.url).searchParams.get("download")?.trim() || "";
@@ -980,7 +988,7 @@ export async function GET(request: Request) {
     .bind(
       PUBLIC_PLAN_QUOTE_PHOTO_NOTICE_VERSION,
       PUBLIC_PLAN_QUOTE_PHOTO_PURPOSE,
-      access.identity.uid,
+      access.ownerUid,
       PUBLIC_PLAN_CONSENT_NOTICE_VERSION,
       PUBLIC_PLAN_CONSENT_PURPOSE,
       photoId,
@@ -999,18 +1007,21 @@ export async function GET(request: Request) {
   if (!object) {
     return json({ ok: false, error: "The stored quote photo was not found." }, 404);
   }
+  if (!await currentTradeLeadAccess(getD1(), access)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
   await getD1().prepare(`INSERT INTO public_trade_lead_quote_photo_events
-    (id, photo_id, opportunity_id, match_id, installer_uid, event_type, created_at)
-    VALUES (?, ?, ?, ?, ?, 'viewed', ?)`)
+    (id, photo_id, opportunity_id, match_id, installer_uid, actor_uid, event_type, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'viewed', ?)`)
     .bind(
       crypto.randomUUID(),
       row.id,
       row.opportunity_id,
       row.match_id,
-      access.identity.uid,
+      access.ownerUid,
+      access.actorUid,
       new Date().toISOString(),
     )
     .run();
+  if (!await currentTradeLeadAccess(getD1(), access)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
   const extension = row.content_type === "image/png"
     ? "png"
     : "jpg";

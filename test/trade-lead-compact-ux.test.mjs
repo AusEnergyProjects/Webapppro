@@ -6,6 +6,7 @@ const read = (path) =>
   fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
 const dashboard = read("../src/components/DirectTradeDashboard.tsx");
+const leadInbox = read("../src/components/TradeLeadInbox.tsx");
 const opportunityRoute = read("../src/app/api/trade-opportunities/route.ts");
 const quote = read("../src/components/InstallerPlatformQuote.tsx");
 const styles = [
@@ -17,9 +18,9 @@ test("the permanent Leads tab uses an accessible list and full selected preview"
   assert.match(dashboard, /const \[selectedOpportunityMatchId, setSelectedOpportunityMatchId\] = useState\(\(\) =>[\s\S]*opportunityMatchFromSearch\(window\.location\.search\)\)/);
   assert.match(dashboard, /const selectedLeadOpportunity = visibleLeadOpportunities\.find\(\(item\) => item\.matchId === selectedOpportunityMatchId\)[\s\S]*\|\| visibleLeadOpportunities\[0\]/);
   assert.match(dashboard, /dashboard-lead-workspace/);
-  assert.match(dashboard, /<nav className="dashboard-lead-list" aria-label="Available leads">/);
-  assert.match(dashboard, /aria-current=\{selected \? "true" : undefined\}/);
-  assert.match(dashboard, /onClick=\{\(\) => setSelectedOpportunityMatchId\(opportunity\.matchId\)\}/);
+  assert.match(dashboard, /<TradeLeadList[\s\S]*onSelect=\{setSelectedOpportunityMatchId\}/);
+  assert.match(leadInbox, /aria-current=\{selected \? "true" : undefined\}/);
+  assert.match(leadInbox, /onClick=\{\(\) => onSelect\(opportunity\.matchId\)\}/);
   assert.match(dashboard, /nextUrl\.searchParams\.set\("matchId", selectedOpportunityMatchId\)/);
   assert.match(dashboard, /setSelectedOpportunityMatchId\(nextMatchId\)/);
   assert.match(dashboard, /dashboard-opportunity-compact-summary/);
@@ -35,7 +36,7 @@ test("the permanent Leads tab uses an accessible list and full selected preview"
   assert.match(dashboard, /Remove .* from this business's leads/);
   assert.match(dashboard, /This does not remove it for other matched trades/);
   assert.match(dashboard, /dashboard-lead-preview-actions/);
-  assert.match(dashboard, /\["offered", "viewed", "interested", "connected"\]\.map\(\(value\) => <option/);
+  assert.match(leadInbox, /\["offered", "viewed", "interested", "connected"\]\.map\(value => <option/);
   assert.match(dashboard, /: "Quote"/);
   assert.match(dashboard, /async function openPublicLeadQuote\(opportunity: DashboardOpportunity\)/);
   assert.match(dashboard, /action: "open_public_quote", matchId: opportunity\.matchId/);
@@ -73,9 +74,9 @@ test("removing a lead is owner scoped, reversible only through allocation, and l
   assert.match(opportunityRoute, /UPDATE trade_opportunity_matches[\s\S]*WHERE id = \? AND firebase_uid = \? AND status = \? AND opportunity_id = \?/);
   assert.match(opportunityRoute, /bounded_match\.status IN \('offered', 'viewed', 'interested', 'connected'\)/);
   assert.match(opportunityRoute, /if \(status === "declined"\)[\s\S]*allocateNearestInstallers\([\s\S]*"automatic-decline-refill"/);
-  assert.match(opportunityRoute, /status === "declined" && currentProjectConsent[\s\S]*await db\.batch\(\[[\s\S]*UPDATE customer_project_quotes[\s\S]*status = 'withdrawn'[\s\S]*customer_decision != 'accepted'[\s\S]*declined_match\.status = 'declined'/);
+  assert.match(opportunityRoute, /status === "declined" && currentProjectConsent[\s\S]*await guardedTradeLeadMutationBatch\(db, access, "manage", \[[\s\S]*UPDATE customer_project_quotes[\s\S]*status = 'withdrawn'[\s\S]*customer_decision != 'accepted'[\s\S]*declined_match\.status = 'declined'/);
   assert.match(opportunityRoute, /customer_project_quotes accepted_quote[\s\S]*accepted_quote\.opportunity_match_id = \?[\s\S]*accepted_quote\.installer_uid = \?[\s\S]*accepted_quote\.customer_decision = 'accepted'/);
-  assert.match(opportunityRoute, /action === "open_public_quote"[\s\S]*\["interested", "connected"\]\.includes\(currentStatus\)[\s\S]*publicLeadQuoteWorkflowOutcome\(db, user\.uid, matchId, now, currentStatus\)/);
+  assert.match(opportunityRoute, /action === "open_public_quote"[\s\S]*\["interested", "connected"\]\.includes\(currentStatus\)[\s\S]*publicLeadQuoteWorkflowOutcome\(db, installerUid, matchId, now, currentStatus, access\.actorUid, access\)/);
   assert.doesNotMatch(opportunityRoute, /already stored as a customer and job/);
   assert.match(opportunityRoute, /PLATFORM_QUOTE_STATE_CHANGED[\s\S]*INSERT INTO customer_project_quotes/);
   assert.match(opportunityRoute, /guarded_match\.status IN \('interested', 'connected'\)[\s\S]*guarded_consent\.withdrawn_at = ''/);

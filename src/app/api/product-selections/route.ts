@@ -6,6 +6,9 @@ import {
   TradeAccessError,
   verifiedTradeAccountPredicate,
 } from "@/lib/trade-access-server";
+import { requireInstallerTeamAccess, canManageLeads } from "@/lib/trade-team-server";
+
+import { currentTradeLeadAccess } from "@/lib/trade-lead-access-server";
 
 export const runtime = "edge";
 
@@ -100,8 +103,15 @@ async function selections(firebaseUid: string) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await installerIdentity(request);
-    return adminJson({ ok: true, lists: await selections(identity.uid) });
+    const access = await requireInstallerTeamAccess(request);
+    if (!access.isOwner && (!canManageLeads(access) || !access.canViewQuotes || !access.canManageQuotes)) {
+      return adminJson({ ok: false, error: "Your team access does not include product lists for lead quotes." }, 403);
+    }
+    const lists = await selections(access.ownerUid);
+    if (!await currentTradeLeadAccess(getD1(), access, access.isOwner ? "view" : "quote_products")) {
+      return adminJson({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
+    }
+    return adminJson({ ok: true, lists });
   } catch (error) {
     return errorResponse(error);
   }

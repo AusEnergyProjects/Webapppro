@@ -1,9 +1,17 @@
 # Next task handover
 
-Status: Site-wide performance, including TLink Jobs, Leads and Customers; matching GitHub/Sites publication authorised.
-Prepared: 12 October 2026
+Status: Creditex compliance readability and TLink team Leads access; matching GitHub/Sites publication authorised.
+Prepared: 13 October 2026
 
-## Current follow-up, 12 October 2026
+## Current follow-up, 13 October 2026
+
+Outcome: Creditex reviewers can read and use their compliance forms in both visual modes, and authorised senior TLink staff can open and work with their business's Leads. Ownership is the shared form/portal theme boundary and trade team permissions, opportunity access and navigation. Preserve the existing design, business approval checks, customer sharing choices, staff actor attribution and the preceding performance improvements.
+
+Scope: repair paired form foreground/background colours and responsive controls; trace and correct the actual team Leads access contract and permission editor/presets. Exclude special rental, safety and PDF/report forms, product facts, quoting changes, billing, real customer communications and unrelated redesign. Acceptance: readable questionnaire labels, answers and controls in day/night desktop/mobile; explicit authorised staff access with restricted staff and foreign businesses denied; unchanged owner access and released customer-contact boundaries.
+
+Validation: focused theme and team/opportunity permission regressions, typecheck, full release validation and migration integrity if persistence changes, committed publication build, scoped diff review and affected live Chrome checks. Stop before changing unrelated access or editing real member permissions/form answers merely as QA. Record baseline validation failures and any unavailable staff-login verification separately.
+
+## Retained preceding delivery: site-wide performance, 12 October 2026
 
 Outcome: faster public pages and portal navigation with the existing design, features, account access and customer privacy preserved. Scope is shared server startup/build/cache, public catalogue loading, portal tab boundaries and CRM list/query loading. No new migration, vendor, product facts or pricing formula changes.
 

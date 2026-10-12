@@ -55,7 +55,7 @@ test("an error without a framework retry offers a real page refresh instead of a
 
 const registrations = {
   "AdminOperationsPortal.tsx": 22,
-  "CreditexCompliancePortal.tsx": 11,
+  "CreditexCompliancePortal.tsx": 14,
   "CouncilPortal.tsx": 7,
   "DirectTradeDashboard.tsx": 4,
   "council/CouncilWorkspace.tsx": 1,

@@ -1,5 +1,11 @@
 # Australian Energy Assessments and TLink forward roadmap
 
+## Creditex tester readiness and staff Leads access, 13 October 2026
+
+Implemented: readable compliance questionnaires and review controls in both visual modes, wrapping question fields and explicit Retry when Forms, Training or Onboarding fails to load. Team Leads now has separate view/manage grants, selected-business staff access and an audited actor boundary, with migration 0261 granting the existing full administrator permission bundle access. Field/crew and other restricted staff stay scoped to their authorised work.
+
+Evidence and remaining verification limits: `C:/Webproject/outputs/creditex-team-access-20261013/release-report.json`.
+
 ## Product comparison and form compliance follow-up, 12 October 2026
 
 Implemented: common-basis calculated hot-water reheating, corrected iStore noise, direct figure sorting, exact approved multihead matching and full-rated-capacity planning examples. Twenty-five recorded source gaps resolved; eight need reliable exact-model evidence.
@@ -14,7 +20,7 @@ Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 12 October 2026
+Last reconciled: 13 October 2026
 
 ## Current implementation: SECCCA council journey and reporting feedback
 

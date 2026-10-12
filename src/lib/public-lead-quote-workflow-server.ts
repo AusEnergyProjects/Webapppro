@@ -1,3 +1,5 @@
+import type { TeamAccess } from "./trade-team-server";
+import { currentTradeLeadAccess, tradeLeadMutationGuard } from "./trade-lead-access-server";
 import { isAeaTradeOwner, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import {
@@ -312,6 +314,8 @@ export async function startPublicLeadQuoteWorkflow(
   matchId: string,
   now: string,
   expectedMatchStatus = "interested",
+  actorUid = installerUid,
+  leadAccess?: TeamAccess,
 ): Promise<PublicLeadQuoteWorkflow> {
   await ensureTlinkSchemaGuards(db);
   const ids = publicLeadQuoteWorkflowIds(matchId);
@@ -324,6 +328,7 @@ export async function startPublicLeadQuoteWorkflow(
     .bind(matchId, installerUid).first();
   if (!scope) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
   const existing = await existingWorkflow(db, installerUid, matchId, ids);
+  if (leadAccess && !await currentTradeLeadAccess(db, leadAccess, "public_quote")) throw new Error("LEAD_ACCESS_CHANGED");
   if (existing) return workflowResponse(existing, true);
   if (expectedMatchStatus === "connected") {
     throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
@@ -502,6 +507,7 @@ export async function startPublicLeadQuoteWorkflow(
     .bind(photo.objectKey, stagedPhotos.attemptId));
   try {
     await db.batch([
+      ...(leadAccess ? [tradeLeadMutationGuard(db, leadAccess, "public_quote")] : []),
     db.prepare(`SELECT CASE WHEN EXISTS (
         SELECT 1
         FROM trade_opportunity_matches guarded_match
@@ -604,9 +610,9 @@ export async function startPublicLeadQuoteWorkflow(
         JSON.stringify(["aea-public-lead", ...snapshot.categories]),
         acceptedDisclosureJson, acceptedDisclosureSha256, now, now, now),
     db.prepare(`INSERT OR IGNORE INTO trade_work_order_events
-      (id, work_order_id, firebase_uid, event_type, summary, created_at)
-      VALUES (?, ?, ?, 'public_lead_quote_started', ?, ?)`)
-      .bind(ids.eventId, ids.workOrderId, installerUid,
+      (id, work_order_id, firebase_uid, actor_uid, event_type, summary, created_at)
+      VALUES (?, ?, ?, ?, 'public_lead_quote_started', ?, ?)`)
+      .bind(ids.eventId, ids.workOrderId, installerUid, actorUid,
         `${workNumber} quote workspace created from enquiry ${snapshot.reference || matchId}.`, now),
     db.prepare(`INSERT OR IGNORE INTO trade_crm_quotes
       (id, work_order_id, firebase_uid, crm_customer_id, service_site_id,
@@ -637,11 +643,12 @@ export async function startPublicLeadQuoteWorkflow(
       now,
     );
     const replay = await existingWorkflow(db, installerUid, matchId, ids);
-    if (replay) return workflowResponse(replay, true);
+    if (replay && (!leadAccess || await currentTradeLeadAccess(db, leadAccess, "public_quote"))) return workflowResponse(replay, true);
     throw error;
   }
 
   const created = await existingWorkflow(db, installerUid, matchId, ids);
   if (!created) throw new Error("PUBLIC_LEAD_QUOTE_WORKFLOW_UNAVAILABLE");
+  if (leadAccess && !await currentTradeLeadAccess(db, leadAccess, "public_quote")) throw new Error("LEAD_ACCESS_CHANGED");
   return workflowResponse(created, false);
 }

@@ -14,3 +14,11 @@ export function canRescheduleWithinScope(access, currentAssigneeMemberId) {
   if (access.crewId) return Boolean(access.crewLead && access.crewMemberIds?.includes(currentAssigneeMemberId));
   return access.scheduleScope === "team" || currentAssigneeMemberId === access.memberId;
 }
+
+export function canViewLeads(access) {
+  return !access.crewId && !access.fieldSessionId && (access.isOwner || Boolean(access.canViewLeads));
+}
+
+export function canManageLeads(access) {
+  return canViewLeads(access) && (access.isOwner || Boolean(access.canManageLeads));
+}

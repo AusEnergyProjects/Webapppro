@@ -37,6 +37,7 @@ export async function applyTradeCrewAccess(access: TeamAccess, db: D1Database = 
     canAssignJobs: scope.isLead && access.canAssignJobs,
     canRescheduleJobs: scope.isLead && access.canRescheduleJobs,
     canManageTeam: false, canEditTeamPermissions: false,
+    canViewLeads: false, canManageLeads: false,
     canViewCustomers: false, canManageCustomers: false, canSearchCustomers: false,
     canViewQuotes: false, canManageQuotes: false, canSendQuotes: false,
     canViewInvoices: false, canManageInvoices: false, canViewPriceBook: false, canManagePriceBook: false,
@@ -106,7 +107,7 @@ export async function saveTradeCrew(access: TeamAccess, input: Record<string, un
       .bind(access.ownerUid, id, memberId, now, ...guardValues)),
     // Membership is a restriction. Removing it must never restore previously broad scopes.
     db.prepare(`UPDATE trade_team_members SET job_scope='own',schedule_scope='own',can_create_jobs=0,can_manage_team=0,can_edit_team_permissions=0,
-      can_view_customers=0,can_manage_customers=0,can_search_customers=0,can_view_quotes=0,can_manage_quotes=0,can_send_quotes=0,
+      can_view_leads=0,can_manage_leads=0,can_view_customers=0,can_manage_customers=0,can_search_customers=0,can_view_quotes=0,can_manage_quotes=0,can_send_quotes=0,
       can_view_invoices=0,can_manage_invoices=0,can_view_price_book=0,can_manage_price_book=0,can_apply_discounts=0,can_send_sms=0,updated_at=?
       WHERE owner_uid=? AND id IN (SELECT value FROM json_each(?)) AND ${guard}`)
       .bind(now, access.ownerUid, JSON.stringify(memberIds), ...guardValues),

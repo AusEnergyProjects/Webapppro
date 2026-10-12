@@ -42,6 +42,8 @@ export type TradeTeamPermissions = {
   canViewCustomers: boolean;
   canManageCustomers: boolean;
   canSearchCustomers: boolean;
+  canViewLeads: boolean;
+  canManageLeads: boolean;
   canViewQuotes: boolean;
   canManageQuotes: boolean;
   canSendQuotes: boolean;
@@ -159,6 +161,7 @@ const fullPermissions: TradeTeamPermissions = {
   jobScope: "team", canCreateJobs: true, canManageJobs: true, canAssignJobs: true,
   canViewCustomers: true, canManageCustomers: true,
   canSearchCustomers: true,
+  canViewLeads: true, canManageLeads: true,
   canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canSendSms: false, canApplyDiscounts: true,
   canReceiveCustomerQaNotifications: false,
   canViewInvoices: true, canManageInvoices: true,
@@ -170,6 +173,8 @@ const fullPermissions: TradeTeamPermissions = {
 
 const officePermissions: TradeTeamPermissions = {
   ...fullPermissions,
+  canViewLeads: false,
+  canManageLeads: false,
   canManageTeam: false,
   canEditTeamPermissions: false,
   canManageFieldEvidence: false,
@@ -180,6 +185,7 @@ const fieldPermissions: TradeTeamPermissions = {
   jobScope: "own", canCreateJobs: true, canManageJobs: true, canAssignJobs: false,
   canViewCustomers: false, canManageCustomers: false,
   canSearchCustomers: false,
+  canViewLeads: false, canManageLeads: false,
   canViewQuotes: false, canManageQuotes: false, canSendQuotes: false, canSendSms: false, canApplyDiscounts: false,
   canReceiveCustomerQaNotifications: false,
   canViewInvoices: false, canManageInvoices: false,
@@ -190,7 +196,7 @@ const fieldPermissions: TradeTeamPermissions = {
 };
 
 const accessPresets: Array<{ id: AccessPreset; name: string; description: string; permissions: TradeTeamPermissions }> = [
-  { id: "manager", name: "Manager access", description: "Starts with jobs, customers, finance, team access and reports. Form authoring is granted separately.", permissions: fullPermissions },
+  { id: "manager", name: "Manager access", description: "Starts with leads, jobs, customers, finance, team access and reports. Form authoring is granted separately.", permissions: fullPermissions },
   { id: "office", name: "Office access", description: "Starts with jobs, customers, quoting, accounts, reports and the team schedule.", permissions: officePermissions },
   { id: "field", name: "Field access", description: "Starts with assigned jobs, simple self-assigned job intake, own schedule and field evidence.", permissions: fieldPermissions },
 ];
@@ -202,6 +208,10 @@ const scheduleColours: Array<{ id: ScheduleColour; label: string }> = [
 ];
 
 const permissionGroups: Array<{ label: string; items: Array<{ key: BooleanPermissionKey; label: string; detail: string }> }> = [
+  { label: "Leads", items: [
+    { key: "canViewLeads", label: "View business leads", detail: "Open leads shared with this business. Customer sharing choices still apply." },
+    { key: "canManageLeads", label: "Respond to and manage leads", detail: "Mark interest or remove a lead for this business. Preparing and sending quotes also needs the relevant job and quote permissions." },
+  ] },
   { label: "Jobs and customers", items: [
     { key: "canCreateJobs", label: "Create jobs", detail: "Start a new customer job." },
     { key: "canManageJobs", label: "Edit job details and status", detail: "Edit work, tasks and job progress within their job scope." },
@@ -239,6 +249,8 @@ function normalizePermissions(value?: Partial<TradeTeamPermissions>): TradeTeamP
 
 function enforcePermissionDependencies(input: TradeTeamPermissions): TradeTeamPermissions {
   const next = { ...input };
+  if (next.canManageLeads) next.canViewLeads = true;
+  if (!next.canViewLeads) next.canManageLeads = false;
   if (next.canSendQuotes) next.canManageQuotes = true;
   if (next.canManageQuotes) next.canViewQuotes = true;
   if (!next.canViewQuotes) { next.canManageQuotes = false; next.canSendQuotes = false; }
@@ -566,7 +578,8 @@ export function TradeTeamSettings({ user, navigationTarget, onOpenOwnTraining, o
   }
 
   function setPermission(key: keyof TradeTeamPermissions, value: boolean | Scope) {
-    setFormPermissions((current) => enforcePermissionDependencies({ ...current, [key]: value }));
+    setFormPermissions((current) => enforcePermissionDependencies({ ...current, [key]: value,
+      ...(key === "canViewLeads" && !value ? { canManageLeads: false } : {}) }));
     setFormPreset("custom");
   }
 

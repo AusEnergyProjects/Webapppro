@@ -23,6 +23,7 @@ import { createMapNavigationGuard } from "@/lib/trade-map-navigation";
 import { InstallerCrmWorkspace } from "./InstallerCrmWorkspace";
 import { TradeTeamSettings, type TradeTeamPermissions } from "./TradeTeamSettings";
 import dynamic from "next/dynamic";
+import { PortalWorkspaceLoading } from "./PortalWorkspaceLoading";
 import type { TLinkCommandTarget } from "./TLinkCommandCentre";
 import { teamAuthErrorCode, teamAuthErrorMessage } from "./trade-team-auth-errors";
 import { saveTradeBusinessSelection } from "@/lib/trade-business-client";
@@ -30,6 +31,7 @@ import { saveTradeBusinessSelection } from "@/lib/trade-business-client";
 const TradeFormsWorkspace = dynamic(() => import('./TradeFormsWorkspace').then(module => module.TradeFormsWorkspace), { loading: () => <p role="status">Opening forms...</p> });
 const TradeTasksAndTraining = dynamic(() => import("./TradeTasksAndTraining").then(module => module.TradeTasksAndTraining), { loading: () => <p role="status">Loading tasks and training...</p> });
 const TradeSalesWorkspace = dynamic(() => import("./TradeSalesWorkspace").then(module => module.TradeSalesWorkspace), { loading: () => <p role="status">Opening sales...</p> });
+const TradeTeamLeadsWorkspace = dynamic(() => import("./TradeTeamLeadsWorkspace").then(module => module.TradeTeamLeadsWorkspace), { loading: ({ error, retry }) => <PortalWorkspaceLoading message="Opening leads..." error={error} retry={retry} /> });
 const TradeMessagesWorkspace = dynamic(() => import("./TradeMessagesWorkspace").then(module => module.TradeMessagesWorkspace));
 const TradePersonalProfileSettings = dynamic(() => import("./TradePersonalProfileSettings").then(module => module.TradePersonalProfileSettings), { loading: () => <p role="status">Opening your profile...</p> });
 import { TradeTeamCallProvider } from "./TradeTeamCallProvider";
@@ -38,13 +40,13 @@ import { TradeMessageAlerts, TradeMessageUnreadBadge } from "./TradeMessageAlert
 type Result = { ownerUid?: string; code?: string; ok?: boolean; accepted?: boolean; access?: { businessName: string; brandThemeKey?: TradeBrandThemeKey; displayName: string; memberId: string; isOwner: boolean; crewId?: string; crewLead?: boolean; permissions: TradeTeamPermissions }; error?: string };
 type Invitation = { email: string; displayName: string; businessName: string; expiresAt: string };
 
-type PortalView = "business" | "sales" | "wattzun" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew" | "profile";
+type PortalView = "business" | "leads" | "sales" | "wattzun" | "map" | "team" | "forms" | "tasks" | "training" | "messages" | "time" | "crew" | "profile";
 type CrmShortcut = "today" | "jobs" | "customers" | "schedule" | "pricebook" | "reports";
 
 function teamWorkspaceLocation(search: string): { view: PortalView; target: TLinkCommandTarget | null } {
   const parameters = new URLSearchParams(search);
   const workspace = parameters.get("workspace");
-  if (workspace === "wattzun" || workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time" || workspace === "profile") return { view: workspace, target: null };
+  if (workspace === "leads" || workspace === "wattzun" || workspace === "sales" || workspace === "forms" || workspace === "tasks" || workspace === "training" || workspace === "messages" || workspace === "time" || workspace === "profile") return { view: workspace, target: null };
   const jobId = parameters.get("jobId") || "";
   if (workspace === "work" && /^[A-Za-z0-9:_-]{1,180}$/.test(jobId)) {
     const requestedTab = parameters.get("jobTab");
@@ -83,6 +85,7 @@ function TeamWorkspaceNavigation({ permissions, view, crmView, onView, onCrm, cr
       <h2 id="staff-nav-daily" className="tlink-nav-heading">Daily work</h2>
       <button type="button" className={view === "business" && crmView === "today" ? "active" : ""} aria-current={view === "business" && crmView === "today" ? "page" : undefined} onClick={() => onCrm("today")}><TLinkNavigationIcon name="home" /><span>Home dashboard</span></button>
       {shortcuts.filter(item => item.id !== "pricebook" && item.id !== "reports").map(item => <button type="button" key={item.id} className={view === "business" && crmView === item.id ? "active" : ""} aria-current={view === "business" && crmView === item.id ? "page" : undefined} onClick={() => onCrm(item.id)}><TLinkNavigationIcon name={item.icon} /><span>{item.label}</span></button>)}
+      {!crewId && permissions.canViewLeads && <button type="button" className={view === "leads" ? "active" : ""} aria-current={view === "leads" ? "page" : undefined} onClick={() => onView("leads")}><TLinkNavigationIcon name="leads" /><span>Leads</span></button>}
       {canUseTeamSales(permissions, crewId) && <button type="button" className={view === "sales" ? "active" : ""} aria-current={view === "sales" ? "page" : undefined} onClick={() => onView("sales")}><TLinkNavigationIcon name="leads" /><span>Sales</span></button>}
       <button type="button" className={view === "time" ? "active" : ""} aria-current={view === "time" ? "page" : undefined} onClick={() => onView("time")}><TLinkNavigationIcon name="schedule" /><span>My time</span></button>
       {crewId && <button type="button" className={view === "crew" ? "active" : ""} aria-current={view === "crew" ? "page" : undefined} onClick={() => onView("crew")}><TLinkNavigationIcon name="team" /><span>My crew</span></button>}
@@ -457,6 +460,7 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
   }
 
   const permissions = data.access?.permissions;
+  const leadsAllowed = Boolean(permissions?.canViewLeads && !data.access?.crewId);
   const salesAllowed = canUseTeamSales(permissions, data.access?.crewId);
   const salesScopeKey = JSON.stringify([user?.uid, business?.ownerUid || data.ownerUid, data.access?.memberId, data.access?.crewId, permissions]);
   const canCreateSalesQuote = salesAllowed && permissions?.canCreateJobs && permissions.jobScope === "team" && permissions.canManageQuotes;
@@ -498,6 +502,8 @@ function TradeTeamPortalContent({ onInvitationAccepted }: { onInvitationAccepted
       <TeamWorkspaceHeader key={user.uid} businessName={data.access.businessName} colourMode={colourMode} onToggleColourMode={toggleColourMode} onProfile={() => setPortalView("profile")} onSignOut={() => void leaveAccount()} getAuthHeaders={async () => ({ Authorization: "Bearer " + await user.getIdToken() })} headerRef={observePortalHeader} />
       <TeamWorkspaceNavigation permissions={data.access.permissions} crewId={data.access.crewId} view={portalView} crmView={crmView} onView={setPortalView} onCrm={openCrm} />
       <div className="tlink-team-content">
+      {portalView === "leads" && leadsAllowed && permissions && <TradeTeamLeadsWorkspace key={salesScopeKey} user={user} permissions={permissions} onOpenJob={openSalesJob} />}
+      {portalView === "leads" && !leadsAllowed && <section className="dashboard-state-card"><p role="alert">Your business owner needs to give you View business leads access. Leads are available to business staff outside crew-only access.</p><button type="button" onClick={() => openCrm("jobs")}>Open jobs</button></section>}
       {portalView === "profile" && <TradePersonalProfileSettings key={`${user.uid}:${business?.ownerUid}:${data.access.memberId}`} user={user} name={data.access.displayName} appearance={appearance} employerTheme={employerTheme} storageAvailable={appearanceState.scope === appearanceScope && appearanceState.storageAvailable} onAppearanceChange={changeAppearance} onResetAppearance={() => changeAppearance({ ...DEFAULT_TRADE_PERSONAL_APPEARANCE })} onSaved={displayName => setData(current => current.access ? { ...current, access: { ...current.access, displayName } } : current)} />}
       {portalView === "sales" && salesAllowed && <TradeSalesWorkspace key={salesScopeKey} user={user} onOpenJob={openSalesJob} onNewQuote={canCreateSalesQuote ? openSalesQuote : undefined} onRegisterLeave={registerMapSave} />}
       {portalView === "sales" && !salesAllowed && <section className="dashboard-state-card"><p role="alert">Customer and quote access is required to open Sales.</p><button type="button" onClick={() => openCrm("jobs")}>Open jobs</button></section>}

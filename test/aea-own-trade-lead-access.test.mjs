@@ -51,7 +51,7 @@ function loadTypescript(path, overrides = {}) {
     if (Object.hasOwn(overrides, specifier)) return overrides[specifier];
     const name = specifier.split("/").at(-1).replace(/\.ts$/, "");
     if (modules.has(name)) return modules.get(name);
-    assert.ok(["public-site", "trade-abn", "firebase-mfa", "myob-security-audit", "trade-mfa-server", "trade-account-predicates", "trade-access-server", "aea-trade-owner-server", "trade-certificate-leads"].includes(name), `Unexpected dependency: ${specifier}`);
+    assert.ok(["public-site", "trade-abn", "firebase-mfa", "myob-security-audit", "trade-mfa-server", "trade-account-predicates", "trade-access-server", "trade-lead-access-server", "aea-trade-owner-server", "trade-certificate-leads"].includes(name), `Unexpected dependency: ${specifier}`);
     const loaded = loadTypescript(`src/lib/${name}.ts`);
     modules.set(name, loaded);
     return loaded;
@@ -491,8 +491,11 @@ function leadRoute(db, uid = "aea-owner") {
     "@/lib/admin-server": { parseJsonList: (value) => JSON.parse(value || "[]") },
     "@/lib/opportunity-server": { expireStaleOpportunities: async () => {} },
     "@/lib/direct-trade-entitlements-server": { accountHasFeature: async () => true },
-    "@/lib/trade-access-server": { ...modules.get("trade-access-server"),
-      requireVerifiedTradeAccess: async () => ({ identity: { uid } }) },
+    "@/lib/trade-access-server": { ...modules.get("trade-access-server") },
+    "@/lib/trade-lead-access-server": { currentTradeLeadAccess: async () => true,
+      guardedTradeLeadMutationBatch: (db, access, action, statements) => db.batch(statements), tradeLeadAccessChanged: () => false },
+    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => ({ ownerUid: uid, actorUid: uid, isOwner: true }),
+      canViewLeads: () => true, canManageLeads: () => true },
     "@/lib/customer-projects.mjs": customerProjects,
     "@/lib/customer-matching-locality.mjs": locality,
     "@/lib/public-trade-lead-access.mjs": { publicTradeContactForMatchedLead },

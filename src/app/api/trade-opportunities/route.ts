@@ -2,7 +2,7 @@ import { isAeaTradeOwner, tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-
 import { tradeOpportunityServiceScopeAllowed } from "@/lib/aea-trade-routing.mjs";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
 import { getD1 } from "../../../../db";
-import { parseJsonList } from "@/lib/admin-server";
+import { parseJsonList, mfaErrorResponse } from "@/lib/admin-server";
 import {
   allocateNearestInstallers,
   expireStaleOpportunities,
@@ -10,7 +10,6 @@ import {
 } from "@/lib/opportunity-server";
 import { accountHasFeature } from "@/lib/direct-trade-entitlements-server";
 import {
-  requireVerifiedTradeAccess,
   TradeAccessError,
   verifiedTradeAccountPredicate,
 } from "@/lib/trade-access-server";
@@ -52,6 +51,10 @@ import {
   customerProjectContextMatchesBase,
   platformQuoteForMatchedLead,
 } from "@/lib/trade-opportunity-read-projection.mjs";
+
+import { requireInstallerTeamAccess, canViewLeads, canManageLeads, type TeamAccess } from "@/lib/trade-team-server";
+
+import { currentTradeLeadAccess, guardedTradeLeadMutationBatch, tradeLeadAccessChanged } from "@/lib/trade-lead-access-server";
 
 export const runtime = "edge";
 const PARTNER_STATUSES = new Set(["viewed", "interested", "declined"]);
@@ -144,6 +147,8 @@ async function publicLeadQuoteWorkflowOutcome(
   matchId: string,
   now: string,
   expectedMatchStatus = "interested",
+  actorUid = installerUid,
+  leadAccess?: TeamAccess,
 ) {
   return {
     quoteWorkflow: await startPublicLeadQuoteWorkflow(
@@ -152,6 +157,8 @@ async function publicLeadQuoteWorkflowOutcome(
         matchId,
         now,
         expectedMatchStatus,
+        actorUid,
+        leadAccess,
     ),
     warning: "",
   };
@@ -223,10 +230,12 @@ async function authoritativePlatformQuote(
 export async function GET(request: Request) {
   if (!sameOrigin(request))
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
-  let access: Awaited<ReturnType<typeof requireVerifiedTradeAccess>>;
+  let access: TeamAccess;
   try {
-    access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+    access = await requireInstallerTeamAccess(request);
   } catch (error) {
+    const mfa = mfaErrorResponse(error);
+    if (mfa) return mfa;
     const code = tradeAccessCode(error);
     if (code === "AUTH_REQUIRED") return json({ ok: false, error: "Sign in to continue." }, 401);
     if (code === "PROFILE_REQUIRED") return json({ ok: false, error: "Complete the business profile first." }, 404);
@@ -234,9 +243,10 @@ export async function GET(request: Request) {
     if (code === "ACCOUNT_INACTIVE") return json({ ok: false, error: "This business account is not active." }, 403);
     return json({ ok: false, error: "Complete trade verification before opening marketplace opportunities." }, 403);
   }
-  const user = access.identity;
+  if (!canViewLeads(access)) return json({ ok: false, error: "Your team access does not include viewing Leads." }, 403);
+  const installerUid = access.ownerUid;
   const db = getD1();
-  if (!await accountHasFeature(user.uid, "installer", "installer_leads"))
+  if (!await accountHasFeature(installerUid, "installer", "installer_leads"))
     return json(
       { ok: false, error: "Complete trade verification before opening marketplace opportunities." },
       403,
@@ -288,13 +298,14 @@ export async function GET(request: Request) {
         )
       )
     ORDER BY o.created_at DESC, m.matched_at DESC, m.id ASC
-    LIMIT 100`).bind(user.uid, requestedMatchId, requestedMatchId);
+    LIMIT 100`).bind(installerUid, requestedMatchId, requestedMatchId);
   // Keep extensions bounded without repeating the entire authorization graph in
   // every query. The batch below re-runs this authoritative read in the same
   // transaction as the extensions; only IDs surviving both reads are serialized.
   const initiallyAuthorized = await authorizedLeadIdsStatement.all<Record<string, unknown>>();
   const authorizedMatchIds = new Set(initiallyAuthorized.results.map((row) => String(row.authorized_match_id)));
-  if (!authorizedMatchIds.size) return json({ ok: true, opportunities: [] });
+  if (!authorizedMatchIds.size && !await currentTradeLeadAccess(db, access)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
+  if (!authorizedMatchIds.size) return json({ ok: true, permissions: { canViewLeads: true, canManageLeads: canManageLeads(access) }, opportunities: [] });
   const authorizedMatchIdsJson = JSON.stringify([...authorizedMatchIds]);
   const baseLeadStatement = db.prepare(`SELECT
       m.id match_id, m.firebase_uid installer_uid, m.status match_status,
@@ -312,7 +323,7 @@ export async function GET(request: Request) {
       AND o.source_reference = 'customer-project:' || p.id
     WHERE m.firebase_uid = ? AND m.id IN (SELECT value FROM json_each(?))
     ORDER BY o.created_at DESC, m.matched_at DESC, m.id ASC
-    LIMIT 100`).bind(user.uid, authorizedMatchIdsJson);
+    LIMIT 100`).bind(installerUid, authorizedMatchIdsJson);
   const projectContextStatement = db.prepare(`SELECT
       m.id project_match_id, p.id customer_project_id, p.firebase_uid customer_uid,
       p.property_context, p.goal customer_goal, p.goals customer_goals,
@@ -340,7 +351,7 @@ export async function GET(request: Request) {
           AND matching_consent.withdrawn_at = ''
       )
     ORDER BY o.created_at DESC, m.matched_at DESC, m.id ASC
-    LIMIT 100`).bind(user.uid, authorizedMatchIdsJson);
+    LIMIT 100`).bind(installerUid, authorizedMatchIdsJson);
   const matchingLocalityStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT
       authorized_match.match_id locality_match_id,
@@ -358,7 +369,7 @@ export async function GET(request: Request) {
       AND receipt.notice_version = '${CUSTOMER_MATCHING_NOTICE_VERSION}'
       AND receipt.granted_at <> '' AND receipt.withdrawn_at = ''
     ORDER BY receipt.granted_at DESC, receipt.id DESC`).bind(
-    user.uid,
+    installerUid,
     authorizedMatchIdsJson,
   );
   const quoteStatement = db.prepare(`${boundedLeadMatchesSql}
@@ -379,7 +390,7 @@ export async function GET(request: Request) {
     JOIN customer_project_quotes q
       ON q.opportunity_match_id = authorized_match.match_id
       AND q.installer_uid = authorized_match.installer_uid`).bind(
-    user.uid,
+    installerUid,
     authorizedMatchIdsJson,
   );
   const customerContactStatement = db.prepare(`${boundedLeadMatchesSql}
@@ -401,7 +412,7 @@ export async function GET(request: Request) {
     JOIN customer_project_contact_releases r
       ON r.opportunity_match_id = authorized_match.match_id
       AND r.installer_uid = authorized_match.installer_uid`).bind(
-    user.uid,
+    installerUid,
     authorizedMatchIdsJson,
   );
   const arrivalStatement = db.prepare(`${boundedLeadMatchesSql}
@@ -423,7 +434,7 @@ export async function GET(request: Request) {
     JOIN customer_project_arrival_proposals ap
       ON ap.opportunity_match_id = authorized_match.match_id
       AND ap.installer_uid = authorized_match.installer_uid`).bind(
-    user.uid,
+    installerUid,
     authorizedMatchIdsJson,
   );
   const publicLeadContextStatement = db.prepare(`${boundedLeadMatchesSql}
@@ -473,7 +484,7 @@ export async function GET(request: Request) {
           '${PUBLIC_PLAN_CONSENT_NOTICE_VERSION}', '${PUBLIC_PLAN_CONSENT_PURPOSE}')
         AND datetime(public_quote_preparation.granted_at) IS NOT NULL
     ORDER BY public_contact.granted_at DESC, public_contact.id DESC`).bind(
-    user.uid,
+    installerUid,
     authorizedMatchIdsJson,
   );
   const evidenceStatement = db.prepare(`${boundedLeadMatchesSql}
@@ -491,7 +502,7 @@ export async function GET(request: Request) {
         WHERE consent.project_id = p.id AND consent.firebase_uid = p.firebase_uid
           AND consent.purpose = 'installer_evidence_sharing' AND consent.withdrawn_at = ''
       )
-    ORDER BY e.created_at DESC`).bind(user.uid, authorizedMatchIdsJson);
+    ORDER BY e.created_at DESC`).bind(installerUid, authorizedMatchIdsJson);
   const publicPhotoStatement = db.prepare(`${boundedLeadMatchesSql}
     SELECT photo.id, photo.prompt_id,
       photo.prompt_label, photo.service_categories, photo.content_type,
@@ -525,7 +536,7 @@ export async function GET(request: Request) {
       AND datetime(contact.granted_at) IS NOT NULL
       AND contact.withdrawn_at = ''
     WHERE photo.status = 'active'
-    ORDER BY photo.created_at DESC`).bind(user.uid, authorizedMatchIdsJson);
+    ORDER BY photo.created_at DESC`).bind(installerUid, authorizedMatchIdsJson);
   const [
     currentAuthorization,
     rows,
@@ -577,7 +588,7 @@ export async function GET(request: Request) {
   }
   const publicReleaseMatches = new Set<string>();
   const publicLeadContextByMatch = new Map<string, Record<string, unknown>>();
-  const allowAeaDelivery = await isAeaTradeOwner(db, user.uid);
+  const allowAeaDelivery = await isAeaTradeOwner(db, installerUid);
   const publicContactByMatch = new Map<string, NonNullable<ReturnType<typeof publicTradeContactForMatchedLead>>>();
   for (const item of publicLeadContextRows.results) {
     const matchId = String(item.opportunity_match_id || "");
@@ -608,8 +619,10 @@ export async function GET(request: Request) {
     current.push({ ...item, service_categories: visibleCategories });
     publicPhotosByMatch.set(matchId, current);
   }
+  if (!await currentTradeLeadAccess(db, access)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
   return json({
     ok: true,
+    permissions: { canViewLeads: true, canManageLeads: canManageLeads(access) },
     opportunities: rows.results.flatMap((baseRow: Record<string, unknown>) => {
       const matchId = String(baseRow.match_id || "");
       if (!authorizedMatchIds.has(matchId) || !currentAuthorizedMatchIds.has(matchId)) return [];
@@ -747,11 +760,12 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  try {
   if (!sameOrigin(request))
     return json({ ok: false, error: "Request origin was not accepted." }, 403);
-  let access: Awaited<ReturnType<typeof requireVerifiedTradeAccess>>;
+  let access: TeamAccess;
   try {
-    access = await requireVerifiedTradeAccess(request, { partnerTypes: ["installer"] });
+    access = await requireInstallerTeamAccess(request);
   } catch (error) {
     const code = tradeAccessCode(error);
     if (code === "AUTH_REQUIRED") return json({ ok: false, error: "Sign in to continue." }, 401);
@@ -761,7 +775,7 @@ export async function PATCH(request: Request) {
     }
     return json({ ok: false, error: "Complete trade verification before responding to marketplace opportunities." }, 403);
   }
-  const user = access.identity;
+  const installerUid = access.ownerUid;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -772,25 +786,34 @@ export async function PATCH(request: Request) {
     typeof body.matchId === "string" ? body.matchId.trim().slice(0, 180) : "";
   const action = typeof body.action === "string" ? body.action : "respond";
   const status = typeof body.status === "string" ? body.status : "";
+  if (!canViewLeads(access) || (!(action === "respond" && status === "viewed") && !canManageLeads(access))) {
+    return json({ ok: false, error: "Your team access does not allow this lead action." }, 403);
+  }
+  if ((action === "submit_quote" || action === "withdraw_quote") && !access.isOwner && (!access.canManageQuotes || !access.canSendQuotes)) {
+    return json({ ok: false, error: "Your team access does not include sending quotes." }, 403);
+  }
+  if (action === "propose_arrival_windows" && !access.isOwner && (!access.canManageJobs || access.jobScope !== "team" || access.scheduleScope !== "team")) {
+    return json({ ok: false, error: "Your team access does not include managing jobs." }, 403);
+  }
   if (!matchId)
     return json({ ok: false, error: "Choose a valid opportunity." }, 400);
   const db = getD1();
   const account = { business_name: access.businessName };
-  if (!await accountHasFeature(user.uid, "installer", "installer_leads"))
+  if (!await accountHasFeature(installerUid, "installer", "installer_leads"))
     return json(
       { ok: false, error: "Complete trade verification before responding to marketplace opportunities." },
       403,
     );
   await expireStaleOpportunities();
   const now = new Date().toISOString();
-  const allowAeaDelivery = await isAeaTradeOwner(db, user.uid);
+  const allowAeaDelivery = await isAeaTradeOwner(db, installerUid);
   const serviceScope = await db.prepare(`SELECT o.service_categories,${allQualifiedTradeOpportunitySql("o")} all_qualified_consent
     FROM trade_opportunity_matches m
     JOIN trade_opportunities o ON o.id = m.opportunity_id
     WHERE m.id = ? AND m.firebase_uid = ?
       AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${await certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")} LIMIT 1`)
-    .bind(matchId, user.uid).first<{ service_categories: string; all_qualified_consent: number }>();
+    .bind(matchId, installerUid).first<{ service_categories: string; all_qualified_consent: number }>();
   if (!serviceScope || !tradeOpportunityServiceScopeAllowed(serviceScope.service_categories, allowAeaDelivery,Boolean(serviceScope.all_qualified_consent))) {
     return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   }
@@ -809,7 +832,7 @@ export async function PATCH(request: Request) {
         AND r.customer_uid = p.firebase_uid AND r.installer_uid = m.firebase_uid AND r.status = 'active'
       LEFT JOIN customer_project_arrival_proposals ap ON ap.opportunity_match_id = m.id
       WHERE m.id = ? AND m.firebase_uid = ? AND q.status = 'submitted'`)
-      .bind(matchId, user.uid).first<Record<string, unknown>>();
+      .bind(matchId, installerUid).first<Record<string, unknown>>();
     if (!source) return json({ ok: false, error: "This accepted customer project is not available." }, 404);
     if (source.customer_decision !== "accepted" || source.match_status !== "connected"
       || !["open", "paused"].includes(String(source.opportunity_status)) || source.contact_release_status !== "active") {
@@ -829,7 +852,7 @@ export async function PATCH(request: Request) {
     const installerNote = typeof body.installerNote === "string" ? body.installerNote.trim().replace(/\s+/g, " ").slice(0, 300) : "";
     const proposalId = String(source.proposal_id || crypto.randomUUID());
     const windowsJson = JSON.stringify(windows);
-    await db.batch([
+    await guardedTradeLeadMutationBatch(db, access, "arrival", [
       db.prepare(`INSERT INTO customer_project_arrival_proposals
         (id, project_id, quote_id, opportunity_match_id, customer_uid, installer_uid, status, windows,
          installer_note, selected_window, revision, proposed_at, selected_at, withdrawn_at, created_at, updated_at)
@@ -837,14 +860,14 @@ export async function PATCH(request: Request) {
         ON CONFLICT(opportunity_match_id) DO UPDATE SET status = 'proposed', windows = excluded.windows,
           installer_note = excluded.installer_note, selected_window = '{}', revision = excluded.revision,
           proposed_at = excluded.proposed_at, selected_at = '', withdrawn_at = '', updated_at = excluded.updated_at`)
-        .bind(proposalId, source.project_id, source.quote_id, matchId, source.customer_uid, user.uid,
+        .bind(proposalId, source.project_id, source.quote_id, matchId, source.customer_uid, installerUid,
           windowsJson, installerNote, nextRevision, now, now, now),
       db.prepare(`INSERT INTO customer_project_arrival_events
         (id, proposal_id, project_id, opportunity_match_id, customer_uid, installer_uid, actor_type,
          actor_uid, event_type, proposal_revision, windows, selected_window, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'installer', ?, 'proposed', ?, ?, '{}', ?)`)
-        .bind(crypto.randomUUID(), proposalId, source.project_id, matchId, source.customer_uid, user.uid,
-          user.uid, nextRevision, windowsJson, now),
+        .bind(crypto.randomUUID(), proposalId, source.project_id, matchId, source.customer_uid, installerUid,
+          access.actorUid, nextRevision, windowsJson, now),
       adminNotificationStatement(db, {
         eventKey: `installer-arrival-proposed:${proposalId}:${nextRevision}`,
         eventType: "installer.arrival_windows_proposed",
@@ -855,7 +878,7 @@ export async function PATCH(request: Request) {
         entityType: "customer_project_arrival_proposal",
         entityId: proposalId,
         actorType: "installer",
-        actorUid: user.uid,
+        actorUid: access.actorUid,
         requiresAction: true,
         metadata: { projectId: source.project_id, matchId, revision: nextRevision },
         occurredAt: now,
@@ -887,7 +910,7 @@ export async function PATCH(request: Request) {
       FROM trade_opportunity_matches m
       JOIN trade_opportunities o ON o.id = m.opportunity_id
       JOIN customer_projects p ON p.opportunity_id = o.id
-      WHERE m.id = ? AND m.firebase_uid = ?`).bind(matchId, user.uid).first<Record<string, unknown>>();
+      WHERE m.id = ? AND m.firebase_uid = ?`).bind(matchId, installerUid).first<Record<string, unknown>>();
     if (!match) return json({ ok: false, error: "This platform project is not available." }, 404);
     if (!String(match.source_reference || "").startsWith("customer-project:") || match.opportunity_status !== "open") {
       return json({ ok: false, error: "Structured quotes are available only for active customer projects." }, 409);
@@ -900,9 +923,9 @@ export async function PATCH(request: Request) {
         FROM customer_project_quote_submissions
         WHERE installer_uid = ? AND opportunity_match_id = ? AND submission_request_id = ?
         LIMIT 1`)
-        .bind(user.uid, matchId, submissionRequestId)
+        .bind(installerUid, matchId, submissionRequestId)
         .first<Record<string, unknown>>(),
-      authoritativePlatformQuote(db, matchId, user.uid),
+      authoritativePlatformQuote(db, matchId, installerUid),
     ]);
     if (replay) {
       return json({
@@ -926,7 +949,7 @@ export async function PATCH(request: Request) {
     }
     let snapshot;
     try {
-      snapshot = await productSnapshot(user.uid, quote.productListId);
+      snapshot = await productSnapshot(installerUid, quote.productListId);
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       return json({ ok: false, error: code === "PRODUCT_LIST_REQUIRED"
@@ -937,7 +960,7 @@ export async function PATCH(request: Request) {
     if (totalCentsExGst <= 0) return json({ ok: false, error: "Add a product, labour or service amount." }, 400);
     const quoteId = String(
       currentQuote?.id
-      || await customerProjectQuoteId(matchId, user.uid),
+      || await customerProjectQuoteId(matchId, installerUid),
     );
     const submissionRevision = expectedSubmissionRevision + 1;
     const submittedQuote = {
@@ -964,15 +987,15 @@ export async function PATCH(request: Request) {
       quoteId,
       opportunityMatchId: matchId,
       customerUid: String(match.customer_uid),
-      installerUid: user.uid,
+      installerUid: installerUid,
       eventType: "installer_quote_submitted",
       audience: "customer",
       actorType: "installer",
-      actorUid: user.uid,
+      actorUid: access.actorUid,
       occurredAt: now,
     });
     try {
-      const mutationResults = await db.batch([
+      const mutationResults = await guardedTradeLeadMutationBatch(db, access, "quote", [
         db.prepare(`SELECT CASE WHEN EXISTS (
             SELECT 1
             FROM trade_opportunity_matches guarded_match
@@ -998,7 +1021,7 @@ export async function PATCH(request: Request) {
                   AND guarded_consent.withdrawn_at = ''
               )
           ) THEN 1 ELSE json_extract('PLATFORM_QUOTE_STATE_CHANGED', '$') END quote_guard`)
-          .bind(match.project_id, match.customer_uid, matchId, user.uid,
+          .bind(match.project_id, match.customer_uid, matchId, installerUid,
             match.opportunity_id, now),
         db.prepare(`INSERT INTO customer_project_quotes
           (id, project_id, opportunity_id, opportunity_match_id, installer_uid,
@@ -1021,7 +1044,7 @@ export async function PATCH(request: Request) {
           WHERE customer_project_quotes.installer_uid = excluded.installer_uid
             AND customer_project_quotes.submission_revision = ?
             AND customer_project_quotes.customer_decision != 'accepted'`)
-          .bind(quoteId, match.project_id, match.opportunity_id, matchId, user.uid,
+          .bind(quoteId, match.project_id, match.opportunity_id, matchId, installerUid,
             submissionRequestId, submissionRevision, quote.productListId,
             JSON.stringify(quote.inclusions), JSON.stringify(snapshot.products), snapshot.subtotalCentsExGst,
             quote.labourCentsExGst, quote.otherCentsExGst, totalCentsExGst,
@@ -1035,8 +1058,8 @@ export async function PATCH(request: Request) {
             WHERE opportunity_match_id = ? AND installer_uid = ?
               AND submission_request_id = ? AND submission_revision = ?
           ), 0), ?, ?, ?)`)
-          .bind(crypto.randomUUID(), matchId, user.uid, submissionRequestId, quoteId,
-            matchId, user.uid, submissionRequestId, submissionRevision,
+          .bind(crypto.randomUUID(), matchId, installerUid, submissionRequestId, quoteId,
+            matchId, installerUid, submissionRequestId, submissionRevision,
             JSON.stringify(submittedQuote), now, now),
         db.prepare("UPDATE customer_projects SET status = 'quote_review', updated_at = ? WHERE id = ? AND status = 'matching'")
           .bind(now, match.project_id),
@@ -1050,7 +1073,7 @@ export async function PATCH(request: Request) {
           entityType: "customer_project_quote",
           entityId: quoteId,
           actorType: "installer",
-          actorUid: user.uid,
+          actorUid: access.actorUid,
           requiresAction: true,
           metadata: { matchId, opportunityId: match.opportunity_id, projectId: match.project_id, totalCentsExGst, submissionRevision },
           occurredAt: now,
@@ -1066,14 +1089,14 @@ export async function PATCH(request: Request) {
           FROM customer_project_quote_submissions
           WHERE installer_uid = ? AND opportunity_match_id = ? AND submission_request_id = ?
           LIMIT 1`)
-          .bind(user.uid, matchId, submissionRequestId)
+          .bind(installerUid, matchId, submissionRequestId)
           .first<Record<string, unknown>>(),
-        authoritativePlatformQuote(db, matchId, user.uid),
+        authoritativePlatformQuote(db, matchId, installerUid),
         db.prepare(`SELECT m.status, o.status opportunity_status, o.expires_at
           FROM trade_opportunity_matches m
           JOIN trade_opportunities o ON o.id = m.opportunity_id
           WHERE m.id = ? AND m.firebase_uid = ? LIMIT 1`)
-          .bind(matchId, user.uid)
+          .bind(matchId, installerUid)
           .first<Record<string, unknown>>(),
       ]);
       if (recordedReplay) {
@@ -1117,8 +1140,8 @@ export async function PATCH(request: Request) {
     }, activity.deliveryId);
   }
   if (action === "withdraw_quote") {
-    const result = await db.prepare(`UPDATE customer_project_quotes SET status = 'withdrawn', customer_decision = 'reviewing', updated_at = ?
-      WHERE opportunity_match_id = ? AND installer_uid = ? AND status = 'submitted' AND customer_decision != 'accepted'`).bind(now, matchId, user.uid).run();
+    const [result] = await guardedTradeLeadMutationBatch(db, access, "quote", [db.prepare(`UPDATE customer_project_quotes SET status = 'withdrawn', customer_decision = 'reviewing', updated_at = ?
+      WHERE opportunity_match_id = ? AND installer_uid = ? AND status = 'submitted' AND customer_decision != 'accepted'`).bind(now, matchId, installerUid)]);
     if (!result.meta.changes) return json({ ok: false, error: "No active quote option was found." }, 404);
     await createAdminNotification({
       eventKey: `installer-quote-withdrawn:${matchId}:${now}`,
@@ -1130,7 +1153,7 @@ export async function PATCH(request: Request) {
       entityType: "trade_opportunity_match",
       entityId: matchId,
       actorType: "installer",
-      actorUid: user.uid,
+      actorUid: access.actorUid,
       requiresAction: false,
       occurredAt: now,
     });
@@ -1152,7 +1175,7 @@ export async function PATCH(request: Request) {
       AND ${tradeOpportunityOwnerScopeSql("o", "m.firebase_uid")}
       AND ${certificateLeadEligibilitySql("m.firebase_uid", "m.matched_categories", "o.state")}
       AND o.expires_at > ?`)
-    .bind(matchId, user.uid, action, action, status, now).first<Record<string, unknown>>();
+    .bind(matchId, installerUid, action, action, status, now).first<Record<string, unknown>>();
   if (!current) return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   const currentPublicContact = await db.prepare(`SELECT
       public_contact.id public_contact_release_id,
@@ -1192,7 +1215,7 @@ export async function PATCH(request: Request) {
     WHERE m.id = ? AND m.firebase_uid = ?
     ORDER BY public_contact.granted_at DESC, public_contact.id DESC
     LIMIT 1`)
-    .bind(matchId, user.uid).first<Record<string, unknown>>();
+    .bind(matchId, installerUid).first<Record<string, unknown>>();
   if (currentPublicContact && !publicTradeContactForMatchedLead(currentPublicContact, allowAeaDelivery)) {
     return json({ ok: false, error: "The opportunity could not be updated." }, 404);
   }
@@ -1223,6 +1246,10 @@ export async function PATCH(request: Request) {
     ...(currentPublicContact ? { connected: new Set(["declined"]) } : {}),
   };
   const currentStatus = String(current.status || "");
+  if ((action === "open_public_quote" || (status === "interested" && currentPublicContact))
+    && !access.isOwner && (access.jobScope !== "team" || !access.canViewQuotes || !access.canCreateJobs || !access.canManageQuotes)) {
+    return json({ ok: false, error: "Your team access needs team jobs, job creation and quote editing to open this quote." }, 403);
+  }
   if (action === "open_public_quote") {
     if (!currentPublicContact || !["interested", "connected"].includes(currentStatus)) {
       return json({ ok: false, error: "The editable quote is not available for this lead." }, 409);
@@ -1230,13 +1257,14 @@ export async function PATCH(request: Request) {
     try {
       return json({
         ok: true,
-        ...await publicLeadQuoteWorkflowOutcome(db, user.uid, matchId, now, currentStatus),
+        ...await publicLeadQuoteWorkflowOutcome(db, installerUid, matchId, now, currentStatus, access.actorUid, access),
       });
     } catch (error) {
+      if (tradeLeadAccessChanged(error) || (error instanceof Error && error.message === "LEAD_ACCESS_CHANGED")) return json({ ok: false, error: "Your team access changed. Refresh before opening the quote." }, 403);
       console.error("Public lead quote reopen failed", {
         code: error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED",
         matchId,
-        installerUid: user.uid,
+        installerUid: installerUid,
       });
       return json({ ok: false, error: "The editable quote could not be reopened. Try again." }, 409);
     }
@@ -1246,9 +1274,9 @@ export async function PATCH(request: Request) {
       return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
     }
     try {
-      await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+      await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), installerUid);
       const quoteWorkflow = await startPublicLeadQuoteWorkflow(
-        db, user.uid, matchId, now, currentStatus,
+        db, installerUid, matchId, now, currentStatus, access.actorUid, access,
       );
       try {
         await createAdminNotification({
@@ -1257,22 +1285,23 @@ export async function PATCH(request: Request) {
           title: "Installer is interested in a lead",
           summary: `${String(account.business_name || "An installer").slice(0, 160)} marked ${String(current.title || "").slice(0, 160)} as interested.`,
           entityType: "trade_opportunity_match", entityId: matchId, actorType: "installer",
-          actorUid: user.uid, requiresAction: true,
+          actorUid: access.actorUid, requiresAction: true,
           metadata: { opportunityId: String(current.opportunity_id || ""), status: "interested" },
           occurredAt: now,
         });
       } catch (error) {
         console.error("Public lead interest notification failed after handoff", {
           code: error instanceof Error ? error.message : "ADMIN_NOTIFICATION_FAILED",
-          matchId, installerUid: user.uid,
+          matchId, installerUid: installerUid,
         });
       }
       return json({ ok: true, quoteWorkflow, warning: "" });
     } catch (error) {
       const code = error instanceof Error ? error.message : "PUBLIC_LEAD_QUOTE_WORKFLOW_FAILED";
+      if (tradeLeadAccessChanged(error) || code === "LEAD_ACCESS_CHANGED") return json({ ok: false, error: "Your team access changed. Refresh before opening the quote." }, 403);
       console.error("Public lead interest handoff failed", {
         code,
-        matchId, installerUid: user.uid,
+        matchId, installerUid: installerUid,
       });
       const publicError = code === "PUBLIC_LEAD_QUOTE_PHOTO_UNAVAILABLE"
         ? "One or more customer photos are temporarily unavailable. No interest was recorded. Try again."
@@ -1287,6 +1316,7 @@ export async function PATCH(request: Request) {
     }
   }
   if (currentStatus === status) {
+    if (!await currentTradeLeadAccess(db, access, status === "viewed" ? "view" : "manage")) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
     return json({ ok: true });
   }
   if (!transitions[currentStatus]?.has(status)) return json({ ok: false, error: "This opportunity response cannot be reversed." }, 409);
@@ -1312,7 +1342,7 @@ export async function PATCH(request: Request) {
         status,
         now,
         matchId,
-        user.uid,
+        installerUid,
         currentStatus,
         current.opportunity_id,
         current.opportunity_id,
@@ -1358,7 +1388,7 @@ export async function PATCH(request: Request) {
           status,
           now,
           matchId,
-          user.uid,
+          installerUid,
           currentStatus,
           current.opportunity_id,
           current.opportunity_id,
@@ -1368,7 +1398,7 @@ export async function PATCH(request: Request) {
           currentProjectConsent.customer_uid,
           current.opportunity_id,
           matchId,
-          user.uid,
+          installerUid,
         )
       : db.prepare(`UPDATE trade_opportunity_matches
         SET status = ?, partner_note = '', updated_at = ?
@@ -1389,7 +1419,7 @@ export async function PATCH(request: Request) {
         status,
         now,
         matchId,
-        user.uid,
+        installerUid,
         currentStatus,
         current.opportunity_id,
         current.opportunity_id,
@@ -1397,7 +1427,7 @@ export async function PATCH(request: Request) {
         current.opportunity_id,
       );
   const [result] = status === "declined" && currentProjectConsent
-    ? await db.batch([
+    ? await guardedTradeLeadMutationBatch(db, access, "manage", [
         updateStatement,
         db.prepare(`UPDATE customer_project_quotes
           SET status = 'withdrawn', customer_decision = 'reviewing', updated_at = ?
@@ -1408,31 +1438,34 @@ export async function PATCH(request: Request) {
               WHERE declined_match.id = ? AND declined_match.firebase_uid = ?
                 AND declined_match.status = 'declined'
             )`)
-          .bind(now, matchId, user.uid, matchId, user.uid),
+          .bind(now, matchId, installerUid, matchId, installerUid),
       ])
     : status === "declined" && currentPublicContact
-      ? await db.batch([
+      ? await guardedTradeLeadMutationBatch(db, access, "manage", [
           updateStatement,
           db.prepare(`UPDATE customer_hub_interests SET interested=0,revision=revision+1,updated_at=?,updated_by_uid=?
             WHERE match_id=? AND opportunity_id=? AND interested=1 AND changes()=1
               AND EXISTS(SELECT 1 FROM trade_opportunity_matches removed WHERE removed.id=customer_hub_interests.match_id
                 AND removed.opportunity_id=customer_hub_interests.opportunity_id AND removed.firebase_uid=? AND removed.status='declined' AND removed.updated_at=?)`)
-            .bind(now,user.uid,matchId,current.opportunity_id,user.uid,now),
+            .bind(now,access.actorUid,matchId,current.opportunity_id,installerUid,now),
         ])
-      : [await updateStatement.run()];
+      : await guardedTradeLeadMutationBatch(db, access, status === "viewed" ? "view" : "manage", [updateStatement]);
   if (!result.meta.changes) {
     const raced = await db.prepare(`SELECT status FROM trade_opportunity_matches
       WHERE id = ? AND firebase_uid = ? AND opportunity_id = ? LIMIT 1`)
-      .bind(matchId, user.uid, current.opportunity_id)
+      .bind(matchId, installerUid, current.opportunity_id)
       .first<Record<string, unknown>>();
     if (String(raced?.status || "") === status) {
       if (status === "interested" && currentPublicContact) {
-        await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+        await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), installerUid);
         const outcome = await publicLeadQuoteWorkflowOutcome(
           db,
-          user.uid,
+          installerUid,
           matchId,
           now,
+          "interested",
+          access.actorUid,
+          access,
         );
         return json({ ok: true, ...outcome });
       }
@@ -1443,9 +1476,9 @@ export async function PATCH(request: Request) {
       404,
     );
   }
-  await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), user.uid);
+  await syncMarketplaceEnquiries(db, String(current.opportunity_id || ""), installerUid);
   const quoteWorkflowOutcome = status === "interested" && currentPublicContact
-    ? await publicLeadQuoteWorkflowOutcome(db, user.uid, matchId, now)
+    ? await publicLeadQuoteWorkflowOutcome(db, installerUid, matchId, now, "interested", access.actorUid, access)
     : { quoteWorkflow: null, warning: "" };
   if (status === "declined") {
     if (current.opportunity_id)
@@ -1464,10 +1497,14 @@ export async function PATCH(request: Request) {
     entityType: "trade_opportunity_match",
     entityId: matchId,
     actorType: "installer",
-    actorUid: user.uid,
+    actorUid: access.actorUid,
     requiresAction: status === "interested",
     metadata: { opportunityId: String(current.opportunity_id || ""), status },
     occurredAt: now,
   });
   return json({ ok: true, ...quoteWorkflowOutcome });
+  } catch (error) {
+    if (tradeLeadAccessChanged(error)) return json({ ok: false, error: "Your team access changed. Refresh the workspace before responding." }, 403);
+    throw error;
+  }
 }

@@ -49,7 +49,7 @@
 .masterEditor { display: grid; gap: 14px; min-width: 0; }
 .masterViewPicker { display: flex; flex-wrap: wrap; gap: 8px; }
 .masterViewPicker > button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; padding: 9px 16px; }
-.masterLibrary .masterViewPicker > button[aria-pressed="true"] { background: #0b2138; color: var(--portal-muted, #35ebc3); border-color: #178c85; }
+.masterLibrary .masterViewPicker > button[aria-pressed="true"] { background: var(--portal-selected-bg, #e6f3ef); color: var(--portal-selected-ink, #145744); border-color: var(--portal-selected-line, #96cdbb); }
 .masterSaveBar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px; background: var(--portal-soft, #edf7f3); border: 1px solid var(--portal-line, #c9ded7); border-radius: 12px; }
 .masterSaveBar > span { font-size: .82rem; font-weight: 750; }
 .masterRowActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }

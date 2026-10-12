@@ -222,7 +222,7 @@ test("trade-sourced work starts as a Customer or Job while Leads stays on the pr
   assert.doesNotMatch(workspace, /TradeEnquiryInbox/);
   assert.match(dashboard, /workspace === "work" && activeWorkView === "leads"/);
   assert.match(dashboard, /<span>Australian Energy Assessments and TLink supplied leads<\/span>/);
-  assert.match(dashboard, /className="dashboard-lead-list" aria-label="Available leads"/);
+  assert.match(dashboard, /<TradeLeadList[\s\S]*onSelect=\{setSelectedOpportunityMatchId\}/);
   assert.match(dashboard, /className="dashboard-opportunity-list dashboard-lead-preview"/);
   assert.match(dashboard, /void respondToOpportunity\(opportunity\.matchId, "interested"\)/);
 });

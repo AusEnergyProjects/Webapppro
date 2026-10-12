@@ -49,6 +49,7 @@ const managerAccess = {
   canSendQuotes: false, canViewInvoices: false, canManageInvoices: false, canViewPriceBook: false,
   canManagePriceBook: false, canApplyDiscounts: false, scheduleScope: "team", canRescheduleJobs: false,
   canViewFieldEvidence: false, canManageFieldEvidence: false, canManageForms: false, canRunReports: false, canSearchCustomers: false,
+  canViewLeads: false, canManageLeads: false,
 };
 
 function loadRoute(database, aborted, currentAccess = managerAccess, { sent = [], deliveryStatus = "sent", beforeBatch } = {}) {
@@ -116,7 +117,7 @@ function loadRoute(database, aborted, currentAccess = managerAccess, { sent = []
 
 function fixture() {
   const database = new DatabaseSync(":memory:");
-  const permissionColumns = ["can_create_jobs", "can_manage_jobs", "can_assign_jobs", "can_view_customers",
+  const permissionColumns = ["can_view_leads", "can_manage_leads", "can_create_jobs", "can_manage_jobs", "can_assign_jobs", "can_view_customers",
     "can_manage_customers", "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_send_sms", "can_view_invoices",
     "can_manage_invoices", "can_view_price_book", "can_manage_price_book", "can_apply_discounts",
     "can_reschedule_jobs", "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence",
@@ -949,3 +950,44 @@ for (const revocation of ["can_receive_customer_qa_notifications=0", "can_edit_t
     } finally { database.close(); }
   });
 }
+
+
+test("Lead access is explicitly grantable, independently revocable and not implied by quote or team management", async () => {
+  const database = fixture();
+  try {
+    const owner = loadRoute(database, [], { ...managerAccess, isOwner: true, actorUid: "owner-1", memberId: "owner-member", canViewLeads: true, canManageLeads: true });
+    const change = (route, permissions) => patch(route, { action: "update_member", memberId: "target-1",
+      expectedUpdatedAt: database.prepare("SELECT updated_at FROM trade_team_members WHERE id='target-1'").get().updated_at, permissions });
+    let response = await change(owner, { canViewLeads: true });
+    assert.equal(response.status, 200);
+    let target = (await response.json()).members.find(member => member.id === "target-1");
+    assert.equal(target.permissions.canViewLeads, true); assert.equal(target.permissions.canManageLeads, false);
+    response = await change(owner, { canManageLeads: true }); assert.equal(response.status, 200);
+    target = (await response.json()).members.find(member => member.id === "target-1");
+    assert.equal(target.permissions.canViewLeads, true); assert.equal(target.permissions.canManageLeads, true);
+    response = await change(owner, { canViewLeads: false, canManageLeads: false }); assert.equal(response.status, 200);
+    const saved = database.prepare("SELECT can_view_leads,can_manage_leads,can_view_customers,can_manage_quotes FROM trade_team_members WHERE id='target-1'").get();
+    assert.deepEqual({ ...saved }, { can_view_leads: 0, can_manage_leads: 0, can_view_customers: 0, can_manage_quotes: 0 });
+    assert.ok(database.prepare("SELECT metadata FROM trade_team_member_events WHERE team_member_id='target-1'").all()
+      .some(row => JSON.parse(row.metadata).permissionsAfter?.canManageLeads === true));
+    const manager = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canViewLeads: false, canManageLeads: false });
+    database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1 WHERE id='manager-1'");
+    assert.equal((await change(manager, { canViewLeads: true })).status, 403);
+    assert.equal((await change(manager, { canManageLeads: true })).status, 403);
+    assert.equal((await change(owner, { canViewLeads: "true" })).status, 400);
+  } finally { database.close(); }
+});
+
+test("delegated Lead permission grants recheck the actor's current grants within the mutation batch", async () => {
+  const database = fixture();
+  try {
+    database.exec("UPDATE trade_team_members SET can_edit_team_permissions=1,can_view_leads=1,can_manage_leads=1 WHERE id='manager-1'");
+    const manager = loadRoute(database, [], { ...managerAccess, canEditTeamPermissions: true, canViewLeads: true, canManageLeads: true }, {
+      beforeBatch: () => database.exec("UPDATE trade_team_members SET can_manage_leads=0 WHERE id='manager-1'"),
+    });
+    const response = await patch(manager, { action: "update_member", memberId: "target-1", expectedUpdatedAt: "2026-08-12T00:00:00.000Z", permissions: { canManageLeads: true } });
+    assert.equal(response.status, 409);
+    assert.equal(database.prepare("SELECT can_manage_leads FROM trade_team_members WHERE id='target-1'").get().can_manage_leads, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) n FROM trade_team_member_events").get().n, 0);
+  } finally { database.close(); }
+});

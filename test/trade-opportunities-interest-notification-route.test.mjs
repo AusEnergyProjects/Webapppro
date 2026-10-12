@@ -36,7 +36,8 @@ function loadRoute(state) {
     try{const results=[];for(const statement of statements)results.push(await statement.run());state.database.exec('COMMIT');return results;}
     catch(error){state.database.exec('ROLLBACK');throw error;}
   } };
-  const workflow = async () => {
+  const workflow = async (...args) => {
+    state.workflowArguments = args;
     state.workflowCalls += 1;
     if (state.workflowFails) throw new Error(state.workflowErrorCode || "COPY_FAILED");
     if (!state.handoff) {
@@ -56,8 +57,12 @@ function loadRoute(state) {
     "@/lib/opportunity-server": { allocateNearestInstallers: async () => {}, expireStaleOpportunities: async () => {},
       syncMarketplaceEnquiries: async () => { state.syncCalls += 1; } },
     "@/lib/direct-trade-entitlements-server": { accountHasFeature: async () => true },
-    "@/lib/trade-access-server": { TradeAccessError, verifiedTradeAccountPredicate: () => "1 = 1",
-      requireVerifiedTradeAccess: async () => ({ identity: { uid: "installer-1" }, businessName: "Installer One" }) },
+    "@/lib/trade-access-server": { TradeAccessError, verifiedTradeAccountPredicate: () => "1 = 1" },
+    "@/lib/trade-lead-access-server": { currentTradeLeadAccess: async () => true,
+      guardedTradeLeadMutationBatch: (db, access, action, statements) => db.batch(statements), tradeLeadAccessChanged: () => false },
+    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => state.access || ({ ownerUid: "installer-1", actorUid: "installer-1", isOwner: true, businessName: "Installer One" }),
+      canViewLeads: access => !access.crewId && !access.fieldSessionId && (access.isOwner || access.canViewLeads),
+      canManageLeads: access => !access.crewId && !access.fieldSessionId && (access.isOwner || access.canViewLeads && access.canManageLeads) },
     "@/lib/customer-projects.mjs": { buildInstallerPropertyContext: () => ({}), normalizePlatformQuote: () => ({ ok: false }), parseStoredJson: () => ({}) },
     "@/lib/customer-matching-locality.mjs": { CUSTOMER_MATCHING_NOTICE_VERSION: "v1", matchingLocalityDisclosure: () => null },
     "@/lib/public-plan-enquiry.mjs": { PUBLIC_PLAN_CONSENT_NOTICE_VERSION: "v1", PUBLIC_PLAN_CONSENT_PURPOSE: "lead",allQualifiedTradeOpportunitySql:()=>"0" },
@@ -207,4 +212,46 @@ test('Q&A opt-out storage failure rolls back removing the lead',async t=>{
   await assert.rejects(f.remove(),/optout unavailable/);
   assert.equal(f.sqlite.prepare("SELECT status FROM trade_opportunity_matches WHERE id='match-1'").get().status,'interested');
   assert.equal(f.sqlite.prepare("SELECT interested FROM customer_hub_interests WHERE match_id='match-1'").get().interested,1);
+});
+
+
+test("team Lead permissions reject restricted actors and view-only lead or quote mutations before any handoff", async () => {
+  for (const access of [
+    { canViewLeads: false, canManageLeads: false },
+    { canViewLeads: true, canManageLeads: false },
+    { canViewLeads: true, canManageLeads: true, crewId: "crew" },
+    { canViewLeads: true, canManageLeads: true, fieldSessionId: "field-session" },
+  ]) {
+    const state = { access: { ownerUid: "installer-1", actorUid: "staff", isOwner: false, ...access },
+      workflowCalls: 0, status: "offered", syncCalls: 0, notificationCalls: 0 };
+    assert.equal((await interested(loadRoute(state))).status, 403);
+    assert.equal(state.workflowCalls, 0); assert.equal(state.syncCalls, 0);
+  }
+  const access = { ownerUid: "installer-1", actorUid: "staff", isOwner: false, canViewLeads: true, canManageLeads: true };
+  const route = loadRoute({ access, workflowCalls: 0, status: "offered", syncCalls: 0, notificationCalls: 0 });
+  for (const action of ["submit_quote", "withdraw_quote", "propose_arrival_windows"]) {
+    const response = await route.PATCH(new Request("https://test/api/trade-opportunities", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ matchId: "match-1", action }) }));
+    assert.equal(response.status, 403);
+  }
+});
+
+test("authorized office staff use business-owned Leads while retaining their actual actor in the quote handoff", async () => {
+  const access = { ownerUid: "installer-1", actorUid: "staff-uid", memberId: "staff", isOwner: false,
+    canViewLeads: true, canManageLeads: true, canCreateJobs: true, canViewQuotes: true, canManageQuotes: true, jobScope: "team" };
+  const state = { access, status: "offered", workflowCalls: 0, handoffCommits: 0, notificationCalls: 0, syncCalls: 0 };
+  const response = await interested(loadRoute(state)); assert.equal(response.status, 200);
+  assert.equal((await response.json()).quoteWorkflow.workOrderId, "job-1");
+  assert.equal(state.workflowCalls, 1);
+  assert.equal(state.workflowArguments[1], "installer-1"); assert.equal(state.workflowArguments[5], "staff-uid");
+  assert.equal(state.workflowArguments[6], access);
+  const ownScope = { ...state, access: { ...access, jobScope: "own" }, workflowCalls: 0 };
+  assert.equal((await interested(loadRoute(ownScope))).status, 403); assert.equal(ownScope.workflowCalls, 0);
+});
+
+test("empty view-only Lead lists retain their capability contract without exposing mutation access", async () => {
+  const state = { access: { ownerUid: "installer-1", actorUid: "staff", isOwner: false, canViewLeads: true, canManageLeads: false }, status: "viewed" };
+  const route = loadRoute(state);
+  const response = await route.GET(new Request("https://test/api/trade-opportunities"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, opportunities: [], permissions: { canViewLeads: true, canManageLeads: false } });
 });

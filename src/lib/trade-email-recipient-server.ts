@@ -1,5 +1,7 @@
 import { getD1 } from '../../db';
 import type { TeamAccess } from './trade-team-server';
+import { currentTradeLeadAccess } from "./trade-lead-access-server";
+import { canManageLeads } from './trade-team-permission-policy.mjs';
 import { tradeOpportunityOwnerScopeSql, isAeaTradeOwner } from './aea-trade-owner-server';
 import { certificateLeadEligibilitySql } from './trade-certificate-leads';
 import { publicTradeContactForMatchedLead } from './public-trade-lead-access.mjs';
@@ -23,8 +25,7 @@ function email(value: unknown) {
 }
 
 async function leadRecipient(access: TeamAccess, matchId: string, db: D1Database) {
-  // Marketplace lead access is currently owner-only; connecting a sender must not expand it.
-  if (!access.isOwner) throw new Error('EMAIL_ACCESS_REQUIRED');
+  if (!canManageLeads(access)) throw new Error('EMAIL_ACCESS_REQUIRED');
   const base = await db.prepare(`SELECT m.id match_id, m.firebase_uid installer_uid, o.id, o.source_reference,
     o.postcode opportunity_postcode, o.state, o.service_categories opportunity_service_categories,
     p.id customer_project_id, p.firebase_uid customer_uid, p.postcode customer_postcode, p.address_state customer_address_state
@@ -58,6 +59,7 @@ async function leadRecipient(access: TeamAccess, matchId: string, db: D1Database
     const authoritativeQuote = platformQuoteForMatchedLead(base, base, quote);
     const contact = customerProjectContactForMatchedLead(base, base, authoritativeQuote, release);
     if (!contact) throw new Error('EMAIL_RECIPIENT_UNAVAILABLE');
+    if (!await currentTradeLeadAccess(db, access, "lead_email")) throw new Error("EMAIL_ACCESS_REQUIRED");
     return email(contact.email);
   }
   const release = await db.prepare(`SELECT id public_contact_release_id, status public_contact_status,
@@ -73,6 +75,7 @@ async function leadRecipient(access: TeamAccess, matchId: string, db: D1Database
     .bind(base.id, base.source_reference).first<Row>();
   const contact = publicTradeContactForMatchedLead({ ...base, ...release }, await isAeaTradeOwner(db, access.ownerUid));
   if (!contact) throw new Error('EMAIL_RECIPIENT_UNAVAILABLE');
+  if (!await currentTradeLeadAccess(db, access, "lead_email")) throw new Error("EMAIL_ACCESS_REQUIRED");
   return email(contact.email);
 }
 

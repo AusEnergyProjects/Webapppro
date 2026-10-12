@@ -1,7 +1,7 @@
 import { tradeOpportunityOwnerScopeSql } from "@/lib/aea-trade-owner-server";
 import { getD1 } from "../../../../db";
 import { certificateLeadEligibilitySql } from "@/lib/trade-certificate-leads";
-import { requireFirebaseIdentity } from "@/lib/firebase-server";
+import { requireInstallerTeamAccess, canViewLeads } from "@/lib/trade-team-server";
 import {
   getCustomerProjectEvidenceBucket as getEvidenceBucket,
 } from "@/lib/customer-project-evidence-bucket";
@@ -12,6 +12,8 @@ import {
 } from "@/lib/customer-project-evidence";
 import { verifiedTradeAccountPredicate } from "@/lib/trade-access-server";
 import { customerAccountRetired } from "@/lib/customer-account-retirement.mjs";
+
+import { currentTradeLeadAccess } from "@/lib/trade-lead-access-server";
 
 export const runtime = "edge";
 
@@ -25,7 +27,7 @@ function sameOrigin(request: Request) {
 }
 
 async function identity(request: Request) {
-  try { return await requireFirebaseIdentity(request); }
+  try { return await requireInstallerTeamAccess(request); }
   catch { return null; }
 }
 
@@ -64,23 +66,26 @@ function installerDownloadName(record: EvidenceRecord) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
   const user = await identity(request);
-  if (!user) return json({ ok: false, error: "Sign in to continue." }, 401);
+  if (!user) return json({ ok: false, error: "Approved business access is required." }, 403);
+  if (!canViewLeads(user)) return json({ ok: false, error: "Your team access does not include viewing Leads." }, 403);
   const url = new URL(request.url);
   const downloadId = cleanCustomerEvidenceId(url.searchParams.get("download"));
   if (downloadId) {
     const record = await getD1().prepare(`SELECT * FROM customer_project_evidence WHERE id = ? AND status = 'active'`)
       .bind(downloadId).first<EvidenceRecord>();
     if (!record) return json({ ok: false, error: "Project evidence not found." }, 404);
-    const installerAccess = await installerCanAccess(user.uid, record);
+    const installerAccess = await installerCanAccess(user.ownerUid, record);
     if (!installerAccess) return json({ ok: false, error: "Project evidence access was not accepted." }, 403);
     const object = await getEvidenceBucket().get(record.object_key);
     if (!object) return json({ ok: false, error: "Stored project evidence was not found." }, 404);
+    if (!await currentTradeLeadAccess(getD1(), user)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
     if (installerAccess) {
       await getD1().prepare(`INSERT INTO customer_project_evidence_events
         (id, evidence_id, project_id, customer_uid, installer_uid, actor_type, actor_uid, event_type, created_at)
         VALUES (?, ?, ?, ?, ?, 'installer', ?, 'viewed', ?)`)
-        .bind(crypto.randomUUID(), record.id, record.project_id, record.customer_uid, user.uid, user.uid, new Date().toISOString()).run();
+        .bind(crypto.randomUUID(), record.id, record.project_id, record.customer_uid, user.ownerUid, user.actorUid, new Date().toISOString()).run();
     }
+    if (!await currentTradeLeadAccess(getD1(), user)) return json({ ok: false, error: "Your team access changed. Refresh the workspace." }, 403);
     return new Response(object.body, {
       headers: {
         "Cache-Control": "private, no-store",

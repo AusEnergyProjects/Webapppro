@@ -77,7 +77,7 @@ function loadServer(database, overrides = {}) {
 function fixture() {
   const database = new DatabaseSync(":memory:");
   const permissionColumns = [
-    "can_create_jobs", "can_manage_jobs", "can_assign_jobs", "can_view_customers", "can_manage_customers",
+    "can_view_leads", "can_manage_leads", "can_create_jobs", "can_manage_jobs", "can_assign_jobs", "can_view_customers", "can_manage_customers",
     "can_view_quotes", "can_manage_quotes", "can_send_quotes", "can_view_invoices", "can_manage_invoices",
     "can_view_price_book", "can_manage_price_book", "can_apply_discounts", "can_reschedule_jobs",
     "can_manage_team", "can_edit_team_permissions", "can_view_field_evidence", "can_manage_field_evidence",

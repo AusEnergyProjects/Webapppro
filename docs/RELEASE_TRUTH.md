@@ -1,5 +1,13 @@
 # TLink and Australian Energy Assessments release truth
 
+## Creditex readability and delegated Leads access, 13 October 2026
+
+Compliance questionnaire cards, editable questions, review answers and controls use the existing portal/business theme palettes with paired foreground/background colours. Long questions wrap, mobile controls remain usable, and Forms, Training and Onboarding expose chunk-load failures with Retry. The existing report/PDF and special safety-form exclusions remain intact.
+
+Migration 0261 adds separate View business leads and Respond to and manage leads grants. Existing full business administrators receive both through a bounded permission-based backfill; other staff retain their current scope. Invited staff use their selected approved business's matched Leads while retaining their own audit identity. Customer sharing, quote grants, crew isolation and business approval still govern each operation. Owners and authorised permission editors can grant view-only access independently.
+
+Validation and matching source/publication evidence: `C:/Webproject/outputs/creditex-team-access-20261013/release-report.json`. Existing expired source-review windows and unrelated full-suite failures are recorded separately; this entry does not assert a clean broad suite or a live login as another team member.
+
 ## Product measurements and independent form reviews, 12 October 2026
 
 The product catalogue corrects iStore R290 noise to 46/47 dB and calculated reheating to 47.8/76.4 litres per hour for the same 45 degree water-temperature rise. Published air-temperature conditions remain in Specs. Research resolved 25 of 33 recorded source gaps; eight measurements remain unsupported rather than invented. Product figures can be sorted directly. All 25 multihead outdoor identities have reviewed approved-product matches; outdoor-only rebate examples use approved rated heating/cooling capacity and explain the effect of a smaller connected system.

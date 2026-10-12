@@ -1,5 +1,5 @@
 "use client";
-import { enquiryCompletionLabel } from "@/lib/enquiry-timing.mjs";
+import { TradeLeadFilters, TradeLeadList, type TradeLeadOpportunity as DashboardOpportunity } from "./TradeLeadInbox";
 
 import TradeTeamPresence from "./TradeTeamPresence";
 
@@ -86,130 +86,7 @@ type DashboardProfile = TradeBusinessSettingsProfile & {
   };
 };
 
-type DashboardOpportunity = {
-  matchId: string;
-  matchStatus:
-    "offered" | "viewed" | "interested" | "declined" | "connected" | "closed";
-  matchedAt: string;
-  createdAt: string;
-  updatedAt: string;
-  id: string;
-  title: string;
-  projectType: string;
-  suburb: string;
-  postcode: string;
-  state: string;
-  serviceCategories: string[];
-  matchedCategories: string[];
-  distanceBand: string;
-  allocationRank: number;
-  contactAttemptCount: number;
-  contactLimit: number;
-  lastContactAt: string;
-  connectedAt: string;
-  expiresAt: string;
-  priority: string;
-  timing: string;
-  requestedWorkBy: string;
-  requestedCompletion: string;
-  customerSector: string;
-  summary: string;
-  propertyContext: Record<string, string | string[]>;
-  enquiryPack: null | {
-    version: string;
-    planTitle: string;
-    summary: string;
-    goals: string[];
-    planBoundary: {
-      pace: string;
-      budget: string;
-    };
-    homeContext: {
-      propertyType: string;
-      tenure: string;
-      state: string;
-      approval: string;
-      details: string[];
-      consideredWork: string[];
-    };
-    readiness: {
-      answered: number;
-      total: number;
-      notSure: number;
-      missing: number;
-      message: string;
-      boundary: string;
-    };
-    actionCount: number;
-    privacyNote: string;
-    adviceBoundary: string;
-  };
-  quotePreparation: null | {
-    answers: Array<{
-      questionId: string;
-      label: string;
-      answer: string;
-      services: string[];
-    }>;
-    expectedPhotoCount: number;
-    availablePhotoCount: number;
-  };
-  approvedSharedFileCount: number;
-  opportunityStatus: string;
-  platformOnly: boolean;
-  customerContact: null | {
-    name: string;
-    email: string;
-    phone: string;
-    addressLine1: string;
-    addressLine2: string;
-    suburb: string;
-    addressState: string;
-    postcode: string;
-    grantedAt: string;
-    message: string;
-    releaseScope: "shortlisted_installer" | "all_qualified_trades" | "aea_only";
-    redactedFields?: Array<"name" | "phone" | "email">;
-  };
-  evidence: Array<{
-    id: string;
-    category: string;
-    fileName: string;
-    contentType: string;
-    sizeBytes: number;
-    createdAt: string;
-    sharingScope: "allocated-installers";
-    promptLabel: string;
-    downloadHref: string;
-  }>;
-  arrivalProposal: null | {
-    id: string;
-    status: "proposed" | "selected" | "direct_contact" | "withdrawn";
-    windows: Array<{ id: string; startsAt: string; endsAt: string }>;
-    installerNote: string;
-    selectedWindow: null | { id: string; startsAt: string; endsAt: string };
-    revision: number;
-    proposedAt: string;
-    selectedAt: string;
-    crmWorkOrderId: string;
-    crmAppointmentId: string;
-    preparationAcknowledgedAt: string;
-  };
-  quote: null | {
-    productListId: string;
-    inclusions: string[];
-    productSubtotalCentsExGst: number;
-    labourCentsExGst: number;
-    otherCentsExGst: number;
-    totalCentsExGst: number;
-    quoteType: string;
-    startWindow: string;
-    durationWeeks: number;
-    workmanshipWarrantyYears: number;
-    status: string;
-    customerDecision: string;
-  };
-};
+
 type ProtectedPhotoLightbox = {
   item: DashboardOpportunity["evidence"][number];
   url: string;
@@ -2810,76 +2687,9 @@ function DirectTradeDashboardContent() {
                           <p>The full lead inbox could not be loaded. {opportunityLoadError}</p>
                         </div>
                       )}
-                      <div className="dashboard-lead-filters" aria-label="Lead filters">
-                        <label>
-                          <span>Search</span>
-                          <input
-                            aria-label="Search leads"
-                            placeholder="Customer, scope, service or region"
-                            value={leadSearch}
-                            onChange={(event) => setLeadSearch(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>Status</span>
-                          <select value={leadStatusFilter} onChange={(event) => setLeadStatusFilter(event.target.value)}>
-                            <option value="">All statuses</option>
-                            {["offered", "viewed", "interested", "connected"].map((value) => <option key={value} value={value}>{value === "offered" ? "New" : value.replaceAll("_", " ")}</option>)}
-                          </select>
-                        </label>
-                        <label>
-                          <span>Service</span>
-                          <select value={leadServiceFilter} onChange={(event) => setLeadServiceFilter(event.target.value)}>
-                            <option value="">All services</option>
-                            {Object.entries(capabilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                          </select>
-                        </label>
-                        <label>
-                          <span>State</span>
-                          <select value={leadStateFilter} onChange={(event) => setLeadStateFilter(event.target.value)}>
-                            <option value="">All states</option>
-                            {[...new Set(opportunities.map((item) => item.state))].sort().map((value) => <option key={value} value={value}>{value}</option>)}
-                          </select>
-                        </label>
-                        <div>
-                          <strong>{visibleLeadOpportunities.length}</strong>
-                          <span>matching lead{visibleLeadOpportunities.length === 1 ? "" : "s"}</span>
-                          <span>Newest first</span>
-                          {(leadSearch || leadStatusFilter || leadServiceFilter || leadStateFilter) && (
-                            <button type="button" onClick={() => {
-                              setLeadSearch("");
-                              setLeadStatusFilter("");
-                              setLeadServiceFilter("");
-                              setLeadStateFilter("");
-                            }}>Clear</button>
-                          )}
-                        </div>
-                      </div>
+                      <TradeLeadFilters opportunities={opportunities} visibleCount={visibleLeadOpportunities.length} search={leadSearch} status={leadStatusFilter} service={leadServiceFilter} state={leadStateFilter} onSearch={setLeadSearch} onStatus={setLeadStatusFilter} onService={setLeadServiceFilter} onState={setLeadStateFilter} />
                       {visibleLeadOpportunities.length ? <div className="dashboard-lead-workspace">
-                      <nav className="dashboard-lead-list" aria-label="Available leads">
-                        {visibleLeadOpportunities.map((opportunity) => {
-                          const selected = selectedLeadOpportunity?.matchId === opportunity.matchId;
-                          const customerName = (!contactFieldIsRedacted(opportunity.customerContact, "name")
-                            ? opportunity.customerContact?.name.trim()
-                            : "")
-                            || opportunity.title
-                            || "Customer enquiry";
-                          return <button
-                            key={opportunity.matchId}
-                            type="button"
-                            className={selected ? "active" : ""}
-                            aria-current={selected ? "true" : undefined}
-                            aria-controls={`opportunity-${opportunity.matchId}`}
-                            onClick={() => setSelectedOpportunityMatchId(opportunity.matchId)}
-                          >
-                            <span>{opportunity.platformOnly ? "Australian Energy Assessments protected lead" : "Australian Energy Assessments supplied lead"} | {opportunity.matchStatus === "offered" ? "New" : !opportunity.platformOnly && opportunity.matchStatus === "interested" ? "Customer added" : opportunity.matchStatus.replaceAll("_", " ")}</span>
-                            <strong>{customerName}</strong>
-                            <small><time dateTime={opportunity.createdAt}>Enquired {new Date(opportunity.createdAt).toLocaleString("en-AU", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</time></small>
-                            <p>{opportunity.enquiryPack?.summary || opportunity.summary}</p>
-                            <small>{opportunityBroadLocation(opportunity)} | {enquiryCompletionLabel(opportunity.requestedWorkBy, opportunity.requestedCompletion)}</small>
-                          </button>;
-                        })}
-                      </nav>
+                      <TradeLeadList opportunities={visibleLeadOpportunities} selectedMatchId={selectedLeadOpportunity?.matchId || ""} onSelect={setSelectedOpportunityMatchId} />
                       <div className="dashboard-opportunity-list dashboard-lead-preview" aria-live="polite">
                       {visibleLeadOpportunities.map((opportunity) => {
                         const isExpanded = selectedLeadOpportunity?.matchId === opportunity.matchId;

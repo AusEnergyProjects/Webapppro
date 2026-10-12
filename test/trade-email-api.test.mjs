@@ -1,3 +1,4 @@
+import * as leadPermissions from "../src/lib/trade-team-permission-policy.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -30,7 +31,8 @@ const api = load("../src/lib/trade-email-api.ts", {
 const targetHelper = load("../src/lib/trade-email-recipient-server.ts", {
   "../../db": {}, "./aea-trade-owner-server": {}, "./trade-certificate-leads": {},
   "./public-trade-lead-access.mjs": {}, "./trade-opportunity-read-projection.mjs": {},
-  "./trade-job-collaboration.ts": collaboration,
+  "./trade-lead-access-server": { currentTradeLeadAccess: async () => true },
+  "./trade-job-collaboration.ts": collaboration, "./trade-team-permission-policy.mjs": leadPermissions,
 });
 const origin = "https://portal.example.test";
 const requestId = "request-1234567890";

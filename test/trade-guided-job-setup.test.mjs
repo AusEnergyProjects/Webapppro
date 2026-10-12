@@ -212,7 +212,7 @@ test("protected Leads uses the canonical opportunity feed and identity-safe sele
   assert.match(dashboard, /protectedOpportunityRequestControllers\.current\.add\(controller\)/);
   assert.match(dashboard, /const selectedLeadOpportunity = visibleLeadOpportunities\.find/);
   assert.match(dashboard, /className="dashboard-lead-workspace"/);
-  assert.match(dashboard, /className="dashboard-lead-list" aria-label="Available leads"/);
+  assert.match(dashboard, /<TradeLeadList[\s\S]*onSelect=\{setSelectedOpportunityMatchId\}/);
   assert.match(dashboard, /hidden=\{!isExpanded\}/);
   assert.match(dashboard, /void respondToOpportunity\(opportunity\.matchId, "interested"\)/);
   assert.doesNotMatch(dashboard, /TradeEnquiryInbox/);

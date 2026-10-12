@@ -120,6 +120,7 @@ function accessFromRow(row: MemberAccessRow, sessionId: string): TeamAccess {
     canManageJobs: Boolean(row.can_manage_jobs),
     canAssignJobs: Boolean(row.can_assign_jobs),
     jobScope: row.job_scope === "team" ? "team" : "own",
+    canViewLeads: false, canManageLeads: false,
     canViewCustomers: Boolean(row.can_view_customers),
     canManageCustomers: Boolean(row.can_manage_customers),
     canViewQuotes: Boolean(row.can_view_quotes),

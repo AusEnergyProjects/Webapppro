@@ -182,8 +182,9 @@ test("free access and verification routes are connected across the account journ
 });
 
 test("installer leads can be narrowed without exposing household details", () => {
-  assert.match(dashboard, /dashboard-lead-filters/);
-  assert.match(dashboard, /Search leads/);
+  assert.match(dashboard, /<TradeLeadFilters/);
+  assert.match(read("../src/components/TradeLeadInbox.tsx"), /dashboard-lead-filters/);
+  assert.match(read("../src/components/TradeLeadInbox.tsx"), /Search leads/);
   assert.match(dashboard, /leadStatusFilter/);
   assert.match(dashboard, /leadServiceFilter/);
   assert.match(dashboard, /leadStateFilter/);

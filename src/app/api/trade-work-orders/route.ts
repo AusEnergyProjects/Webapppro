@@ -25,7 +25,7 @@ import { ENERGY_SERVICE_IDS } from "@/lib/energy-service-catalogue.mjs";
 import {
   assignedJob,
   canManageJobs,
-  requireInstallerTeamAccess,
+  requireInstallerTeamAccess, canCreateJobs, canManageLeads,
   type TeamAccess,
 } from "@/lib/trade-team-server";
 import {
@@ -33,6 +33,8 @@ import {
   isTradeJobScheduleEligibilityConflict,
   tradeJobScheduleEligibilityGuardStatement,
 } from "@/lib/trade-schedule-server";
+
+import { guardedTradeLeadMutationBatch, tradeLeadAccessChanged } from "@/lib/trade-lead-access-server";
 
 export const runtime = "edge";
 
@@ -84,11 +86,12 @@ function eventStatement(
   eventType: string,
   summary: string,
   createdAt: string,
+  actorUid = firebaseUid,
 ) {
   return db.prepare(`INSERT INTO trade_work_order_events
-    (id, work_order_id, firebase_uid, event_type, summary, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(crypto.randomUUID(), workOrderId, firebaseUid, eventType, summary, createdAt);
+    (id, work_order_id, firebase_uid, actor_uid, event_type, summary, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), workOrderId, firebaseUid, actorUid, eventType, summary, createdAt);
 }
 
 function offlineSyncStatements(
@@ -119,16 +122,26 @@ async function tradeIdentity(request: Request): Promise<TradeIdentity> {
   };
 }
 
-async function mutationIdentity(request: Request, action: string): Promise<{
+async function mutationIdentity(request: Request, action: string, body?: Record<string, unknown>): Promise<{
   identity: TradeIdentity;
   teamAccess: TeamAccess | null;
 }> {
+  if (action === "create_work_order" && body?.sourceType === "opportunity") {
+    const teamAccess = await requireInstallerTeamAccess(request);
+    if (!canManageLeads(teamAccess) || !canCreateJobs(teamAccess) || (!teamAccess.isOwner && teamAccess.jobScope !== "team")) {
+      throw new Error("JOB_MANAGEMENT_REQUIRED");
+    }
+    return { identity: { uid: teamAccess.ownerUid, partnerType: "installer", businessName: teamAccess.businessName,
+      fullAccess: true, teamAccess: true }, teamAccess };
+  }
   try {
     return { identity: await tradeIdentity(request), teamAccess: null };
   } catch (ownerError) {
     if (action !== "add_task" && action !== "update_task") throw ownerError;
     const teamAccess = await requireInstallerTeamAccess(request);
-    if (!canManageJobs(teamAccess)) throw new Error("JOB_MANAGEMENT_REQUIRED");
+    if (!canManageJobs(teamAccess)) {
+      throw new Error("JOB_MANAGEMENT_REQUIRED");
+    }
     return {
       identity: {
         uid: teamAccess.ownerUid,
@@ -143,6 +156,7 @@ async function mutationIdentity(request: Request, action: string): Promise<{
 }
 
 function errorResponse(error: unknown) {
+  if (tradeLeadAccessChanged(error)) return adminJson({ ok: false, error: "Your team access changed. Refresh before creating the job." }, 403);
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const conflict = creditexMutationConflict(error);
@@ -362,7 +376,7 @@ export async function POST(request: Request) {
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid Business Hub request." }, 400); }
     const action = cleanAdminText(body.action, 40) || "create_work_order";
-    const { identity, teamAccess } = await mutationIdentity(request, action);
+    const { identity, teamAccess } = await mutationIdentity(request, action, body);
     const db = getD1();
     const now = new Date().toISOString();
 
@@ -526,7 +540,7 @@ export async function POST(request: Request) {
         .bind(workOrderId, identity.uid, identity.partnerType, workType, sourceType, sourceReference,
           workNumber, title, serviceCategory, JSON.stringify(serviceCategories), siteArea, priority, scheduledStart, scheduledEnd,
           requestedAssignee, now, now),
-      eventStatement(db, identity.uid, workOrderId, "work_created", `${workNumber} created in Business Hub.`, now),
+      eventStatement(db, identity.uid, workOrderId, "work_created", `${workNumber} created in Business Hub.`, now, teamAccess?.actorUid || identity.uid),
       ...offlineSyncStatements(db, identity, workOrderId, 1, now),
     ];
     if (selectedArrival) createStatements.push(
@@ -541,18 +555,19 @@ export async function POST(request: Request) {
          assignee_label, change_source, source_reference, changed_by_uid, created_at)
         VALUES (?, ?, ?, ?, 1, ?, ?, '', '', 'customer_arrival', ?, ?, ?)`)
         .bind(crypto.randomUUID(), appointmentId, workOrderId, identity.uid, selectedArrival.startsAt,
-          selectedArrival.endsAt, selectedArrival.proposalId, identity.uid, now),
+          selectedArrival.endsAt, selectedArrival.proposalId, teamAccess?.actorUid || identity.uid, now),
       db.prepare(`UPDATE trade_work_orders SET stage = 'scheduled', scheduled_start = ?, scheduled_end = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ?`).bind(selectedArrival.startsAt.slice(0, 10), selectedArrival.endsAt.slice(0, 10), now, workOrderId, identity.uid),
       db.prepare(`UPDATE customer_project_arrival_proposals SET crm_work_order_id = ?, crm_appointment_id = ?, updated_at = ?
         WHERE id = ? AND installer_uid = ? AND status = 'selected' AND revision = ? AND crm_appointment_id = ''`)
         .bind(workOrderId, appointmentId, now, selectedArrival.proposalId, identity.uid, selectedArrival.revision),
-      eventStatement(db, identity.uid, workOrderId, "customer_arrival_materialised", "Customer-selected arrival window created as an unassigned CRM appointment for dispatch review.", now),
+      eventStatement(db, identity.uid, workOrderId, "customer_arrival_materialised", "Customer-selected arrival window created as an unassigned CRM appointment for dispatch review.", now, teamAccess?.actorUid || identity.uid),
     );
-    await db.batch(createStatements);
+    if (teamAccess) await guardedTradeLeadMutationBatch(db, teamAccess, "conversion", createStatements);
+    else await db.batch(createStatements);
     if (appointmentId) await queueAppointmentNotifications({ appointmentId, ownerUid: identity.uid,
       eventType: "appointment_created", appointmentRevision: 1, origin: new URL(request.url).origin, occurredAt: now });
-    return adminJson({ ok: true, createdWorkOrderId: workOrderId, workNumber, createdAppointmentId: appointmentId, ...(await workOrderPayload(identity)) }, 201);
+    return adminJson({ ok: true, createdWorkOrderId: workOrderId, workNumber, createdAppointmentId: appointmentId, ...(teamAccess && !teamAccess.isOwner ? {} : await workOrderPayload(identity)) }, 201);
   } catch (error) {
     return errorResponse(error);
   }
@@ -565,7 +580,7 @@ export async function PATCH(request: Request) {
     try { body = await request.json() as Record<string, unknown>; }
     catch { return adminJson({ ok: false, error: "Invalid Business Hub update." }, 400); }
     const action = cleanAdminText(body.action, 40);
-    const { identity, teamAccess } = await mutationIdentity(request, action);
+    const { identity, teamAccess } = await mutationIdentity(request, action, body);
     const db = getD1();
     const now = new Date().toISOString();
 

@@ -9,7 +9,7 @@ import {
 } from "./trade-access-server";
 import { requestedTradeBusiness, selectTradeBusiness, TradeBusinessContextError, type TradeBusinessChoice } from "./trade-business-context-server";
 import { ensureCreditexSchemaGuards } from "./creditex-schema-guards";
-import { canAssignWithinScope } from "./trade-team-permission-policy.mjs";
+import { canAssignWithinScope, canViewLeads as canViewLeadsWithinScope, canManageLeads as canManageLeadsWithinScope } from "./trade-team-permission-policy.mjs";
 import { applyTradeCrewAccess } from "./trade-crews-server";
 import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-session-server";
 
@@ -28,6 +28,8 @@ export type TeamAccess = {
   canManageJobs: boolean;
   canAssignJobs: boolean;
   jobScope: TeamScope;
+  canViewLeads: boolean;
+  canManageLeads: boolean;
   canViewCustomers: boolean;
   canManageCustomers: boolean;
   canViewQuotes: boolean;
@@ -60,7 +62,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
   const now = new Date().toISOString();
   const repairMember = (memberId: string, requireOwnerMember: boolean) => db.prepare(`UPDATE trade_team_members SET member_uid = ?, email = ?, display_name = ?, role = 'manager',
       can_create_jobs = 1, can_manage_jobs = 1, can_assign_jobs = 1, job_scope = 'team',
-      can_view_customers = 1, can_manage_customers = 1,
+      can_view_customers = 1, can_manage_customers = 1, can_view_leads = 1, can_manage_leads = 1,
       can_view_quotes = 1, can_manage_quotes = 1, can_send_quotes = 1,
       can_receive_customer_qa_notifications = 1,
       can_view_invoices = 1, can_manage_invoices = 1,
@@ -73,7 +75,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
       WHERE id = ? AND owner_uid = ? AND (? = 0 OR member_uid = ?)
         AND (member_uid <> ? OR email <> ? OR display_name <> ? OR role <> 'manager'
           OR can_create_jobs <> 1 OR can_manage_jobs <> 1 OR can_assign_jobs <> 1 OR job_scope <> 'team'
-          OR can_view_customers <> 1 OR can_manage_customers <> 1
+          OR can_view_customers <> 1 OR can_manage_customers <> 1 OR can_view_leads <> 1 OR can_manage_leads <> 1
           OR can_view_quotes <> 1 OR can_manage_quotes <> 1 OR can_send_quotes <> 1
           OR can_receive_customer_qa_notifications <> 1
           OR can_view_invoices <> 1 OR can_manage_invoices <> 1
@@ -109,10 +111,10 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
       can_manage_price_book, can_apply_discounts, schedule_scope, can_reschedule_jobs, can_manage_team,
      can_edit_team_permissions,
      can_view_field_evidence, can_manage_field_evidence, can_manage_forms, can_run_reports,
-     can_search_customers, status, invited_at,
+     can_search_customers, can_view_leads, can_manage_leads, status, invited_at,
      accepted_at, last_active_at, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 'manager', 1, 1, 1, 'team', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-      'team', 1, 1, 1, 1, 1, 1, 1, 1, 'active', '', ?, ?, ?, ?)`)
+      'team', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'active', '', ?, ?, ?, ?)`)
     .bind(id, ownerUid, ownerUid, email, displayName, now, now, now, now).run();
   return id;
 }
@@ -155,7 +157,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       displayName, isOwner: true,
       businessName: verified.businessName || "Installer business",
       canCreateJobs: true, canManageJobs: true, canAssignJobs: true, jobScope: "team",
-      canViewCustomers: true, canManageCustomers: true,
+      canViewCustomers: true, canManageCustomers: true, canViewLeads: true, canManageLeads: true,
       canViewQuotes: true, canManageQuotes: true, canSendQuotes: true, canSendSms: true,
       canReceiveCustomerQaNotifications: true,
       canViewInvoices: true, canManageInvoices: true,
@@ -176,7 +178,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
       m.schedule_scope, m.can_reschedule_jobs, m.can_manage_team,
       m.can_edit_team_permissions,
       m.can_view_field_evidence, m.can_manage_field_evidence, m.can_manage_forms,
-      m.can_run_reports, m.can_search_customers, a.business_name
+      m.can_run_reports, m.can_search_customers, m.can_view_leads, m.can_manage_leads, a.business_name
     FROM trade_team_members m JOIN trade_accounts a ON a.firebase_uid = m.owner_uid
     WHERE m.member_uid = ? AND m.owner_uid = ? AND m.id = ? AND m.status = 'active'`)
     .bind(identity.uid, selected.ownerUid, selected.memberId).first<Record<string, unknown>>();
@@ -195,6 +197,7 @@ export async function requireInstallerTeamAccess(request: Request): Promise<Team
     canCreateJobs: Boolean(member.can_create_jobs), canManageJobs: Boolean(member.can_manage_jobs),
     canAssignJobs: Boolean(member.can_assign_jobs),
     jobScope: member.job_scope === "team" ? "team" : "own",
+    canViewLeads: Boolean(member.can_view_leads), canManageLeads: Boolean(member.can_manage_leads),
     canViewCustomers: Boolean(member.can_view_customers), canManageCustomers: Boolean(member.can_manage_customers),
     canViewQuotes: Boolean(member.can_view_quotes), canManageQuotes: Boolean(member.can_manage_quotes),
     canSendQuotes: Boolean(member.can_send_quotes), canSendSms: Boolean(member.can_send_sms),
@@ -281,4 +284,13 @@ export async function requireAssignedJob(access: TeamAccess, workOrderId: string
 
 export async function assignedJob(access: TeamAccess, workOrderId: string) {
   return requireAssignedJob(access, workOrderId, await assignedJobStatement(access, workOrderId).first<AssignedTradeJob>());
+}
+
+/** Lead grants are business-wide office access; crew and field-only logins stay scoped to jobs. */
+export function canViewLeads(access: TeamAccess) {
+  return canViewLeadsWithinScope(access);
+}
+
+export function canManageLeads(access: TeamAccess) {
+  return canManageLeadsWithinScope(access);
 }
