@@ -1102,7 +1102,7 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /focused 22 of 22 checks/);
   assert.match(roadmap, /3d36c715-4904-4a1b-bde3-aa3e8253c74b/);
   assert.match(roadmap, /Live v307 QA confirmed the compact header shows Account\s+then TLink with no separator dot and no horizontal overflow/);
-  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Product comparison corrections and separate Creditex\/business-created form compliance/);
+  assert.match(currentHandover, /^# Next task handover\r?\n\r?\nStatus:[^\n]*Site-wide performance, including TLink Jobs, Leads and Customers/);
   assert.match(currentHandover, /## Retained prior delivery: council journey and reporting, 8 October 2026/);
   assert.match(releaseTruth, /## Council enquiry controls and official community reporting, 8 October 2026/);
   assert.match(releaseTruth, /Migrations 0257 through 0259 are additive/);
