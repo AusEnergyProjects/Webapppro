@@ -42,15 +42,6 @@
       "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/06/Reclaim-EcoAIO-Products-NewLogo-600PX-400x631-Single-EcoBadge.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4410,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "300REC25P",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/reclaim-eco-r290-heat-pump-300l",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -188,15 +179,6 @@
       "sourceUrl": "https://www.rheem.com.au/rheem/medias/300Wx300H-Rheem-AmbiPower-280e-Front-Display-On-1200px.jpg?context=bWFzdGVyfGltYWdlc3wzMDI3NXxpbWFnZS9qcGVnfGFEQm1MMmc1WXk4NU1ETXlNVFkwTWpRMU5UTTBMek13TUZkNE16QXdTRjlTYUdWbGJTQkJiV0pwVUc5M1pYSWdNamd3WlNCR2NtOXVkQ0F0SUVScGMzQnNZWGtnVDI1Zk1USXdNSEI0TG1wd1p3fDM2OWY1NzJkY2UzNjBkMzJmMTFkYjYxZmQ1NGMwMWQ1MzA3ZTU2MmE0NjA4MzQ3YzcxNWRjMmUwODdlNWFkOWE"
     },
     "measurements": {
-      "cost": {
-        "value": 3640,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "551E280G5",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rheem-ambipower-280e-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -336,15 +318,6 @@
       "sourceUrl": "https://ecogenica.com.au/images/rwa1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3024,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "ECON-300RVW-2.0E complete unit with Quick Connect Kit",
-        "basis": "Published exact-model equipment cart price inclusive of GST under Appliances Online trading terms clause 3.1. One Quick Connect Kit included; installation is separately priced. Public page read 10 October 2026; normal downloader returned generic HTML, so evidence is the public browser/web-page text, not its fallback response.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw-20e/",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -488,15 +461,6 @@
       "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2024/09/Evo270-E-R290-3-1.png"
     },
     "measurements": {
-      "cost": {
-        "value": 3810,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EVO270-E",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/evoheat-evo270-e",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -648,7 +612,6 @@
       "sourceUrl": "https://images.ctfassets.net/phagqs82lusw/5uRzP4KsVeUFtBlwpt8shV/e9b2957e7a3c519ca7e15fd5bb94d048/Rheem_AmbiPower_280e_Front_-_Display_On_1200px.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -760,12 +723,6 @@
         "sourceUrl": "https://assets.ctfassets.net/phagqs82lusw/5UoYF3N9Kh8xRfCz8AsXp1/3ec32d73bd518b04de3c989b4d0547c2/install_instruct_-_Rheem_heat_pump_551E280_WiFi_-_122339_Rev-02_-_2026_May.pdf",
         "basis": "Average heating-only thermal output at air 19 C dry/15 C wet, water 10 to 60 C, AS/NZS 5125.1:2014; boost excluded."
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No GST-inclusive equipment-only price was verified for this exact current Wi-Fi model.",
-        "sourceUrl": "https://solar.rheem.com.au/news/ambipower-280e-wi%2Bfi-heat-pump"
-      }
     }
   },
   {
@@ -808,7 +765,6 @@
       "Needs a hardwired 15 A circuit rather than a standard 10 A socket."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 6,
         "unit": "included-product-years",
@@ -915,12 +871,6 @@
         "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
       },
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No GST-inclusive equipment-only price was verified; installation and rebate examples cannot establish unit cost.",
-        "sourceUrl": "https://powrhouse.au/aquatech-fusion-x8-review/"
-      }
     }
   },
   {
@@ -978,16 +928,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/a92f4a440c/hw-electric-hp-enviroflo-ar-300-ima.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4295,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPA300VMH, 300 L hard-water complete unit",
-        "basis": "Actual GST-inclusive equipment cart price for exact EHPA300VMH. For other current AR variants this is explicitly a same-platform range reference, with different capacity/anode possible; no target price is invented. AO clause 3.1 includes GST, installation separately agreed.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "EHPA300VM"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -1153,15 +1093,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/a92f4a440c/hw-electric-hp-enviroflo-ar-300-ima.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4295,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPA300VMH, 300 L hard-water complete unit",
-        "basis": "Actual GST-inclusive equipment cart price for exact EHPA300VMH. For other current AR variants this is explicitly a same-platform range reference, with different capacity/anode possible; no target price is invented. AO clause 3.1 includes GST, installation separately agreed.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -1323,16 +1254,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/a92f4a440c/hw-electric-hp-enviroflo-ar-300-ima.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4295,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPA300VMH, 300 L hard-water complete unit",
-        "basis": "Actual GST-inclusive equipment cart price for exact EHPA300VMH. For other current AR variants this is explicitly a same-platform range reference, with different capacity/anode possible; no target price is invented. AO clause 3.1 includes GST, installation separately agreed.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "EHPA340VM"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -1498,16 +1419,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/a92f4a440c/hw-electric-hp-enviroflo-ar-300-ima.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4295,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPA300VMH, 300 L hard-water complete unit",
-        "basis": "Actual GST-inclusive equipment cart price for exact EHPA300VMH. For other current AR variants this is explicitly a same-platform range reference, with different capacity/anode possible; no target price is invented. AO clause 3.1 includes GST, installation separately agreed.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "EHPA340VMH"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -1674,16 +1585,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/9c77d06b21/hw-electric-hp-enviroflo-gr-ima.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3370,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPG280VM, 280 L, 15 A plug",
-        "basis": "Real published equipment-only GST-inclusive price for current GR EHPG280VM, explicitly used as a same-platform range reference. Target tank size, heater and electrical connection may differ. No scaled target retail price is inferred.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "EHPG180VM10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -1844,16 +1745,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/9c77d06b21/hw-electric-hp-enviroflo-gr-ima.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3370,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPG280VM, 280 L, 15 A plug",
-        "basis": "Real published equipment-only GST-inclusive price for current GR EHPG280VM, explicitly used as a same-platform range reference. Target tank size, heater and electrical connection may differ. No scaled target retail price is inferred.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "EHPG215VM"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2014,16 +1905,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/9c77d06b21/hw-electric-hp-enviroflo-gr-ima.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3370,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPG280VM, 280 L, 15 A plug",
-        "basis": "Real published equipment-only GST-inclusive price for current GR EHPG280VM, explicitly used as a same-platform range reference. Target tank size, heater and electrical connection may differ. No scaled target retail price is inferred.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "EHPG265VM10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2184,15 +2065,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/9c77d06b21/hw-electric-hp-enviroflo-gr-ima.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3370,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPG280VM",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2348,15 +2220,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/9c77d06b21/hw-electric-hp-enviroflo-gr-ima.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3670,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EHPG300VM10",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-300l-10a-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2494,7 +2357,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/650d893a67/hw-electric-hp-enviroflo-s5-ima.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2604,12 +2466,6 @@
     "hotWaterPerformance": {
       "noise": null,
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
-      }
     }
   },
   {
@@ -2649,7 +2505,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/650d893a67/hw-electric-hp-enviroflo-s5-ima.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2759,12 +2614,6 @@
     "hotWaterPerformance": {
       "noise": null,
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
-      }
     }
   },
   {
@@ -2804,7 +2653,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/650d893a67/hw-electric-hp-enviroflo-s5-ima.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -2914,12 +2762,6 @@
     "hotWaterPerformance": {
       "noise": null,
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
-      }
     }
   },
   {
@@ -2959,7 +2801,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/650d893a67/hw-electric-hp-enviroflo-s5-ima.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -3069,12 +2910,6 @@
     "hotWaterPerformance": {
       "noise": null,
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
-      }
     }
   },
   {
@@ -3120,7 +2955,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/06/Emerald-Heat-Pump-All-In-One-Select_angle_1_B2C_RGB_300dpi_update.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -3241,12 +3075,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      }
     }
   },
   {
@@ -3292,7 +3120,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/06/Emerald-Heat-Pump-All-In-One-Select_angle_1_B2C_RGB_300dpi_update.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -3413,12 +3240,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      }
     }
   },
   {
@@ -3464,7 +3285,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/06/Emerald-Heat-Pump-All-In-One-Select_angle_1_B2C_RGB_300dpi_update.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -3584,12 +3404,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      }
     }
   },
   {
@@ -3635,7 +3449,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/06/Emerald-Heat-Pump-All-In-One-Select_angle_1_B2C_RGB_300dpi_update.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -3756,12 +3569,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      }
     }
   },
   {
@@ -3807,7 +3614,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/06/Emerald-Heat-Pump-All-In-One-Select_angle_1_B2C_RGB_300dpi_update.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -3927,12 +3733,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      }
     }
   },
   {
@@ -3968,7 +3768,6 @@
       "There is no extra electric heater for emergency heating."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -4086,12 +3885,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      }
     }
   },
   {
@@ -4127,7 +3920,6 @@
       "The quieter mode reheats water more slowly."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -4245,12 +4037,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      }
     }
   },
   {
@@ -4286,7 +4072,6 @@
       "There is no extra electric heater for emergency heating."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -4404,12 +4189,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      }
     }
   },
   {
@@ -4445,7 +4224,6 @@
       "The quieter mode reheats water more slowly."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -4563,12 +4341,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      }
     }
   },
   {
@@ -4604,7 +4376,6 @@
       "There is no extra electric heater for emergency heating."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -4722,12 +4493,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      }
     }
   },
   {
@@ -4763,7 +4528,6 @@
       "The quieter mode reheats water more slowly."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -4881,12 +4645,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      }
     }
   },
   {
@@ -4922,7 +4680,6 @@
       "There is no extra electric heater for emergency heating."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -5036,12 +4793,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      }
     }
   },
   {
@@ -5077,7 +4828,6 @@
       "Two units need space and connecting refrigerant pipework."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -5191,12 +4941,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      }
     }
   },
   {
@@ -5232,7 +4976,6 @@
       "There is no extra electric heater for emergency heating."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -5346,12 +5089,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      }
     }
   },
   {
@@ -5387,7 +5124,6 @@
       "Two units need space and connecting refrigerant pipework."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -5501,12 +5237,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "thermalOutputKw": 2.8
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      }
     }
   },
   {
@@ -5560,15 +5290,6 @@
       "Uses the extra electric heater when heating is needed at 5 C or below."
     ],
     "measurements": {
-      "cost": {
-        "value": 4340,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "SHP-O 200 Plus, article 204472",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-200-plus-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 2,
         "unit": "included-product-years",
@@ -5712,15 +5433,6 @@
       "Uses the extra electric heater when heating is needed at 5 C or below."
     ],
     "measurements": {
-      "cost": {
-        "value": 4640,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "SHP-O 300 Plus, article 204473",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-300-plus-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 2,
         "unit": "included-product-years",
@@ -5863,7 +5575,6 @@
       "Detailed schedules need the phone app."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 2,
         "unit": "included-product-years",
@@ -5965,12 +5676,6 @@
         "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
       },
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "The checked current Premium listings have no usable Australian equipment-only price.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/news/new-innovations-2025-stiebel-eltron"
-      }
     }
   },
   {
@@ -6017,7 +5722,6 @@
       "Detailed schedules need the phone app."
     ],
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 2,
         "unit": "included-product-years",
@@ -6119,12 +5823,6 @@
         "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
       },
       "recovery": null
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "The checked current Premium listings have no usable Australian equipment-only price.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/news/new-innovations-2025-stiebel-eltron"
-      }
     }
   },
   {
@@ -6176,16 +5874,6 @@
       "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/72g5z3j278pcvnn23vwkjtr/haier_04_HP250M1_34_au-nz_600x400_HHV.png?width=600"
     },
     "measurements": {
-      "cost": {
-        "value": 3090,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "HP330M1U1, 330 L complete unit",
-        "basis": "Real current HP330M1U1 GST-inclusive unit price used only as a same-current-500-series equipment range reference. The target size, heater and connection differ; no target-unit retail price is inferred.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "HP200M1U1P"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -6353,16 +6041,6 @@
       "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/72g5z3j278pcvnn23vwkjtr/haier_04_HP250M1_34_au-nz_600x400_HHV.png?width=600"
     },
     "measurements": {
-      "cost": {
-        "value": 3090,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "HP330M1U1, 330 L complete unit",
-        "basis": "Real current HP330M1U1 GST-inclusive unit price used only as a same-current-500-series equipment range reference. The target size, heater and connection differ; no target-unit retail price is inferred.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "HP250M1U1P"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -6530,15 +6208,6 @@
       "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/72g5z3j278pcvnn23vwkjtr/haier_04_HP250M1_34_au-nz_600x400_HHV.png?width=600"
     },
     "measurements": {
-      "cost": {
-        "value": 3090,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "HP330M1U1",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -6689,16 +6358,6 @@
       "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-HP-270L.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4350,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "270DHB36 hardwired, 270 L complete unit",
-        "basis": "Real GST-inclusive equipment price for the current 270DHB36 hardwired model used only as a same-platform range reference for the plug-in 270DHB36P. Heater and connection differ. No target P-model price is inferred.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/dux-ecosmart-pro-series-270l-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "270DHB36P"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -6853,15 +6512,6 @@
       "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-HP-270L.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4350,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "270DHB36",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/dux-ecosmart-pro-series-270l-heat-pump",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -7011,7 +6661,6 @@
       "sourceUrl": "https://earthworkerenergy.coop/wp-content/uploads/NEO-Heat-Pump-Grey-Earthworker-Tank.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 6,
         "unit": "included-product-years",
@@ -7123,12 +6772,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "litresPerHour": 70
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No GST-inclusive equipment-only price was verified; installation and rebate examples cannot establish unit cost.",
-        "sourceUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters#air-source-heat-pump-models"
-      }
     }
   },
   {
@@ -7168,7 +6811,6 @@
       "sourceUrl": "https://earthworkerenergy.coop/wp-content/uploads/NEO-Heat-Pump-Grey-Earthworker-Tank.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 6,
         "unit": "included-product-years",
@@ -7280,12 +6922,6 @@
         "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
         "litresPerHour": 70
       }
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No GST-inclusive equipment-only price was verified; installation and rebate examples cannot establish unit cost.",
-        "sourceUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters#air-source-heat-pump-models"
-      }
     }
   },
   {
@@ -7332,16 +6968,6 @@
       "Corrosion-protection rods need inspection and replacement."
     ],
     "measurements": {
-      "cost": {
-        "value": 3509,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "H-PASHW015-270LD-R290, 270 L complete R290 unit",
-        "basis": "Actual current retailer SKU H-PASHW015-270LD-R290 published equipment price 3190 AUD excluding GST, rebates and installation, converted to 3509 AUD including 10% GST. Explicitly a same-current-R290-range reference for the exact maker NM/FL02 model; no target-specific price inferred. Older 180 L retailer SKU omits R290 and is not reused.",
-        "sourceUrl": "https://ausetech.com.au/products/istore-hot-water-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "PASHW008-180LD-NM-R290"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -7484,16 +7110,6 @@
       "Corrosion-protection rods need inspection and replacement."
     ],
     "measurements": {
-      "cost": {
-        "value": 3509,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "H-PASHW015-270LD-R290, 270 L complete R290 unit",
-        "basis": "Actual current retailer SKU H-PASHW015-270LD-R290 published equipment price 3190 AUD excluding GST, rebates and installation, converted to 3509 AUD including 10% GST. Explicitly a same-current-R290-range reference for the exact maker NM/FL02 model; no target-specific price inferred. Older 180 L retailer SKU omits R290 and is not reused.",
-        "sourceUrl": "https://ausetech.com.au/products/istore-hot-water-heat-pump",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "PASHW015-270LD-FL02-R290"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -7630,15 +7246,6 @@
       "Phone control needs an optional Wi-Fi module."
     ],
     "measurements": {
-      "cost": {
-        "value": 3320,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "EVO150-1",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/evoheat-evo150-1",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -7777,15 +7384,6 @@
       "sourceUrl": "https://admin.rheem.com.au/sites/default/files/2025-12/Rheem-AmbiPower-5kW-Split_500px.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4410,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "565E315R0",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rheem-325l-ambipower-5kw-split-heat-pump-system-ve",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -7948,15 +7546,6 @@
       "sourceUrl": "https://admin.rheem.com.au/sites/default/files/2025-12/Rheem-AmbiPower-5kW-Split_500px.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4640,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "565E32AM0",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rheem-325-ambipower-5kw-split-heat-pump-system-stainless-steel",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",
@@ -8120,15 +7709,6 @@
       "sourceUrl": "https://ecogenica.com.au/images/rwa1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 2977,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "ECON-300RVW complete unit with Quick Connect Kit",
-        "basis": "Published exact-model equipment cart price inclusive of GST under Appliances Online trading terms clause 3.1. One Quick Connect Kit included; installation is separately priced. Public page read 10 October 2026; normal downloader returned generic HTML, so evidence is the public browser/web-page text, not its fallback response.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw/",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -8271,15 +7851,6 @@
       "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/06/Reclaim-EcoAIO-Products-NewLogo-600PX-400x631-Single-EcoBadge.png"
     },
     "measurements": {
-      "cost": {
-        "value": 4010,
-        "unit": "aud-system",
-        "basisId": "hot-water-unit-gst",
-        "variant": "200REC25P",
-        "basis": "Published complete equipment price including GST, excluding installation, delivery and rebates; current public retailer listing checked 10 October 2026.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/reclaim-eco-r290-heat-pump-200l",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 1,
         "unit": "included-product-years",

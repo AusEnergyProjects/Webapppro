@@ -36,7 +36,6 @@
       "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
@@ -115,13 +114,7 @@
     ],
     "cons": [
       "Phone control requires the optional AC Link accessory."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "Indoor units are not specified as a complete package, and a public before-rebate equipment price was not confirmed.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf"
-      }
-    }
+    ]
   },
   {
     "id": "emerald-multi-ultra-18",
@@ -160,7 +153,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/02/Emerald-Air-Con-Ultra-Multi-Head-18kw-ODU-1_-300dpi-RGB-1404x1536.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
@@ -240,13 +232,7 @@
     "cons": [
       "Needs at least two indoor units, so it cannot serve just one room.",
       "Phone control requires the optional AC Link accessory."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "Indoor units are not specified as a complete package, and a public before-rebate equipment price was not confirmed.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf"
-      }
-    }
+    ]
   },
   {
     "id": "emerald-multi-ultra-20",
@@ -285,7 +271,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/05/Emerald_Air-Con-Ducted-Ultra-ODU-front.png"
     },
     "measurements": {
-      "cost": null,
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
@@ -365,13 +350,7 @@
     "cons": [
       "The outdoor box is 1.65 metres tall and 1.25 metres wide.",
       "Phone control requires the optional AC Link accessory."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "Indoor units are not specified as a complete package, and a public before-rebate equipment price was not confirmed.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf"
-      }
-    }
+    ]
   },
   {
     "id": "rinnai-multi-px",
@@ -428,15 +407,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/e7913b544b/ac-split-px-series-front-ima.png"
     },
     "measurements": {
-      "cost": {
-        "value": 2673,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "MON3H07B1LA outdoor + 3 x HINRPX25M indoor units with standard supplied controllers",
-        "basis": "Complete manufacturer-approved combination equipment cost including GST, before rebates and excluding installation, piping and separately sold accessories. Bill of materials sums the exact public GST-inclusive outdoor listing and three exact indoor-unit listings; mandatory standard controllers are supplied with the heads.",
-        "sourceUrl": "https://gphvac.com.au/product/rin-mon3h07b1la/",
-        "checkedAt": "2026-10-10"
-      },
       "warranty": {
         "value": 7,
         "unit": "included-product-years",
@@ -586,16 +556,6 @@
       "Outdoor quiet mode reduces the heating or cooling power available."
     ],
     "measurements": {
-      "cost": {
-        "value": 2573.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x MXZ-2F52VF-A1 + 2 x MSZ-AP25VGKD2-A2",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Same-generation range cost reference; this selected outdoor variant may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-5-2kw-multi-head-outdoor-unit-only-mxz-2f52vf-a1",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2"
-      },
       "capacity": {
         "value": 5.2,
         "unit": "cooling-kw",
@@ -716,15 +676,6 @@
       "The special allergen-cleaning cycle does not work in this multi-room combination."
     ],
     "measurements": {
-      "cost": {
-        "value": 2481.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM40ZS-W + 2 x DXK06ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-4kw-multi-head-outdoor-unit-only-scm40zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 4,
         "unit": "cooling-kw",
@@ -837,15 +788,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
     },
     "measurements": {
-      "cost": {
-        "value": 4046.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x MXZ-4F71VGD-A1 + 3 x MSZ-AP25VGKD2-A2",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-7-1kw-multi-head-outdoor-unit-only-mxz-4f71vgd-a1",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 7.1,
         "unit": "cooling-kw",
@@ -965,15 +907,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
     },
     "measurements": {
-      "cost": {
-        "value": 4736.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x MXZ-4F80VGD-A1 + 4 x MSZ-AP25VGKD2-A2",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-8kw-multi-head-outdoor-unit-only-mxz-4f80vgd-a1",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 8,
         "unit": "cooling-kw",
@@ -1099,15 +1032,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
     },
     "measurements": {
-      "cost": {
-        "value": 4347.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x MXZ-4F80VGD-A1 + 2 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP35VGKD2-A2",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-8kw-multi-head-outdoor-unit-only-mxz-4f80vgd-a1",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 8,
         "unit": "cooling-kw",
@@ -1233,15 +1157,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
     },
     "measurements": {
-      "cost": {
-        "value": 5439.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x MXZ-5F100VGD-A1 + 3 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP50VGKD2-A2",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-10kw-multi-head-outdoor-unit-only-mxz-5f100vgd-a1",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 10,
         "unit": "cooling-kw",
@@ -1349,15 +1264,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 2872.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM45ZS-W + 2 x DXK09ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-4-5kw-multi-head-outdoor-unit-only-scm45zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 4.5,
         "unit": "cooling-kw",
@@ -1465,15 +1371,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3248.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM50ZS-W + 2 x DXK12ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-5kw-multi-head-outdoor-unit-only-scm50zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 5,
         "unit": "cooling-kw",
@@ -1581,15 +1478,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 3634.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM60ZS-W + 3 x DXK06ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-6kw-multi-head-outdoor-unit-only-scm60zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 6,
         "unit": "cooling-kw",
@@ -1697,15 +1585,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 4189.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM71ZS-W + 3 x DXK09ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-7-1kw-multi-head-outdoor-unit-only-scm71zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 7.1,
         "unit": "cooling-kw",
@@ -1813,15 +1692,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 4720.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM80ZS-W + 4 x DXK06ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-8kw-multi-head-outdoor-unit-only-scm80zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 8,
         "unit": "cooling-kw",
@@ -1929,15 +1799,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 5535.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x SCM100ZS-W + 4 x DXK09ZSA-WF1",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-10kw-multi-head-outdoor-unit-only-scm100zs-w",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 10,
         "unit": "cooling-kw",
@@ -2051,15 +1912,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
     },
     "measurements": {
-      "cost": {
-        "value": 2778.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-2kw-multi-head-outdoor-unit-only-cu-2z52vbr",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 5.2,
         "unit": "cooling-kw",
@@ -2173,15 +2025,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr"
     },
     "measurements": {
-      "cost": {
-        "value": 3432.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-4kw-multi-head-outdoor-unit-only-cu-3z54vbr",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 5.4,
         "unit": "cooling-kw",
@@ -2295,15 +2138,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
     },
     "measurements": {
-      "cost": {
-        "value": 4085.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-7-1kw-multi-head-outdoor-unit-only-cu-4z71vbr",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 7.1,
         "unit": "cooling-kw",
@@ -2417,15 +2251,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
     },
     "measurements": {
-      "cost": {
-        "value": 4642.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-8kw-multi-head-outdoor-unit-only-cu-4z80vbr",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 8,
         "unit": "cooling-kw",
@@ -2539,15 +2364,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr"
     },
     "measurements": {
-      "cost": {
-        "value": 5796.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-10kw-multi-head-outdoor-unit-only-cu-5z100vbr",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 10,
         "unit": "cooling-kw",
@@ -2667,15 +2483,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
     },
     "measurements": {
-      "cost": {
-        "value": 3517.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x 3MXM52RVMA + 2 x CTXM20RVMA + 1 x CTXM50RVMA",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-5-2kw-super-multi-nx-outdoor-unit-only-3mxm52rvma",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 5.2,
         "unit": "cooling-kw",
@@ -2800,15 +2607,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
     },
     "measurements": {
-      "cost": {
-        "value": 4428.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x 4MXM68RVMA + 3 x CTXM20RVMA + 1 x CTXM50RVMA",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-6-8kw-super-multi-nx-outdoor-unit-only-4mxm68rvma",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 6.8,
         "unit": "cooling-kw",
@@ -2939,15 +2737,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2-5kw-multi-cora-series-indoor-unit-only-ctxm25rvma"
     },
     "measurements": {
-      "cost": {
-        "value": 5002.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x 4MXM80RVMA + 1 x CTXM25RVMA + 2 x CTXM35RVMA + 1 x CTXM50RVMA",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-8kw-super-multi-nx-outdoor-unit-only-4mxm80rvma",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 8,
         "unit": "cooling-kw",
@@ -3078,15 +2867,6 @@
       "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
     },
     "measurements": {
-      "cost": {
-        "value": 6145.0,
-        "unit": "aud-system",
-        "basisId": "multi-split-kit-gst",
-        "variant": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
-        "basis": "Sum of the separately listed outdoor unit and all selected room units including their handheld controls and GST. Installation pipework, labour, electrical work and delivery excluded; before rebates. Exact maker-supported equipment combination.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-10kw-super-multi-nx-outdoor-unit-only-5mxm100rvma",
-        "checkedAt": "2026-10-10"
-      },
       "capacity": {
         "value": 10,
         "unit": "cooling-kw",

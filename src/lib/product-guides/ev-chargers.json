@@ -50,15 +50,6 @@
       "Solar charging needs correctly installed power-monitoring sensors."
     ],
     "measurements": {
-      "cost": {
-        "value": 999,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "zappi GLO 7 kW with 6.5 m attached cable",
-        "basis": "Current maker AU unit price including GST and attached cable; excludes installation, power-monitoring extras and rebates.",
-        "sourceUrl": "https://www.myenergi.com/au/product/zappi-glo/",
-        "checkedAt": "2026-10-10"
-      },
       "chargingPower": {
         "value": 7,
         "unit": "ev-ac-kw",
@@ -180,16 +171,6 @@
       "Cannot send the car's stored energy back into your home."
     ],
     "measurements": {
-      "cost": {
-        "value": 2390.3,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "Fronius Wattpilot Flex Home 22 C6, MPN 4,240,187",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Same-generation range reference; selected configuration may cost differently.",
-        "sourceUrl": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Fronius Wattpilot Flex Home 11 C6"
-      },
       "chargingPower": {
         "value": 11,
         "unit": "ev-ac-kw",
@@ -321,15 +302,6 @@
       "Cannot send the car's stored energy back into your home."
     ],
     "measurements": {
-      "cost": {
-        "value": 2390.3,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "Fronius Wattpilot Flex Home 22 C6, MPN 4,240,187",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22",
-        "checkedAt": "2026-10-10"
-      },
       "chargingPower": {
         "value": 22,
         "unit": "ev-ac-kw",
@@ -460,15 +432,6 @@
       "Charging information uses status lights and the app rather than a screen."
     ],
     "measurements": {
-      "cost": {
-        "value": 1199,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "EP0-07AU-WI-BLSTD-01",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.sparkydirect.com.au/p/ohme-ep0-07au-wi-blstd-01-epod-7-4kw-ev-charger-type-1-2-vehicles-untethered",
-        "checkedAt": "2026-10-10"
-      },
       "chargingPower": {
         "value": 7.4,
         "unit": "ev-ac-kw",
@@ -587,15 +550,6 @@
       "Solar charging is unavailable in Bluetooth-only mode."
     ],
     "measurements": {
-      "cost": {
-        "value": 1394.8,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "HP5-07AU-WI-BLSTD-01",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.sparkydirect.com.au/p/ohme-hp5-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-5m-cable-wifi",
-        "checkedAt": "2026-10-10"
-      },
       "chargingPower": {
         "value": 7.4,
         "unit": "ev-ac-kw",
@@ -725,15 +679,6 @@
       "Solar charging is unavailable in Bluetooth-only mode."
     ],
     "measurements": {
-      "cost": {
-        "value": 1494.9,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "HP8-07AU-WI-BLSTD-01",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.sparkydirect.com.au/p/ohme-hp8-07au-wi-blstd-01-home-pro-7-4kw-ev-charger-type-2-8m-cable-wifi",
-        "checkedAt": "2026-10-10"
-      },
       "chargingPower": {
         "value": 7.4,
         "unit": "ev-ac-kw",
@@ -855,15 +800,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 799,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "E2 Flex 10384",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://store.evnex.com/products/evnex-e2-flex",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -958,15 +894,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://store.evnex.com/products/evnex-e2-core",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1099,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "E2 Core 10391",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://store.evnex.com/products/evnex-e2-core",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -1058,15 +985,6 @@
         "basisId": "main-product-parts",
         "variant": "E2 Plus 10576",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
-        "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1399,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "E2 Plus 10576",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
         "sourceUrl": "https://store.evnex.com/products/evnex-e2-plus",
         "checkedAt": "2026-10-10"
       }
@@ -1167,15 +1085,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://store.evnex.com/products/evnex-x22",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1699,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "X22 10184PN",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -1274,15 +1183,6 @@
         "basisId": "main-product-parts",
         "variant": "X22 10143PN",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
-        "sourceUrl": "https://store.evnex.com/products/evnex-x22",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1699,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "X22 10143PN",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
         "sourceUrl": "https://store.evnex.com/products/evnex-x22",
         "checkedAt": "2026-10-10"
       }
@@ -1388,15 +1288,6 @@
         "variant": "IOCAH30-7TE-RW",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1147,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "IOCAH30-7TE-RW",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-ev-charger/",
         "checkedAt": "2026-10-10"
       }
     },
@@ -1504,15 +1395,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1147,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "IOCAH30-7SE-RW",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-7kw-socket-ev-charger/",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -1616,15 +1498,6 @@
         "variant": "IOCAH30-22TE-RW",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1378,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "IOCAH30-22TE-RW",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-22kw-ev-charger/",
         "checkedAt": "2026-10-10"
       }
     },
@@ -1732,15 +1605,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2025/07/IQ-Home-Solar-Installation-Guide.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1378,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "IOCAH30-22SE-RW",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-iq-home-solar-22kw-socket-ev-charger/",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -1841,15 +1705,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 689,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "OC20-BC-7KW-PLUS-V3",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-7kw-ev-charger/",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -1949,15 +1804,6 @@
         "variant": "OC20-BC-22KW-PLUS-V3",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://ocularcharging.com.au/wp-content/uploads/2024/08/LTE-Plus-User-Manual-Installation-Guide-compressed.pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 788,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "OC20-BC-22KW-PLUS-V3",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.evchargeau.com.au/product/ocular-lte-plus-v3-22kw-ev-charger/",
         "checkedAt": "2026-10-10"
       }
     },
@@ -2076,15 +1922,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://www.tesla.com/en_au/home-charging",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 800,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "Gen 3 Wall Connector 7.3 m",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.perkinelec.com.au/bmw-ev-charger-installation",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -2190,15 +2027,6 @@
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1545,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "ZAPPI-2H22UW",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -2290,15 +2118,6 @@
         "basisId": "main-product-parts",
         "variant": "ZAPPI-2H22TW",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
-        "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1595,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "ZAPPI-2H22TW",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
         "sourceUrl": "https://www.myenergi.com/au/product/zappi/",
         "checkedAt": "2026-10-10"
       }
@@ -2399,15 +2218,6 @@
         "variant": "EVH5A07N2C7",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1491.6,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "EVH5A07N2C7",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.switchboardinabox.com.au/evh5a07n2c7-charging-station-schneider-charge-1pn-attached-cable-7m-74kw-32a",
         "checkedAt": "2026-10-10"
       }
     },
@@ -2514,15 +2324,6 @@
         "variant": "EVH5A22N2S",
         "basis": "Included residential manufacturing-fault parts warranty for the main charger; separate installation and optional accessories are outside the main product term.",
         "sourceUrl": "https://www.solarquotes.com.au/wp-content/uploads/2022/05/eMobility-range-Warranty-Conditions-2024_2-1.pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 1485.55,
-        "unit": "aud-system",
-        "basisId": "ev-charger-unit-gst",
-        "variant": "EVH5A22N2S",
-        "basis": "Public Australian charger equipment price including GST, before rebates; excludes installation and separately sold cables, sensors or accessories. Exact listed charger hardware variant.",
-        "sourceUrl": "https://www.switchboardinabox.com.au/evh5a22n2s-charging-station-schneider-charge-1pn3pn-1xt2s-741122kw-1632a",
         "checkedAt": "2026-10-10"
       }
     },

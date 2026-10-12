@@ -24,12 +24,22 @@ test("tank volume alone never becomes a recovery claim and missing air condition
   assert.match(measured.conditions, /Scaled.*air temperature not specified/);
 });
 
-test("noise retains the measurement type, distance and operating mode", () => {
+test("noise shows the exact sourced number without inventing a shared test distance", () => {
   const noise = { value: 43, metric: "sound-pressure", distanceMetres: 1, mode: "Compressor mode", sourceUrl: conditions.sourceUrl };
-  assert.match(hotWaterComparisonFacts({ noise, recovery: null }).noise, /43 dB\(A\), at 1 m; Compressor mode/);
-  assert.match(hotWaterComparisonFacts({ noise: { ...noise, metric: "sound-power", distanceMetres: null }, recovery: null }).noise, /sound power, not a distance reading/);
-  assert.match(hotWaterComparisonFacts({ noise: { ...noise, metric: "not-stated" }, recovery: null }).noise, /at 1 m; noise test type not specified/);
-  assert.match(hotWaterComparisonFacts({ noise: { ...noise, distanceMetres: null }, recovery: null }).noise, /distance not specified/);
+  for (const change of [
+    {},
+    { distanceMetres: 1.5 },
+    { distanceMetres: 2 },
+    { distanceMetres: null },
+    { metric: "sound-power", distanceMetres: null },
+    { metric: "not-stated" },
+    { value: 43.5, metric: "not-stated", distanceMetres: null },
+  ]) {
+    const evidence = { ...noise, ...change };
+    const original = structuredClone(evidence);
+    assert.equal(hotWaterComparisonFacts({ noise: evidence, recovery: null }).noise, `${evidence.value} dB`);
+    assert.deepEqual(evidence, original, "display formatting cannot rewrite the published metric, distance, mode or source");
+  }
 });
 
 test("invalid measurements, zero output and incomplete recovery conditions are rejected", () => {

@@ -7,7 +7,7 @@ import * as jsx from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PUBLIC_SITE, buildPlatformMetadata } from "../src/lib/public-site.ts";
 import { searchPublicSite } from "../src/lib/public-site-search.ts";
-import { calculateProductRating, productRatingMethods, publicProductRating } from "../src/lib/product-ratings.ts";
+import { calculateProductRating, productRatingMethods } from "../src/lib/product-ratings.ts";
 import { hotWaterComparisonFacts } from "../src/lib/product-hot-water.ts";
 function compile(relative, dependencies) {
   const compiled = ts.transpileModule(readFileSync(new URL(relative, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -18,13 +18,22 @@ function compile(relative, dependencies) {
 const slugs = ["solar", "inverters", "batteries", "hot-water", "air-conditioning", "multi-split", "ev-chargers"];
 const datasets = Object.fromEntries(slugs.map(slug => ["./product-guides/" + slug + ".json", { default: JSON.parse(readFileSync(new URL("../src/lib/product-guides/" + slug + ".json", import.meta.url), "utf8")) }]));
 const guide = compile("../src/lib/product-guides.ts", datasets);
-const browser = compile("../src/components/ProductComparisonBrowser.tsx", { react, "react/jsx-runtime": jsx, "./product-comparison.css": {} });
+const browser = compile("../src/components/ProductComparisonBrowser.tsx", {
+  react,
+  "react/jsx-runtime": jsx,
+  "./product-comparison.css": {},
+  "./ProductRebateChecker": {
+    useProductRebateCheck: () => ({ profile: {}, lookup: {}, readyToCheck: false, entryFor: () => undefined }),
+    ProductRebateChecker: () => jsx.jsx("section", { "data-testid": "product-rebate-checker" }),
+    ProductRebateResult: ({ product }) => jsx.jsx("section", { "data-product-rebates": product.id }),
+  },
+});
 const dependencies = {
   "react/jsx-runtime": jsx,
   "next/link": { default: ({ children, ...props }) => jsx.jsx("a", { ...props, children }) },
   "next/navigation": { notFound() { throw new Error("NOT_FOUND"); } },
   "@/lib/product-guides": guide,
-  "@/lib/product-ratings": { calculateProductRating, productRatingMethods, publicProductRating },
+  "@/lib/product-ratings": { calculateProductRating, productRatingMethods },
   "@/lib/product-hot-water": { hotWaterComparisonFacts },
   "@/lib/public-site": { PUBLIC_SITE, buildPlatformMetadata },
   "./ComparatorChrome": { SiteHeader: () => jsx.jsx("nav", { children: "Navigation" }), SiteFooter: ({ children }) => jsx.jsx("footer", { children }) },
@@ -37,12 +46,29 @@ const categoryPage = compile("../src/app/guides/products/[category]/page.tsx", d
 const overview = compile("../src/app/guides/products/page.tsx", dependencies);
 
 test("the authored JSON boundary rejects unsupported evidence labels without type casts", () => {
-  const altered = structuredClone(datasets);
-  altered["./product-guides/solar.json"].default[0].measurements.cost = { ...guide.PRODUCT_GUIDE_CATEGORIES[0].options.find(product => product.measurements.cost).measurements.cost, priceEvidence: "guessed" };
-  assert.throws(() => compile("../src/lib/product-guides.ts", altered), /Unsupported catalogue price evidence/);
   const noise = structuredClone(datasets);
   noise["./product-guides/hot-water.json"].default[0].hotWaterPerformance = { noise: { value: 40, metric: "quiet", distanceMetres: 1, mode: "Standard", sourceUrl: "https://example.com/specification" }, recovery: null };
   assert.throws(() => compile("../src/lib/product-guides.ts", noise), /Unsupported heat-pump noise measurement/);
+});
+
+test("cost measurements, gaps, price-only sources and cost UI are absent across the catalogue", async () => {
+  for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
+    for (const product of datasets["./product-guides/" + category.slug + ".json"].default) {
+      assert.equal(Object.hasOwn(product.measurements, "cost"), false, product.id + ": authored cost data must be removed");
+      assert.equal(Object.hasOwn(product.measurementGaps ?? {}, "cost"), false, product.id + ": obsolete cost gap");
+      assert.ok(!product.sources.some(source => source.kind === "published_equipment_price"), product.id + ": price-only source");
+      for (const figure of Object.values(product.measurements).filter(Boolean)) {
+        assert.equal(Object.hasOwn(figure, "referenceFor"), false, product.id + ": obsolete cost reference");
+        assert.equal(Object.hasOwn(figure, "priceEvidence"), false, product.id + ": obsolete price metadata");
+        assert.doesNotMatch(figure.unit, /^aud-/);
+      }
+    }
+    const html = renderToStaticMarkup(await categoryPage.default({ params: Promise.resolve({ category: category.slug }) }));
+    assert.doesNotMatch(html, /data-rating="cost"|Cost level|Cost research source|Cost: more bars|higher equipment cost/);
+    const element = page.ProductComparisonPage({ category });
+    const listing = element.props.children.find(child => child?.type === browser.ProductComparisonBrowser);
+    assert.doesNotMatch(JSON.stringify(listing.props), /costEvidence|priceEvidence|referenceFor|published_equipment_price|"id":"cost"/);
+  }
 });
 
 test("all seven categories provide verified model-specific trade-offs, real photos and exact-model evidence", () => {
@@ -105,7 +131,6 @@ test("all seven categories provide verified model-specific trade-offs, real phot
         assert.equal(new URL(figure.sourceUrl).protocol, "https:");
         assert.ok(product.sources.some(source => source.url === figure.sourceUrl), product.id + ": figure must link to its reviewed source");
         assert.equal(typeof calculateProductRating(method, figure).score, "number", product.id + ": comparable measurement basis");
-        if (method.id === "cost") assert.ok(figure.value > 0, product.id + ": no free-equipment assumption");
       }
       if (productRatingMethods(category.slug).every(method => product.measurements[method.id])) fullyMeasured++;
       for (const field of ["rank", "score", "price", "rating", "reviewCount", "comparisons"]) assert.equal(Object.hasOwn(product, field), false);
@@ -113,7 +138,7 @@ test("all seven categories provide verified model-specific trade-offs, real phot
   }
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(ids.length >= 300, "the catalogue must contain at least 300 distinct Australian products/configurations");
-  assert.ok(fullyMeasured >= 300, "at least 300 exact Australian product configurations must have all three sourced bars");
+  assert.ok(fullyMeasured >= 300, "at least 300 exact Australian product configurations must have both sourced performance and warranty bars");
   for (const olderId of ["rec-alpha-pure-rx", "enphase-iq8", "goodwe-dns-g3", "tesla-powerwall-3", "mitsubishi-electric-gs", "rheem-ambipower-mdc180", "rheem-ambiheat-hdc270", "reclaim-co2-v2", "apricus-all-in-one"]) assert.ok(!ids.includes(olderId), "older generation " + olderId);
   for (const slug of ["air-conditioning", "multi-split"]) assert.ok(guide.PRODUCT_GUIDE_CATEGORIES.find(c => c.slug === slug).options.some(p => p.brand === "Emerald"));
   assert.ok(guide.PRODUCT_GUIDE_CATEGORIES.some(category => category.options.some(product => category.options.filter(other => other.brand === product.brand).length > 1)), "distinct options from the same brand");
@@ -129,11 +154,24 @@ test("heat-pump noise and recovery are visible and use exact published test cond
     assert.equal(Object.hasOwn(product.hotWaterPerformance, "noise"), true);
     assert.equal(Object.hasOwn(product.hotWaterPerformance, "recovery"), true);
     const facts = hotWaterComparisonFacts(product.hotWaterPerformance);
+    assert.deepEqual(product.hotWaterPerformance, datasets["./product-guides/hot-water.json"].default.find(item => item.id === product.id).hotWaterPerformance, product.id + ": raw test metadata survives the JSON boundary");
     assert.deepEqual(listing.props.products.find(item => item.id === product.id).hotWaterFacts, facts);
     const card = html.split('id="' + product.id + '"')[1].split("</article>")[0];
     assert.ok(card.includes("Noise"));
+    assert.ok(card.includes(facts.noise));
+    assert.equal(facts.noise, product.hotWaterPerformance.noise ? `${product.hotWaterPerformance.noise.value} dB` : "Not published for this model");
     assert.ok(card.includes("Reheat 100 litres"));
     assert.ok(card.includes(facts.recovery));
+    const noise = product.hotWaterPerformance.noise;
+    if (noise) {
+      // Combined noise/recovery rows can link their recovery source; both original
+      // documents remain available in the product's source list below.
+      const detail = product.technicalSpecs.find(spec => /Noise and heating test/.test(spec.label));
+      assert.ok(detail, product.id + ": simplified card must retain the sourced noise test in Specs");
+      assert.ok(detail.value.includes(`${noise.value} dB(A)`), product.id + ": original noise number");
+      assert.ok(detail.value.includes(noise.distanceMetres === null ? "test distance not stated" : `at ${noise.distanceMetres} m`), product.id + ": original test distance");
+      assert.ok(detail.value.includes(noise.metric === "sound-pressure" ? "sound pressure" : noise.metric === "sound-power" ? "sound power" : "pressure/power method not stated"), product.id + ": original measurement type");
+    }
     for (const figure of [product.hotWaterPerformance.noise, product.hotWaterPerformance.recovery].filter(Boolean)) {
       assert.equal(new URL(figure.sourceUrl).protocol, "https:");
       assert.ok(product.sources.some(source => source.url === figure.sourceUrl), product.id + ": performance source");
@@ -177,12 +215,12 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
       assert.equal(Object.hasOwn(product, "fit"), false);
       assert.ok(product.pros.length);
       assert.ok(Array.isArray(product.cons));
-      const cost = product.ratings.find(rating => rating.id === "cost");
-      assert.equal(cost.measurement, null, "equipment price evidence must stay on the server");
+      assert.equal(product.ratings.length, 2);
+      assert.ok(product.ratings.every(rating => rating.id !== "cost"));
       assert.ok(!product.sources.some(source => source.kind === "published_equipment_price"));
       assert.doesNotMatch(JSON.stringify(product), /(?:A?\$|AUD\s*)\s*\d/, product.id + ": public price anchor");
     }
-    assert.doesNotMatch(JSON.stringify(listing.props.methods), /maximum|aud-|inverter-unit-gst|\$/, "private cost rulers do not cross the client boundary");
+    assert.doesNotMatch(JSON.stringify(listing.props.methods), /maximum|aud-|inverter-unit-gst|\$/, "only plain performance and warranty methods cross the client boundary");
   }
   const html = renderToStaticMarkup(await overview.default());
   assert.equal((html.match(/<article /g) || []).length, guide.PRODUCT_GUIDE_CATEGORIES[0].options.length, "entry page goes directly to solar tiles");
@@ -193,6 +231,16 @@ test("missing verified benefits are rejected instead of silently showing an empt
   const category = guide.PRODUCT_GUIDE_CATEGORIES[0];
   const product = { ...category.options[0], ratings: [], pros: [] };
   assert.throws(() => renderToStaticMarkup(jsx.jsx(browser.ProductComparisonBrowser, { products: [product], methods: productRatingMethods(category.slug) })), /Missing verified benefits/);
+});
+
+test("rebate intake is shown only with hot-water products without gating their immediate cards", async () => {
+  for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
+    const html = renderToStaticMarkup(await categoryPage.default({ params: Promise.resolve({ category: category.slug }) }));
+    assert.equal((html.match(/data-testid="product-rebate-checker"/g) || []).length, category.slug === "hot-water" ? 1 : 0);
+    assert.equal((html.match(/data-product-rebates=/g) || []).length, category.slug === "hot-water" ? category.options.length : 0);
+    assert.equal((html.match(/<article /g) || []).length, category.options.length);
+    assert.equal((html.match(/<img /g) || []).length, category.options.length);
+  }
 });
 
 test("solar trade-offs use actual product differences rather than forced numerical or generic filler", () => {
@@ -232,20 +280,18 @@ test("current battery variants and Earthworker equipment keep their distinct ide
   assert.equal(earthworker.measurements.capacity.value, 250);
 });
 
-test("EV chargers distinguish supply limits and retain exact-model cost and warranty evidence", () => {
+test("EV chargers distinguish supply limits and retain exact-model power and warranty evidence", () => {
   const chargers = guide.PRODUCT_GUIDE_CATEGORIES.find(category => category.slug === "ev-chargers").options;
   const glo = chargers.find(product => product.id === "myenergi-zappi-glo-7");
   const small = chargers.find(product => product.id === "fronius-wattpilot-flex-home-11c6");
   const large = chargers.find(product => product.id === "fronius-wattpilot-flex-home-22c6");
-  assert.ok(glo.measurements.cost?.value > 0);
   if (glo.measurements.warranty) assert.equal(glo.measurements.warranty.basisId, "main-product-parts", "generic accessories are not the main charger warranty");
   assert.equal(small.measurements.chargingPower.value, 11);
   assert.equal(large.measurements.chargingPower.value, 22);
   assert.ok(small.cons.some(text => /single-phase.*3\.68 kW/.test(text)));
   assert.ok(large.cons.some(text => /single-phase.*7\.36 kW/.test(text)));
-  for (const product of [small, large]) if (product.measurements.cost) assert.equal(product.measurements.cost.basisId, "ev-charger-unit-gst");
   assert.ok(small.cons.some(text => /Cannot send the car/.test(text)));
-  assert.deepEqual(productRatingMethods("ev-chargers").map(method => method.id), ["cost", "chargingPower", "warranty"]);
+  assert.deepEqual(productRatingMethods("ev-chargers").map(method => method.id), ["chargingPower", "warranty"]);
 });
 
 test("Haier's latest dated specification supplies the exact plug rating instead of undated web copy", () => {

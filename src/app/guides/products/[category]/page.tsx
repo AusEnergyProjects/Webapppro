@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: ProductGuidePageProps) {
   return buildPlatformMetadata({
     path: `/guides/products/${category.slug}`,
     title: `Compare ${category.title} | Australian Energy Assessments`,
-    description: `Compare ${category.title.toLowerCase()} with product photos, simple pros and cons, visual ratings and sourced technical specs. See current models from established brands side by side.`,
+    description: category.slug === "hot-water" ? "Compare heat-pump tank sizes, noise and reheating with product photos and plain pros and cons. Check model rebates using your postcode and the hot-water system you are replacing." : `Compare ${category.title.toLowerCase()} with product photos, simple pros and cons, visual ratings and sourced technical specs. See current models from established brands side by side.`,
   });
 }
 

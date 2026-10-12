@@ -4,14 +4,14 @@ import { JsonLd } from "./JsonLd";
 import { ProductComparisonBrowser } from "./ProductComparisonBrowser";
 import { PRODUCT_GUIDE_CATEGORIES, PRODUCT_GUIDE_REVIEW_DATE, type ProductGuideCategory } from "@/lib/product-guides";
 import { PUBLIC_SITE } from "@/lib/public-site";
-import { calculateProductRating, productRatingMethods, publicProductRating } from "@/lib/product-ratings";
+import { calculateProductRating, productRatingMethods } from "@/lib/product-ratings";
 import { hotWaterComparisonFacts } from "@/lib/product-hot-water";
 const CATEGORY_LABELS: Record<string, string> = { solar: "Solar panels", inverters: "Inverters", batteries: "Batteries", "hot-water": "Heat-pump hot water", "air-conditioning": "Aircon", "multi-split": "Multi-room aircon", "ev-chargers": "EV chargers" };
 
 export function ProductComparisonPage({ category, overview = false }: { category: ProductGuideCategory; overview?: boolean }) {
   const path = `/guides/products${overview ? "" : `/${category.slug}`}`;
   const methods = productRatingMethods(category.slug);
-  const products = [...category.options].sort((a, b) => a.name.localeCompare(b.name, "en-AU")).map(({ id, name, brand, image, pros, cons, warning, sources, checkedAt, technicalSpecs, freshness, measurements, measurementGaps, hotWaterPerformance }) => ({ id, name, brand, image, pros, cons, warning, sources: sources.filter(source => source.kind !== "published_equipment_price"), checkedAt, technicalSpecs, freshness, ratings: methods.map(method => publicProductRating(calculateProductRating(method, measurements[method.id], measurementGaps?.[method.id]))), ...(category.slug === "hot-water" ? { hotWaterFacts: hotWaterComparisonFacts(hotWaterPerformance ?? { noise: null, recovery: null }) } : {}) }));
+  const products = [...category.options].sort((a, b) => a.name.localeCompare(b.name, "en-AU")).map(({ id, name, brand, image, pros, cons, warning, sources, checkedAt, technicalSpecs, freshness, measurements, measurementGaps, hotWaterPerformance }) => ({ id, name, brand, image, pros, cons, warning, sources, checkedAt, technicalSpecs, freshness, ratings: methods.map(method => calculateProductRating(method, measurements[method.id], measurementGaps?.[method.id])), ...(category.slug === "hot-water" ? { hotWaterFacts: hotWaterComparisonFacts(hotWaterPerformance ?? { noise: null, recovery: null }) } : {}) }));
   return <main className="wrap product-comparison-page">
     <SiteHeader active="products" />
     <header className="product-comparison-hero"><h1>Compare products</h1><Link href={category.comparePath}>{category.slug === "ev-chargers" ? "Compare electricity plans" : category.comparePath === "/gas-compare" ? "Check upgrade savings" : "Check solar savings"} ↗</Link></header>

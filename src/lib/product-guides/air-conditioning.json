@@ -54,15 +54,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/mitsubishi-electric-mszap35vgkd2kit-3.5kw-wi-fi-wa"
     },
     "measurements": {
-      "cost": {
-        "value": 1282.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP35VGKD2-A2 / MUZ-AP35VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-3-5kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -198,16 +189,6 @@
       "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/MSZ-EF_W_front-1200x800.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 1505.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-EF35VGKDW / MUZ-EF35VGD",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Same-generation range price reference; selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "MSZ-EF35VGKDW-A1 / MUZ-EF35VGD-A1"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -343,15 +324,6 @@
       "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/02/MFZ-KW-VG-front-1920x1440-1-1200x900.png"
     },
     "measurements": {
-      "cost": {
-        "value": 2162.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MFZ-KW35VGK-A1/ MUFZ-KW35VG2-A1",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-floor-console-mfzkw35kit",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -481,15 +453,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/02/WebHeroImages_AVANTI_630x341_12.24-1.jpg"
     },
     "measurements": {
-      "cost": {
-        "value": 1271.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK12ZSA-WF1 | DXC12ZSA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industry-avanti-3-5kw-reverse-cycle-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -605,15 +568,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/12/WebCategoryImages_AVANTIPLUS_588x330_12.24.png"
     },
     "measurements": {
-      "cost": {
-        "value": 1439.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK35ZSXA-WF / SRC35ZSXA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-avanti-plus-3-5kw-split-system-srk35zsxa-wf",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -741,15 +695,6 @@
       "sourceUrl": "https://www.mhiaa.com.au/wp-content/uploads/2024/01/WebHeroImages_768x341_BRONTE_12.24.png"
     },
     "measurements": {
-      "cost": {
-        "value": 2275.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK24ZRA-WF1 / DXC24ZRA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-bronte-7-1kw-split-system-dxk24zra-wf1-built-in-wi-fi",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -872,15 +817,6 @@
       "sourceUrl": "https://assets.generalairstage.com.au/assets-au/images/default-source/shared-album/product-tiles/astg09kmtc673304b5-2f59-46d2-aef2-838e2e37218a.jpg?sfvrsn=cf2505f_7"
     },
     "measurements": {
-      "cost": {
-        "value": 1343,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SET-ASTG09KMTC-NXT complete indoor/outdoor system with supplied UTY-NXT phone control",
-        "basis": "Exact public Australian complete equipment-system price including GST under seller trading terms, before rebates; excludes installation. Current direct listing reviewed 10 October 2026, rather than older search-cache amounts.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/fujitsu-25kw-lifestyle-next-wall-mounted-air-conditioner-set-astg09kmtc-nxt/",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -1000,15 +936,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/assets/full/AS09S0S.png?20251112084440"
     },
     "measurements": {
-      "cost": {
-        "value": 958,
-        "unit": "aud-system",
-        "variant": "AS12S0N / AS12S0U, AS12S0S 3.5 kW kit with wireless controller",
-        "basis": "Retailer complete 3.5 kW indoor/outdoor/controller equipment kit including GST, excluding installation and freight, before rebates. Listed price checked 10 October 2026; may change.",
-        "basisId": "single-ac-pair-gst",
-        "sourceUrl": "https://www.climatehvac.com.au/lg-dualcool-as12s0s-ai-air-standard-3.5kw-wall-spl",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 5,
@@ -1092,7 +1019,6 @@
       "sourceUrl": "https://images.samsung.com/is/image/samsung/p6pim/au/ar12dxeanwknsa/gallery/au-wall-mount-ar12dxeanwknsa-geo-windfree--purification-split-system-ai-smart-----kw-white-554025824?$Q90_684_547_JPG$"
     },
     "measurements": {
-      "cost": null,
       "efficiency": null,
       "warranty": {
         "value": 5,
@@ -1150,10 +1076,6 @@
       "WindFree maintains an already-cooled room; normal airflow is needed to cool it down first."
     ],
     "measurementGaps": {
-      "cost": {
-        "reason": "No public GST-inclusive complete indoor/outdoor equipment price was confirmed for this exact Australian pair.",
-        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
-      },
       "efficiency": {
         "reason": "The exact Australian matched pair's mixed-climate heating star rating was not verified.",
         "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
@@ -1191,7 +1113,6 @@
       "sourceUrl": "https://cdn-ildhael.nitrocdn.com/aKMCfaOLHDnhatqFbSQJwsdFlbIqiwFs/assets/images/optimized/rev-e1102b5/www.emerald.com.au/wp-content/uploads/2025/11/Emerald-Air-Con-Split-System-indoor-unit-front.jpg"
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -1265,13 +1186,7 @@
     "cons": [
       "Phone control needs the optional AC Link accessory; it is not built in.",
       "Labour cover ends after two years, although parts cover lasts five years."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "A public complete equipment price before rebates was not confirmed for this exact system.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/06/Emerald-Air-Con-Split-System-data-sheet.pdf"
-      }
-    }
+    ]
   },
   {
     "id": "lg-dualcool-ai-deluxe",
@@ -1310,15 +1225,6 @@
       "sourceUrl": "https://www.climatehvac.com.au/lg-dualcool-ah12s1s-ai-air-deluxe-3.5kw-wall-split"
     },
     "measurements": {
-      "cost": {
-        "value": 1133,
-        "unit": "aud-system",
-        "variant": "AH12S1N / AH12S1U, AH12S1S 3.5 kW kit with wireless controller",
-        "basis": "Retailer complete 3.5 kW indoor/outdoor/controller equipment kit including GST, excluding installation and freight, before rebates. Listed price checked 10 October 2026; may change.",
-        "basisId": "single-ac-pair-gst",
-        "sourceUrl": "https://www.climatehvac.com.au/lg-dualcool-ah12s1s-ai-air-deluxe-3.5kw-wall-split",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -1438,15 +1344,6 @@
       "sourceUrl": "https://a.storyblok.com/f/293064688899482/1080x1080/e7913b544b/ac-split-px-series-front-ima.png"
     },
     "measurements": {
-      "cost": {
-        "value": 1007.6,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "HSNRPX35: HINRPX35M / HONRPX35 complete matched wall-split equipment system",
-        "basis": "Exact matched split-system equipment price including GST, before rebates and excluding installation. Current direct retailer listing is 916 excluding GST; GST-inclusive figure verified on the same listing.",
-        "sourceUrl": "https://gphvac.com.au/product/rin-hsnrpx35/",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -1566,15 +1463,6 @@
       "Uses low wall space that a high-mounted unit would leave free for furniture."
     ],
     "measurements": {
-      "cost": {
-        "value": 2063.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FVXM35YVMA / RXM35YFVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-3-5kw-floor-standing-console-system-fvxm35y",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -1708,15 +1596,6 @@
     ],
     "cons": [],
     "measurements": {
-      "cost": {
-        "value": 1451.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z35AKRW / CU-Z35AKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-3-5kw-reverse-cycle-deluxe-series-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -1821,15 +1700,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1122.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP25VGKD2-A2 / MUZ-AP25VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-2-5kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -1929,15 +1799,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1540.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP42VGKD2-A2 / MUZ-AP42VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-4-2kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2037,15 +1898,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1716.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP50VGKD2-A2 / MUZ-AP50VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-5kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2145,15 +1997,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 2001.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP60VGKD2-A2 / MUZ-AP60VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-6-0kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2255,15 +2098,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 2195.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP71VGKD2-A2 / MUZ-AP71VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-7-1kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2365,15 +2199,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 2703.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-AP80VGKD2-A2 / MUZ-AP80VGD2-A2",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-ap-series-7-8kw-reverse-cycle-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2475,16 +2300,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1505.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-EF35VGKDW / MUZ-EF35VGD",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Same-generation range price reference; selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "MSZ-EF25VGKDW-A1 / MUZ-EF25VGD-A1"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2586,16 +2401,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1505.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-EF35VGKDW / MUZ-EF35VGD",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Same-generation range price reference; selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "MSZ-EF42VGKDW-A1 / MUZ-EF42VGD-A1"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2697,16 +2502,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1505.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MSZ-EF35VGKDW / MUZ-EF35VGD",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Same-generation range price reference; selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "MSZ-EF50VGKDW-A1 / MUZ-EF50VGD-A1"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2808,15 +2603,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 1920.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MFZ-KW25VGK-A1 / MUFZ-KW25VG2-A1",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-2-5kw-floor-console-mfzkw25kit",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -2918,15 +2704,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 2545.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MFZ-KW42VGK-A1 / MUFZ-KW42VG2-A1",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-4-2kw-floor-console-mfzkw42kit",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -3028,15 +2805,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 2619.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MFZ-KW50VGK-A1 / MUFZ-KW50VG2-A1",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-5kw-floor-console-mfzkw50kit",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -3138,15 +2906,6 @@
     ],
     "brand": "Mitsubishi Electric",
     "measurements": {
-      "cost": {
-        "value": 3239.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "MFZ-KW60VG-A1 / MUFZ-KW60VG2-A1",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-6kw-floor-console-air-conditioner-system-mfzkw60kit",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -3248,15 +3007,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 952.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK06ZSA-WF1 | DXC06ZSA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industry-avanti-2-0kw-reverse-cycle-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -3356,15 +3106,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 1075.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK09ZSA-WF1 | DXC09ZSA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-avanti-2-5kw-reverse-cycle-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -3464,15 +3205,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 1627.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK18ZSA-WF1 | DXC18ZSA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industry-avanti-5-0kw-reverse-cycle-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -3572,15 +3304,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 1114.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK20ZSXA-WF / SRC20ZSXA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-avanti-plus-2kw-split-system-srk20zsxa-wf",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 4,
         "unit": "zoned-heating-stars",
@@ -3682,15 +3405,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 1234.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK25ZSXA-WF / SRC25ZSXA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-avanti-plus-2-5kw-split-system-srk25zsxa-wf",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 4,
         "unit": "zoned-heating-stars",
@@ -3792,15 +3506,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 1828.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK50ZSXA-WF / SRC50ZSXA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-avanti-plus-5kw-split-system-srk50zsxa-wf",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -3902,15 +3607,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 2254.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK60ZSXA-WF / SRC60ZSXA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-avanti-plus-6kw-split-system-srk60zsxa-wf",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -4012,15 +3708,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 2134.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK21ZRA-WF1 / DXC21ZRA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-bronte-6-3kw-split-system-dxk21zra-wf1-built-in-wi-fi",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -4122,15 +3809,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 2819.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK28ZRA-WF1 / DXC28ZRA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-bronte-8kw-split-system-dxk28zra-wf1-built-in-wi-fi",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -4232,15 +3910,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 3497.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "DXK33ZRA-WF1 / DXC33ZRA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-bronte-9-5kw-split-system-dxk33zra-wf1-built-in-wi-fi",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -4342,15 +4011,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 3988.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK100ZR-WF / FDCA100VNA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-bronte-10kw-split-system-srk100avnawzrf-1-phase",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 1.5,
         "unit": "zoned-heating-stars",
@@ -4452,15 +4112,6 @@
     ],
     "brand": "Mitsubishi Heavy Industries",
     "measurements": {
-      "cost": {
-        "value": 4115.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "SRK100ZR-WF / FDCA100VSA-W",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-heavy-industries-bronte-10kw-split-system-srk100avsawzrf-3-phase",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 1.5,
         "unit": "zoned-heating-stars",
@@ -4562,15 +4213,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1150.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM20AVMA / RXM20AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2-2kw-inverter-split-system-air-conditioner-alira-x-ftxm20yvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 4,
         "unit": "zoned-heating-stars",
@@ -4672,15 +4314,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1210.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM25AVMA / RXM25AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-alira-x-2-5kw-inverter-split-system-ftxm25yvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 4,
         "unit": "zoned-heating-stars",
@@ -4782,15 +4415,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1470.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM35AVMA / RXM35AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-3-5kw-alira-x-inverter-split-system-ftxm35yvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -4892,15 +4516,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1926.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM46AVMA / RXM46AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-4-6kw-alira-x-inverter-split-system-ftxm46wvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -5002,15 +4617,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1980.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM50AVMA / RXM50AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-5kw-alira-x-inverter-split-system-ftxm50wvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3.5,
         "unit": "zoned-heating-stars",
@@ -5112,15 +4718,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 2211.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM60AVMA / RXM60AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-6kw-alira-x-inverter-split-system-ftxm60wvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -5222,15 +4819,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 2476.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXM71AVMA / RXM71AVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-7-1kw-alira-x-inverter-split-system-ftxm71wvma",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -5332,15 +4920,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1022.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV20WVMA / RXV20WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-split-systems-cora-series-ftxv20wvma-2kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -5440,15 +5019,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1080.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV25WVMA / RXV25WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-split-systems-cora-series-ftxv25wvma-2-5kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -5548,15 +5118,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1307.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV35WVMA / RXV35WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-inverter-split-system-cora-ftxv35wvma-3-5kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -5656,15 +5217,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1689.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV46WVMA / RXV46WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-inverter-split-system-cora-ftxv46wvma-4-6kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -5764,15 +5316,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1739.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV50WVMA / RXV50WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-inverter-split-system-cora-ftxv50wvma-5kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -5872,15 +5415,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1948.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV60WVMA / RXV60WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-inverter-split-system-cora-ftxv60wvma-6kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -5980,15 +5514,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 2137.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FTXV71WVMA / RXV71WVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-inverter-split-system-cora-ftxv71wvma-7-1kw",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -6088,15 +5613,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 1810.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FVXM25YVMA / RXM25YFVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2-5kw-floor-standing-console-system-fvxm25y",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -6198,15 +5714,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 2315.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FVXM45YVMA / RXM45YFVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-4-5kw-floor-standing-console-system-fvxm45y",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -6308,15 +5815,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 2452.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FVXM50YVMA / RXM50YFVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-5kw-floor-standing-console-system-fvxm50y",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -6418,15 +5916,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 3179.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FVXM60YVMA / RXM60YFVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-6kw-floor-standing-console-system-fvxm60y",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -6528,15 +6017,6 @@
     ],
     "brand": "Daikin",
     "measurements": {
-      "cost": {
-        "value": 3622.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "FVXM71YVMA / RXM71YFVMA",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/daikin-7-1kw-floor-standing-console-system-fvxm71y",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -6638,15 +6118,6 @@
     ],
     "brand": "Panasonic",
     "measurements": {
-      "cost": {
-        "value": 1201.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z25AKRW / CU-Z25AKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-deluxe-series-reverse-cycle-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -6748,15 +6219,6 @@
     ],
     "brand": "Panasonic",
     "measurements": {
-      "cost": {
-        "value": 1719.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z42AKRW / CU-Z42AKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-4-2kw-reverse-cycle-deluxe-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -6858,15 +6320,6 @@
     ],
     "brand": "Panasonic",
     "measurements": {
-      "cost": {
-        "value": 1937.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z50AKRW / CU-Z50AKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-0kw-reverse-cycle-deluxe-series-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -6968,15 +6421,6 @@
     ],
     "brand": "Panasonic",
     "measurements": {
-      "cost": {
-        "value": 2120.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z60AKRW / CU-Z60AKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-6kw-reverse-cycle-deluxe-series-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 3,
         "unit": "zoned-heating-stars",
@@ -7078,15 +6522,6 @@
     ],
     "brand": "Panasonic",
     "measurements": {
-      "cost": {
-        "value": 2378.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z71AKRW / CU-Z71AKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-7-1kw-deluxe-series-reverse-cycle-split-system",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",
@@ -7188,15 +6623,6 @@
     ],
     "brand": "Panasonic",
     "measurements": {
-      "cost": {
-        "value": 3019.0,
-        "unit": "aud-system",
-        "basisId": "single-ac-pair-gst",
-        "variant": "CS-Z80YKR / CU-Z80YKR",
-        "basis": "Listed complete indoor and outdoor equipment pair including supplied controller and GST; installation and delivery excluded, before rebates. Exact pair matched to the maker table.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-8kw-reverse-cycle-deluxe-split-air-conditioner",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 2.5,
         "unit": "zoned-heating-stars",

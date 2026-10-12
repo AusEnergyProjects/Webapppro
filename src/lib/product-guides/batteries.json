@@ -61,32 +61,11 @@
       {
         "title": "Australian equipment listing: AlphaESS Smile M5 5kW Single Phase Hybrid Inverter 2-MPPT 2-Strings SMILE-M5-S-INV (AS4777-2 2020)",
         "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaESS Smile M5 5kWh Battery (SMILE-M-BAT-5P)",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kwh-battery-smile-m-bat-5p",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaESS Smile M5 Floor Stand Base",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-floor-stand-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 611.38,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SMILE-M5-S-INV + 2 x SMILE-M-BAT-5P + required mounting hardware",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes separately listed floor base. Maker controller packing list supplies Wi-Fi and grid/PV CTs. Installation and site wiring excluded. Actual equipment total A$6113.80 divided by 10 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -225,32 +204,11 @@
       {
         "title": "Australian equipment listing: AlphaESS Smile M5 5kW Single Phase Hybrid Inverter 2-MPPT 2-Strings SMILE-M5-S-INV (AS4777-2 2020)",
         "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaEss SMILE-M-BAT-13.9P   13.99kWh, usable 13.99kWh LV Battery 100% DOD IP65, compatible with ES-Alpha-Smile-M5-S-INV (Support either Front or stackable installation for the 2nd battery. An extension box is required for each additional battery)",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m-bat-13-9p-13-99kwh-usable-13-99kwh-lv-battery-100-dod-ip65-compatible-with-es-alpha-smile-m5-s-inv-support-either-front-or-stackable-installation-for-the-2nd-battery-an-extension-box-is-required-for-each-additional-battery",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaESS Smile M5 Floor Stand Base",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-floor-stand-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 380.7934,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SMILE-M5-S-INV + 1 x SMILE-M-BAT-13.9P + required mounting hardware",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes separately listed floor base. Maker controller packing list supplies Wi-Fi and grid/PV CTs. Installation and site wiring excluded. Actual equipment total A$5327.30 divided by 13.99 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -390,38 +348,11 @@
       {
         "title": "Australian equipment listing: AlphaESS Smile M5 5kW Single Phase Hybrid Inverter 2-MPPT 2-Strings SMILE-M5-S-INV (AS4777-2 2020)",
         "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaEss SMILE-M-BAT-13.9P   13.99kWh, usable 13.99kWh LV Battery 100% DOD IP65, compatible with ES-Alpha-Smile-M5-S-INV (Support either Front or stackable installation for the 2nd battery. An extension box is required for each additional battery)",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m-bat-13-9p-13-99kwh-usable-13-99kwh-lv-battery-100-dod-ip65-compatible-with-es-alpha-smile-m5-s-inv-support-either-front-or-stackable-installation-for-the-2nd-battery-an-extension-box-is-required-for-each-additional-battery",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaESS Smile M5 Floor Stand Base",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-floor-stand-base",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Alpha ESS Smile M5 13.99 kWh Secondary Battery Extension Box w/top cover w/connecting plates (forward installation)",
-        "url": "https://dzelectricalproducts.com/products/alpha-ess-smile-m5-13-99-kwh-secondary-battery-extension-box-w-top-cover-w-connecting-plates-forward-installation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 319.1887,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SMILE-M5-S-INV + 2 x SMILE-M-BAT-13.9P + required mounting hardware",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes separately listed floor base and one secondary battery extension box. Maker controller packing list supplies Wi-Fi and grid/PV CTs. Installation and site wiring excluded. Actual equipment total A$8930.90 divided by 27.98 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -560,32 +491,11 @@
       {
         "title": "Australian equipment listing: AlphaESS Smile M5 5kW Single Phase Hybrid Inverter 2-MPPT 2-Strings SMILE-M5-S-INV (AS4777-2 2020)",
         "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaESS Smile M5 5kWh Battery (SMILE-M-BAT-5P)",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kwh-battery-smile-m-bat-5p",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: AlphaESS Smile M5 Floor Stand Base",
-        "url": "https://dzelectricalproducts.com/products/alphaess-smile-m5-floor-stand-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 822.36,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SMILE-M5-S-INV + 1 x SMILE-M-BAT-5P + required mounting hardware",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes separately listed floor base. Maker controller packing list supplies Wi-Fi and grid/PV CTs. Installation and site wiring excluded. Actual equipment total A$4111.80 divided by 5 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/alphaess-smile-m5-5kw-single-phase-hybrid-inverter-2-mppt-2-strings-smile-m5-s-inv-as4777-2-2020",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -707,19 +617,7 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Power Module 6kW AC Couple (Part No. A5101GZ1) w/Wi-Fi",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: *AC Coupled Only* Anker Solix X1 Power Sensor SDM230-Modbus v1 100A 1P Meter (Part no. A5420G21)",
-        "url": "https://bessaustralia.com.au/products/ac-coupled-only-anker-solix-x1-power-sensor-sdm230-modbus-v1-100a-1p-meter-part-no-a5420g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -735,16 +633,6 @@
       "note": "Explicit Australian AC-coupled X1 commercial availability from that date."
     },
     "measurements": {
-      "cost": {
-        "value": 520.6567,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-P6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. Includes required SDM230 power sensor. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7809.85 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 AC 6 kW + 10 kWh"
-      },
       "efficiency": {
         "value": 90.2,
         "unit": "ac-round-trip-percent",
@@ -873,19 +761,7 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Power Module 6kW AC Couple (Part No. A5101GZ1) w/Wi-Fi",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: *AC Coupled Only* Anker Solix X1 Power Sensor SDM230-Modbus v1 100A 1P Meter (Part no. A5420G21)",
-        "url": "https://bessaustralia.com.au/products/ac-coupled-only-anker-solix-x1-power-sensor-sdm230-modbus-v1-100a-1p-meter-part-no-a5420g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -901,15 +777,6 @@
       "note": "Explicit Australian AC-coupled X1 commercial availability from that date."
     },
     "measurements": {
-      "cost": {
-        "value": 520.6567,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-P6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. Includes required SDM230 power sensor. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7809.85 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 90.2,
         "unit": "ac-round-trip-percent",
@@ -1038,19 +905,7 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Power Module 6kW AC Couple (Part No. A5101GZ1) w/Wi-Fi",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: *AC Coupled Only* Anker Solix X1 Power Sensor SDM230-Modbus v1 100A 1P Meter (Part no. A5420G21)",
-        "url": "https://bessaustralia.com.au/products/ac-coupled-only-anker-solix-x1-power-sensor-sdm230-modbus-v1-100a-1p-meter-part-no-a5420g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -1066,16 +921,6 @@
       "note": "Explicit Australian AC-coupled X1 commercial availability from that date."
     },
     "measurements": {
-      "cost": {
-        "value": 520.6567,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-P6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. Includes required SDM230 power sensor. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7809.85 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 AC 6 kW + 20 kWh"
-      },
       "efficiency": {
         "value": 90.2,
         "unit": "ac-round-trip-percent",
@@ -1205,19 +1050,7 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Power Module 6kW AC Couple (Part No. A5101GZ1) w/Wi-Fi",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: *AC Coupled Only* Anker Solix X1 Power Sensor SDM230-Modbus v1 100A 1P Meter (Part no. A5420G21)",
-        "url": "https://bessaustralia.com.au/products/ac-coupled-only-anker-solix-x1-power-sensor-sdm230-modbus-v1-100a-1p-meter-part-no-a5420g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -1233,16 +1066,6 @@
       "note": "Explicit Australian AC-coupled X1 commercial availability from that date."
     },
     "measurements": {
-      "cost": {
-        "value": 520.6567,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-P6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. Includes required SDM230 power sensor. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7809.85 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 AC 6 kW + 25 kWh"
-      },
       "efficiency": {
         "value": 90.2,
         "unit": "ac-round-trip-percent",
@@ -1372,19 +1195,7 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Power Module 6kW AC Couple (Part No. A5101GZ1) w/Wi-Fi",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: *AC Coupled Only* Anker Solix X1 Power Sensor SDM230-Modbus v1 100A 1P Meter (Part no. A5420G21)",
-        "url": "https://bessaustralia.com.au/products/ac-coupled-only-anker-solix-x1-power-sensor-sdm230-modbus-v1-100a-1p-meter-part-no-a5420g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -1400,16 +1211,6 @@
       "note": "Explicit Australian AC-coupled X1 commercial availability from that date."
     },
     "measurements": {
-      "cost": {
-        "value": 520.6567,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-P6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. Includes required SDM230 power sensor. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7809.85 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 AC 6 kW + 30 kWh"
-      },
       "efficiency": {
         "value": 90.2,
         "unit": "ac-round-trip-percent",
@@ -1539,19 +1340,7 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Power Module 6kW AC Couple (Part No. A5101GZ1) w/Wi-Fi",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: *AC Coupled Only* Anker Solix X1 Power Sensor SDM230-Modbus v1 100A 1P Meter (Part no. A5420G21)",
-        "url": "https://bessaustralia.com.au/products/ac-coupled-only-anker-solix-x1-power-sensor-sdm230-modbus-v1-100a-1p-meter-part-no-a5420g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -1567,16 +1356,6 @@
       "note": "Explicit Australian AC-coupled X1 commercial availability from that date."
     },
     "measurements": {
-      "cost": {
-        "value": 520.6567,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-P6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. Includes required SDM230 power sensor. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7809.85 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-power-module-6kw-ac-couple-part-no-a5101gz1-w-wi-fi",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 AC 6 kW + 5 kWh"
-      },
       "efficiency": {
         "value": 90.2,
         "unit": "ac-round-trip-percent",
@@ -1710,27 +1489,11 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Hybrid Inverter Single-Phase 6kW 2 MPPT 2 Strings w/Wi-Fi w/DDSU666-1CT100A (Part No. A5102G/TZ4) [X1-H6K-S]",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 522.362,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-H6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. DDSU666 meter included with hybrid controller. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7835.43 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 Hybrid 6 kW + 10 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -1862,26 +1625,11 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Hybrid Inverter Single-Phase 6kW 2 MPPT 2 Strings w/Wi-Fi w/DDSU666-1CT100A (Part No. A5102G/TZ4) [X1-H6K-S]",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 522.362,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-H6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. DDSU666 meter included with hybrid controller. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7835.43 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2013,27 +1761,11 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Hybrid Inverter Single-Phase 6kW 2 MPPT 2 Strings w/Wi-Fi w/DDSU666-1CT100A (Part No. A5102G/TZ4) [X1-H6K-S]",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 522.362,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-H6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. DDSU666 meter included with hybrid controller. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7835.43 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 Hybrid 6 kW + 20 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2166,27 +1898,11 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Hybrid Inverter Single-Phase 6kW 2 MPPT 2 Strings w/Wi-Fi w/DDSU666-1CT100A (Part No. A5102G/TZ4) [X1-H6K-S]",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 522.362,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-H6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. DDSU666 meter included with hybrid controller. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7835.43 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 Hybrid 6 kW + 25 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2319,27 +2035,11 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Hybrid Inverter Single-Phase 6kW 2 MPPT 2 Strings w/Wi-Fi w/DDSU666-1CT100A (Part No. A5102G/TZ4) [X1-H6K-S]",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 522.362,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-H6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. DDSU666 meter included with hybrid controller. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7835.43 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 Hybrid 6 kW + 30 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2472,27 +2172,11 @@
       {
         "title": "Australian equipment listing: Anker SOLIX X1 Hybrid Inverter Single-Phase 6kW 2 MPPT 2 Strings w/Wi-Fi w/DDSU666-1CT100A (Part No. A5102G/TZ4) [X1-H6K-S]",
         "url": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Anker Solix X1 Energy Storage System 5kWh module HV",
-        "url": "https://dzelectricalproducts.com/products/anker-solix-x1-energy-storage-system-5kwh-module-hv",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
     "measurements": {
-      "cost": {
-        "value": 522.362,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "X1-H6K-S + three X1-B5-H blocks, 15 kWh",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Power-module floor base, wall bracket and Wi-Fi are supplied. DDSU666 meter included with hybrid controller. This reference uses one three-block column; backup switchgear and installation excluded. Actual equipment total A$7835.43 divided by 15 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/anker-solix-x1-hybrid-inverter-single-phase-6kw-2-mppt-2-strings-w-wi-fi-w-ddsu666-1ct100a-part-no-a5102g-tz4-x1-h6k-s",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Anker SOLIX X1 Hybrid 6 kW + 5 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2593,15 +2277,6 @@
       "The selected stack is 122.8 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1305.0879,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVM11.0 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$14408.17 divided by 11.04 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2704,25 +2379,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVM Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvm-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -2746,16 +2403,6 @@
       "The selected stack is 146.1 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1305.0879,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVM11.0 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$14408.17 divided by 11.04 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVM 13.8 + BCU 2.0 (13.8 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -2858,25 +2505,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVM Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvm-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -2900,16 +2529,6 @@
       "The selected stack is 169.4 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1305.0879,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVM11.0 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$14408.17 divided by 11.04 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVM 16.6 + BCU 2.0 (16.56 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3012,25 +2631,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVM Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvm-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3054,16 +2655,6 @@
       "The selected stack is 192.7 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1305.0879,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVM11.0 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$14408.17 divided by 11.04 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVM 19.3 + BCU 2.0 (19.32 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3166,25 +2757,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVM Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvm-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3207,16 +2780,6 @@
       "The selected stack is 216 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1305.0879,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVM11.0 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$14408.17 divided by 11.04 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVM 22.1 + BCU 2.0 (22.08 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3319,25 +2882,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVM Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvm-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3361,16 +2906,6 @@
       "The selected stack is 99.5 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1305.0879,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVM11.0 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$14408.17 divided by 11.04 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVM 8.3 + BCU 2.0 (8.28 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3473,25 +3008,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVM Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvm-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3515,16 +3032,6 @@
       "The selected stack is 122.8 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1673.2513,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVS7.7 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$12850.57 divided by 7.68 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVS 10.2 + BCU 2.0 (10.24 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3633,25 +3140,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVS Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvs-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3674,16 +3163,6 @@
       "The selected stack is 146.1 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1673.2513,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVS7.7 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$12850.57 divided by 7.68 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVS 12.8 + BCU 2.0 (12.8 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3792,25 +3271,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVS Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvs-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3834,16 +3295,6 @@
       "The selected stack is 76.2 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1673.2513,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVS7.7 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$12850.57 divided by 7.68 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "BYD HVS 5.1 + BCU 2.0 (5.12 kWh)"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -3952,25 +3403,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVS Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvs-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -3994,15 +3427,6 @@
       "The selected stack is 99.5 cm tall before installation clearances."
     ],
     "measurements": {
-      "cost": {
-        "value": 1673.2513,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "BYD HVS7.7 + BCU 2.0 + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes battery modules, exact 16448287-00 BCU 2.0/base, compatible three-phase Symo inverter and direct-connected meter. Grid storage equipment; extra backup switch and installation excluded. Actual equipment total A$12850.57 divided by 7.68 usable kWh.",
-        "sourceUrl": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -4111,25 +3535,7 @@
       {
         "title": "Australian equipment listing: BYD BCU 2.0 and base",
         "url": "https://solarshop.greentech.com.au/BYD-BCU-Base-for-HVS-HVM-V2.0",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: B-Box Premium HVS Battery Module",
-        "url": "https://bessaustralia.com.au/products/b-box-premium-hvs-battery-module",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -4166,7 +3572,7 @@
       {
         "title": "Australian cabinet listing; required kit price not verified",
         "url": "https://www.solarheroes.com.au/enphase-5kwh-iq-battery-5p-ac-coupled-single-three-phase-with-flexphase/",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public listing checked10October2026; cabinet alone does not establish complete kit cost"
       }
     ],
@@ -4183,7 +3589,6 @@
       "note": "Retain the new Australian FlexPhase version, distinguished from the older IQ Battery 5P without FlexPhase."
     },
     "measurements": {
-      "cost": null,
       "efficiency": null,
       "warranty": {
         "value": 15,
@@ -4259,13 +3664,7 @@
     "cons": [
       "On three phases, each unit's power is shared rather than repeated on each phase.",
       "A separate system controller is needed for blackout backup."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "Cabinet price is published, but a complete required gateway and communications package price was not verified.",
-        "sourceUrl": "https://www.solarheroes.com.au/enphase-5kwh-iq-battery-5p-ac-coupled-single-three-phase-with-flexphase/"
-      }
-    }
+    ]
   },
   {
     "id": "foxess-cq7-l2-au-1392",
@@ -4286,7 +3685,6 @@
       "This version cannot charge below freezing; the heated version is a different model."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": null,
       "warranty": null,
       "capacity": {
@@ -4384,10 +3782,6 @@
       }
     ],
     "measurementGaps": {
-      "cost": {
-        "reason": "A complete CQ7 battery, controller and required controls price was not verified.",
-        "sourceUrl": "https://au.fox-ess.com/products/battery/56"
-      },
       "warranty": {
         "reason": "Current AU terms state performance cover but do not clearly separate a CQ7 hardware fault term.",
         "sourceUrl": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20260514/AUBATTERYWARRANTYV2.7A.pdf"
@@ -4427,7 +3821,7 @@
       {
         "title": "Australian aGate supplier listing and account-only pricing",
         "url": "https://acsolarwarehouse.com/shop/energy-storage-franklinwh-180/agt-r1v1-au-franklinwh-agate-single-phase-gateway-25743",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Checked10October2026; required gateway price requires supplier login"
       }
     ],
@@ -4443,7 +3837,6 @@
       "note": "Introduces enhanced 15 kWh aPower generation for Australia and New Zealand."
     },
     "measurements": {
-      "cost": null,
       "efficiency": null,
       "warranty": {
         "value": 12,
@@ -4523,13 +3916,7 @@
     "cons": [
       "Needs a separate aGate control box.",
       "Each battery supplies 5 kW continuously, even though it stores 15 kWh."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "The Australian supplier requires login for aGate pricing; no verified complete current 15 kWh equipment price.",
-        "sourceUrl": "https://acsolarwarehouse.com/shop/energy-storage-franklinwh-180/agt-r1v1-au-franklinwh-agate-single-phase-gateway-25743"
-      }
-    }
+    ]
   },
   {
     "id": "fronius-reserva",
@@ -4576,25 +3963,7 @@
       {
         "title": "Australian equipment listing: RESERVA BMS + BASE AUS-NZ",
         "url": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: RESERVA BATTERY MODULE 3.15 kWh AUS-NZ",
-        "url": "https://bessaustralia.com.au/products/reserva-battery-module-3-15-kwh-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -4610,15 +3979,6 @@
       "note": "New Reserva storage generation."
     },
     "measurements": {
-      "cost": {
-        "value": 1158.1211,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "Reserva 12.63 kWh + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes four battery modules, Reserva BMS/base, compatible three-phase inverter and direct-connected meter. Grid storage equipment; external backup switch and installation excluded. Actual equipment total A$14627.07 divided by 12.63 usable kWh.",
-        "sourceUrl": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -4735,25 +4095,7 @@
       {
         "title": "Australian equipment listing: RESERVA BMS + BASE AUS-NZ",
         "url": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: RESERVA BATTERY MODULE 3.15 kWh AUS-NZ",
-        "url": "https://bessaustralia.com.au/products/reserva-battery-module-3-15-kwh-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -4769,16 +4111,6 @@
       "note": "New Reserva storage generation."
     },
     "measurements": {
-      "cost": {
-        "value": 1158.1211,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "Reserva 12.63 kWh + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes four battery modules, Reserva BMS/base, compatible three-phase inverter and direct-connected meter. Grid storage equipment; external backup switch and installation excluded. Actual equipment total A$14627.07 divided by 12.63 usable kWh.",
-        "sourceUrl": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Fronius Reserva 15.79 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -4895,25 +4227,7 @@
       {
         "title": "Australian equipment listing: RESERVA BMS + BASE AUS-NZ",
         "url": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: RESERVA BATTERY MODULE 3.15 kWh AUS-NZ",
-        "url": "https://bessaustralia.com.au/products/reserva-battery-module-3-15-kwh-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -4929,16 +4243,6 @@
       "note": "New Reserva storage generation."
     },
     "measurements": {
-      "cost": {
-        "value": 1158.1211,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "Reserva 12.63 kWh + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes four battery modules, Reserva BMS/base, compatible three-phase inverter and direct-connected meter. Grid storage equipment; external backup switch and installation excluded. Actual equipment total A$14627.07 divided by 12.63 usable kWh.",
-        "sourceUrl": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Fronius Reserva 6.31 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -5055,25 +4359,7 @@
       {
         "title": "Australian equipment listing: RESERVA BMS + BASE AUS-NZ",
         "url": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: RESERVA BATTERY MODULE 3.15 kWh AUS-NZ",
-        "url": "https://bessaustralia.com.au/products/reserva-battery-module-3-15-kwh-aus-nz",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: SYMO GEN24 12.0 Plus SC",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Fronius Smart Meter 63A-3",
-        "url": "https://bessaustralia.com.au/products/smart-meter-63a-3",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -5089,16 +4375,6 @@
       "note": "New Reserva storage generation."
     },
     "measurements": {
-      "cost": {
-        "value": 1158.1211,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "Reserva 12.63 kWh + Symo GEN24 12.0 Plus SC + Smart Meter 63A-3",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes four battery modules, Reserva BMS/base, compatible three-phase inverter and direct-connected meter. Grid storage equipment; external backup switch and installation excluded. Actual equipment total A$14627.07 divided by 12.63 usable kWh.",
-        "sourceUrl": "https://bessaustralia.com.au/products/reserva-bms-base-aus-nz",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Fronius Reserva 9.47 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -5206,12 +4482,6 @@
         "revision": "Maps the 2025 residential ESA series to GW5K-EHA-G20 and GW8.3-BAT-D-G20/G21, distinguishing it from unrelated G10 or commercial ESA identities. This is model-mapping corroboration, not a substitute launch date."
       },
       {
-        "title": "Exact ESA equipment-price example",
-        "url": "https://www.solar4life.com.au/goodwe-esa/",
-        "kind": "published_equipment_price",
-        "revision": "Public GST equipment price checked 10 October 2026; incomplete controls scope"
-      },
-      {
         "title": "Main hardware fault warranty",
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20ESA%203-10kW-AU_NZ.pdf",
         "kind": "manufacturer_warranty",
@@ -5226,13 +4496,7 @@
       {
         "title": "Australian equipment listing: GoodWe All in one 5Kw Single Phase Inverter 200% Oversizing 2MPPTs 1 String per MPPT w/Meter w/Wifi w/Backup w/Grid Forming",
         "url": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: GoodWe High Voltage Battery Module  8.32 kWh  Usable Capacity 8kWh | Used with ESA All in One Goodwe Inverter | same as G21",
-        "url": "https://dzelectricalproducts.com/products/goodwe-high-voltage-battery-module-8-32-kwh-usable-capacity-8kwh-used-with-esa-all-in-one-goodwe-inverter-same-as-g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -5249,15 +4513,6 @@
       "note": "New residential single-phase ESA generation announced globally on 3 September 2025, then introduced in Australia on 24 October 2025. The current AU table confirms this configuration."
     },
     "measurements": {
-      "cost": {
-        "value": 439.9819,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "GW5K-EHA-G20 + 2 x GW8.3-BAT-D-G20",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Listed controller includes meter and Wi-Fi. Maker supplied mounting base and connectors included; floor mounting. Installation and external site wiring excluded. Actual equipment total A$7039.71 divided by 16 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -5369,12 +4624,6 @@
         "revision": "Maps the 2025 residential ESA series to GW5K-EHA-G20 and GW8.3-BAT-D-G20/G21, distinguishing it from unrelated G10 or commercial ESA identities. This is model-mapping corroboration, not a substitute launch date."
       },
       {
-        "title": "Exact ESA equipment-price example",
-        "url": "https://www.solar4life.com.au/goodwe-esa/",
-        "kind": "published_equipment_price",
-        "revision": "Public GST equipment price checked 10 October 2026; incomplete controls scope"
-      },
-      {
         "title": "Main hardware fault warranty",
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20ESA%203-10kW-AU_NZ.pdf",
         "kind": "manufacturer_warranty",
@@ -5389,13 +4638,7 @@
       {
         "title": "Australian equipment listing: GoodWe All in one 5Kw Single Phase Inverter 200% Oversizing 2MPPTs 1 String per MPPT w/Meter w/Wifi w/Backup w/Grid Forming",
         "url": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: GoodWe High Voltage Battery Module  8.32 kWh  Usable Capacity 8kWh | Used with ESA All in One Goodwe Inverter | same as G21",
-        "url": "https://dzelectricalproducts.com/products/goodwe-high-voltage-battery-module-8-32-kwh-usable-capacity-8kwh-used-with-esa-all-in-one-goodwe-inverter-same-as-g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -5412,15 +4655,6 @@
       "note": "New residential single-phase ESA generation announced globally on 3 September 2025, then introduced in Australia on 24 October 2025. The current AU table confirms this configuration."
     },
     "measurements": {
-      "cost": {
-        "value": 407.7212,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "GW5K-EHA-G20 + 3 x GW8.3-BAT-D-G20",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Listed controller includes meter and Wi-Fi. Maker supplied mounting base and connectors included; floor mounting. Installation and external site wiring excluded. Actual equipment total A$9785.31 divided by 24 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -5532,12 +4766,6 @@
         "revision": "Maps the 2025 residential ESA series to GW5K-EHA-G20 and GW8.3-BAT-D-G20/G21, distinguishing it from unrelated G10 or commercial ESA identities. This is model-mapping corroboration, not a substitute launch date."
       },
       {
-        "title": "Exact ESA equipment-price example",
-        "url": "https://www.solar4life.com.au/goodwe-esa/",
-        "kind": "published_equipment_price",
-        "revision": "Public GST equipment price checked 10 October 2026; incomplete controls scope"
-      },
-      {
         "title": "Main hardware fault warranty",
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20ESA%203-10kW-AU_NZ.pdf",
         "kind": "manufacturer_warranty",
@@ -5552,13 +4780,7 @@
       {
         "title": "Australian equipment listing: GoodWe All in one 5Kw Single Phase Inverter 200% Oversizing 2MPPTs 1 String per MPPT w/Meter w/Wifi w/Backup w/Grid Forming",
         "url": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: GoodWe High Voltage Battery Module  8.32 kWh  Usable Capacity 8kWh | Used with ESA All in One Goodwe Inverter | same as G21",
-        "url": "https://dzelectricalproducts.com/products/goodwe-high-voltage-battery-module-8-32-kwh-usable-capacity-8kwh-used-with-esa-all-in-one-goodwe-inverter-same-as-g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -5575,15 +4797,6 @@
       "note": "New residential single-phase ESA generation announced globally on 3 September 2025, then introduced in Australia on 24 October 2025. The current AU table confirms this configuration."
     },
     "measurements": {
-      "cost": {
-        "value": 391.5909,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "GW5K-EHA-G20 + 4 x GW8.3-BAT-D-G20",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Listed controller includes meter and Wi-Fi. Maker supplied mounting base and connectors included; floor mounting. Installation and external site wiring excluded. Actual equipment total A$12530.91 divided by 32 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -5695,12 +4908,6 @@
         "revision": "Maps the 2025 residential ESA series to GW5K-EHA-G20 and GW8.3-BAT-D-G20/G21, distinguishing it from unrelated G10 or commercial ESA identities. This is model-mapping corroboration, not a substitute launch date."
       },
       {
-        "title": "Exact ESA equipment-price example",
-        "url": "https://www.solar4life.com.au/goodwe-esa/",
-        "kind": "published_equipment_price",
-        "revision": "Public GST equipment price checked 10 October 2026; incomplete controls scope"
-      },
-      {
         "title": "Main hardware fault warranty",
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20ESA%203-10kW-AU_NZ.pdf",
         "kind": "manufacturer_warranty",
@@ -5715,13 +4922,7 @@
       {
         "title": "Australian equipment listing: GoodWe All in one 5Kw Single Phase Inverter 200% Oversizing 2MPPTs 1 String per MPPT w/Meter w/Wifi w/Backup w/Grid Forming",
         "url": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: GoodWe High Voltage Battery Module  8.32 kWh  Usable Capacity 8kWh | Used with ESA All in One Goodwe Inverter | same as G21",
-        "url": "https://dzelectricalproducts.com/products/goodwe-high-voltage-battery-module-8-32-kwh-usable-capacity-8kwh-used-with-esa-all-in-one-goodwe-inverter-same-as-g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -5738,15 +4939,6 @@
       "note": "New residential single-phase ESA generation announced globally on 3 September 2025, then introduced in Australia on 24 October 2025. The current AU table confirms this configuration."
     },
     "measurements": {
-      "cost": {
-        "value": 381.9128,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "GW5K-EHA-G20 + 5 x GW8.3-BAT-D-G20",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Listed controller includes meter and Wi-Fi. Maker supplied mounting base and connectors included; floor mounting. Installation and external site wiring excluded. Actual equipment total A$15276.51 divided by 40 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -5858,12 +5050,6 @@
         "revision": "Maps the 2025 residential ESA series to GW5K-EHA-G20 and GW8.3-BAT-D-G20/G21, distinguishing it from unrelated G10 or commercial ESA identities. This is model-mapping corroboration, not a substitute launch date."
       },
       {
-        "title": "Exact ESA equipment-price example",
-        "url": "https://www.solar4life.com.au/goodwe-esa/",
-        "kind": "published_equipment_price",
-        "revision": "Public GST equipment price checked 10 October 2026; incomplete controls scope"
-      },
-      {
         "title": "Main hardware fault warranty",
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20ESA%203-10kW-AU_NZ.pdf",
         "kind": "manufacturer_warranty",
@@ -5878,13 +5064,7 @@
       {
         "title": "Australian equipment listing: GoodWe All in one 5Kw Single Phase Inverter 200% Oversizing 2MPPTs 1 String per MPPT w/Meter w/Wifi w/Backup w/Grid Forming",
         "url": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: GoodWe High Voltage Battery Module  8.32 kWh  Usable Capacity 8kWh | Used with ESA All in One Goodwe Inverter | same as G21",
-        "url": "https://dzelectricalproducts.com/products/goodwe-high-voltage-battery-module-8-32-kwh-usable-capacity-8kwh-used-with-esa-all-in-one-goodwe-inverter-same-as-g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -5901,15 +5081,6 @@
       "note": "New residential single-phase ESA generation announced globally on 3 September 2025, then introduced in Australia on 24 October 2025. The current AU table confirms this configuration."
     },
     "measurements": {
-      "cost": {
-        "value": 375.4606,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "GW5K-EHA-G20 + 6 x GW8.3-BAT-D-G20",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Listed controller includes meter and Wi-Fi. Maker supplied mounting base and connectors included; floor mounting. Installation and external site wiring excluded. Actual equipment total A$18022.11 divided by 48 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -6021,12 +5192,6 @@
         "revision": "Maps the 2025 residential ESA series to GW5K-EHA-G20 and GW8.3-BAT-D-G20/G21, distinguishing it from unrelated G10 or commercial ESA identities. This is model-mapping corroboration, not a substitute launch date."
       },
       {
-        "title": "Exact ESA equipment-price example",
-        "url": "https://www.solar4life.com.au/goodwe-esa/",
-        "kind": "published_equipment_price",
-        "revision": "Public GST equipment price checked 10 October 2026; incomplete controls scope"
-      },
-      {
         "title": "Main hardware fault warranty",
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20ESA%203-10kW-AU_NZ.pdf",
         "kind": "manufacturer_warranty",
@@ -6041,13 +5206,7 @@
       {
         "title": "Australian equipment listing: GoodWe All in one 5Kw Single Phase Inverter 200% Oversizing 2MPPTs 1 String per MPPT w/Meter w/Wifi w/Backup w/Grid Forming",
         "url": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: GoodWe High Voltage Battery Module  8.32 kWh  Usable Capacity 8kWh | Used with ESA All in One Goodwe Inverter | same as G21",
-        "url": "https://dzelectricalproducts.com/products/goodwe-high-voltage-battery-module-8-32-kwh-usable-capacity-8kwh-used-with-esa-all-in-one-goodwe-inverter-same-as-g21",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -6064,15 +5223,6 @@
       "note": "New residential single-phase ESA generation announced globally on 3 September 2025, then introduced in Australia on 24 October 2025. The current AU table confirms this configuration."
     },
     "measurements": {
-      "cost": {
-        "value": 536.7637,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "GW5K-EHA-G20 + 1 x GW8.3-BAT-D-G20",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Listed controller includes meter and Wi-Fi. Maker supplied mounting base and connectors included; floor mounting. Installation and external site wiring excluded. Actual equipment total A$4294.11 divided by 8 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-all-in-one-5kw-single-phase-inverter-200-oversizing-2mppts-1-string-per-mppt-w-meter-w-wifi-w-backup-w-grid-forming",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -6197,7 +5347,6 @@
       "note": "Retain the new HS3 generation with exact Australian 5/6 kW single-phase specification."
     },
     "measurements": {
-      "cost": null,
       "efficiency": null,
       "warranty": null,
       "capacity": null
@@ -6262,10 +5411,6 @@
       "The quoted 10 kWh is total capacity; the usable amount is not separately confirmed."
     ],
     "measurementGaps": {
-      "cost": {
-        "reason": "No complete current Australian HS3 equipment price was verified.",
-        "sourceUrl": "https://au.saj-electric.com/en-au/hs3"
-      },
       "warranty": {
         "reason": "The current Australian battery warranty lists HS2 and other models, but does not identify HS3 or BU3 fault cover.",
         "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Warranty/SAJ%20limited%20warranty%20for%20batteries%20-AU%20V4.0-2-1.pdf"
@@ -6320,25 +5465,7 @@
       {
         "title": "Australian equipment listing: Sigenergy 5.0kW SigenStor Single Phase Controller",
         "url": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy 10.0kW SigenStor Battery with LED",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-10-0kw-sigenstor-battery-with-led",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy Gateway Single Phase up to 12kW On & Off Grid With Generator Input Or AC Coupled",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-gateway-single-phase-up-to-12kw-on-off-grid-with-generator-input-or-ac-coupled",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy SigenStor Floor Mounting Installation Kit with Adjustable Feet",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-sigenstor-floor-mounting-installation-kit-with-adjustable-feet",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -6356,15 +5483,6 @@
       "note": "Retain the specifically upgraded BAT 10.0 battery generation. Do not date the entire earlier SigenStor platform as a new 2025 product."
     },
     "measurements": {
-      "cost": {
-        "value": 834.9411,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SigenStor EC5.0SP + 1 BAT10.0 + SP gateway + floor kit",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes listed current battery modules, 5 kW controller, single-phase backup gateway and adjustable floor installation kit. Gateway supplies system control; installation and site wiring excluded. Actual equipment total A$7514.47 divided by 9 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -6484,25 +5602,7 @@
       {
         "title": "Australian equipment listing: Sigenergy 5.0kW SigenStor Single Phase Controller",
         "url": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy 10.0kW SigenStor Battery with LED",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-10-0kw-sigenstor-battery-with-led",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy Gateway Single Phase up to 12kW On & Off Grid With Generator Input Or AC Coupled",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-gateway-single-phase-up-to-12kw-on-off-grid-with-generator-input-or-ac-coupled",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy SigenStor Floor Mounting Installation Kit with Adjustable Feet",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-sigenstor-floor-mounting-installation-kit-with-adjustable-feet",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -6520,15 +5620,6 @@
       "note": "Retain the specifically upgraded BAT 10.0 battery generation. Do not date the entire earlier SigenStor platform as a new 2025 product."
     },
     "measurements": {
-      "cost": {
-        "value": 655.7122,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SigenStor EC5.0SP + 2 BAT10.0 + SP gateway + floor kit",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes listed current battery modules, 5 kW controller, single-phase backup gateway and adjustable floor installation kit. Gateway supplies system control; installation and site wiring excluded. Actual equipment total A$11802.82 divided by 18 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -6648,25 +5739,7 @@
       {
         "title": "Australian equipment listing: Sigenergy 5.0kW SigenStor Single Phase Controller",
         "url": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy 10.0kW SigenStor Battery with LED",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-10-0kw-sigenstor-battery-with-led",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy Gateway Single Phase up to 12kW On & Off Grid With Generator Input Or AC Coupled",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-gateway-single-phase-up-to-12kw-on-off-grid-with-generator-input-or-ac-coupled",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy SigenStor Floor Mounting Installation Kit with Adjustable Feet",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-sigenstor-floor-mounting-installation-kit-with-adjustable-feet",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -6684,15 +5757,6 @@
       "note": "Retain the specifically upgraded BAT 10.0 battery generation. Do not date the entire earlier SigenStor platform as a new 2025 product."
     },
     "measurements": {
-      "cost": {
-        "value": 595.9693,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SigenStor EC5.0SP + 3 BAT10.0 + SP gateway + floor kit",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes listed current battery modules, 5 kW controller, single-phase backup gateway and adjustable floor installation kit. Gateway supplies system control; installation and site wiring excluded. Actual equipment total A$16091.17 divided by 27 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -6812,25 +5876,7 @@
       {
         "title": "Australian equipment listing: Sigenergy 5.0kW SigenStor Single Phase Controller",
         "url": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy 10.0kW SigenStor Battery with LED",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-10-0kw-sigenstor-battery-with-led",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy Gateway Single Phase up to 12kW On & Off Grid With Generator Input Or AC Coupled",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-gateway-single-phase-up-to-12kw-on-off-grid-with-generator-input-or-ac-coupled",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy SigenStor Floor Mounting Installation Kit with Adjustable Feet",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-sigenstor-floor-mounting-installation-kit-with-adjustable-feet",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -6848,15 +5894,6 @@
       "note": "Retain the specifically upgraded BAT 10.0 battery generation. Do not date the entire earlier SigenStor platform as a new 2025 product."
     },
     "measurements": {
-      "cost": {
-        "value": 566.0978,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SigenStor EC5.0SP + 4 BAT10.0 + SP gateway + floor kit",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes listed current battery modules, 5 kW controller, single-phase backup gateway and adjustable floor installation kit. Gateway supplies system control; installation and site wiring excluded. Actual equipment total A$20379.52 divided by 36 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -6976,25 +6013,7 @@
       {
         "title": "Australian equipment listing: Sigenergy 5.0kW SigenStor Single Phase Controller",
         "url": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy 10.0kW SigenStor Battery with LED",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-10-0kw-sigenstor-battery-with-led",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy Gateway Single Phase up to 12kW On & Off Grid With Generator Input Or AC Coupled",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-gateway-single-phase-up-to-12kw-on-off-grid-with-generator-input-or-ac-coupled",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy SigenStor Floor Mounting Installation Kit with Adjustable Feet",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-sigenstor-floor-mounting-installation-kit-with-adjustable-feet",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -7012,15 +6031,6 @@
       "note": "Retain the specifically upgraded BAT 10.0 battery generation. Do not date the entire earlier SigenStor platform as a new 2025 product."
     },
     "measurements": {
-      "cost": {
-        "value": 548.1749,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SigenStor EC5.0SP + 5 BAT10.0 + SP gateway + floor kit",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes listed current battery modules, 5 kW controller, single-phase backup gateway and adjustable floor installation kit. Gateway supplies system control; installation and site wiring excluded. Actual equipment total A$24667.87 divided by 45 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7140,25 +6150,7 @@
       {
         "title": "Australian equipment listing: Sigenergy 5.0kW SigenStor Single Phase Controller",
         "url": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy 10.0kW SigenStor Battery with LED",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-10-0kw-sigenstor-battery-with-led",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy Gateway Single Phase up to 12kW On & Off Grid With Generator Input Or AC Coupled",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-gateway-single-phase-up-to-12kw-on-off-grid-with-generator-input-or-ac-coupled",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sigenergy SigenStor Floor Mounting Installation Kit with Adjustable Feet",
-        "url": "https://dzelectricalproducts.com/products/sigenergy-sigenstor-floor-mounting-installation-kit-with-adjustable-feet",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -7176,15 +6168,6 @@
       "note": "Retain the specifically upgraded BAT 10.0 battery generation. Do not date the entire earlier SigenStor platform as a new 2025 product."
     },
     "measurements": {
-      "cost": {
-        "value": 536.2263,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SigenStor EC5.0SP + 6 BAT10.0 + SP gateway + floor kit",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes listed current battery modules, 5 kW controller, single-phase backup gateway and adjustable floor installation kit. Gateway supplies system control; installation and site wiring excluded. Actual equipment total A$28956.22 divided by 54 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sigenergy-5-0kw-sigenstor-single-phase-controller",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7279,16 +6262,6 @@
       "The battery cannot charge below freezing."
     ],
     "measurements": {
-      "cost": {
-        "value": 856.562,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBH200 + SH15T 15 kW + cover and foundation",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Four SMR050 modules, SBH system parts and SH15T. Maker user manual delivery list includes Wi-Fi, meter and CTs. Installation and site backup wiring excluded. Actual equipment total A$17131.24 divided by 20 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBH150 15 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7385,19 +6358,7 @@
       {
         "title": "Australian equipment listing: SUNGROW T Hybrid HV Three Phase 15kW 3mppt 5-String Inverter, w/ DC, in-built Backup, w/ WiFi w/ 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH 5kWh Rechargeable Li-ion Battery Module (SMR050)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-5kwh-rechargeable-li-ion-battery-module-smr050",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH Battery Accessories (Cover & Foundation)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-battery-accessories-cover-foundation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -7421,15 +6382,6 @@
       "The battery cannot charge below freezing."
     ],
     "measurements": {
-      "cost": {
-        "value": 856.562,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBH200 + SH15T 15 kW + cover and foundation",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Four SMR050 modules, SBH system parts and SH15T. Maker user manual delivery list includes Wi-Fi, meter and CTs. Installation and site backup wiring excluded. Actual equipment total A$17131.24 divided by 20 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7526,19 +6478,7 @@
       {
         "title": "Australian equipment listing: SUNGROW T Hybrid HV Three Phase 15kW 3mppt 5-String Inverter, w/ DC, in-built Backup, w/ WiFi w/ 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH 5kWh Rechargeable Li-ion Battery Module (SMR050)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-5kwh-rechargeable-li-ion-battery-module-smr050",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH Battery Accessories (Cover & Foundation)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-battery-accessories-cover-foundation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -7562,16 +6502,6 @@
       "The battery cannot charge below freezing."
     ],
     "measurements": {
-      "cost": {
-        "value": 856.562,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBH200 + SH15T 15 kW + cover and foundation",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Four SMR050 modules, SBH system parts and SH15T. Maker user manual delivery list includes Wi-Fi, meter and CTs. Installation and site backup wiring excluded. Actual equipment total A$17131.24 divided by 20 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBH250 25 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7668,19 +6598,7 @@
       {
         "title": "Australian equipment listing: SUNGROW T Hybrid HV Three Phase 15kW 3mppt 5-String Inverter, w/ DC, in-built Backup, w/ WiFi w/ 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH 5kWh Rechargeable Li-ion Battery Module (SMR050)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-5kwh-rechargeable-li-ion-battery-module-smr050",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH Battery Accessories (Cover & Foundation)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-battery-accessories-cover-foundation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -7704,16 +6622,6 @@
       "The battery cannot charge below freezing."
     ],
     "measurements": {
-      "cost": {
-        "value": 856.562,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBH200 + SH15T 15 kW + cover and foundation",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Four SMR050 modules, SBH system parts and SH15T. Maker user manual delivery list includes Wi-Fi, meter and CTs. Installation and site backup wiring excluded. Actual equipment total A$17131.24 divided by 20 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBH300 30 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7810,19 +6718,7 @@
       {
         "title": "Australian equipment listing: SUNGROW T Hybrid HV Three Phase 15kW 3mppt 5-String Inverter, w/ DC, in-built Backup, w/ WiFi w/ 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH 5kWh Rechargeable Li-ion Battery Module (SMR050)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-5kwh-rechargeable-li-ion-battery-module-smr050",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH Battery Accessories (Cover & Foundation)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-battery-accessories-cover-foundation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -7846,16 +6742,6 @@
       "The battery cannot charge below freezing."
     ],
     "measurements": {
-      "cost": {
-        "value": 856.562,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBH200 + SH15T 15 kW + cover and foundation",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Four SMR050 modules, SBH system parts and SH15T. Maker user manual delivery list includes Wi-Fi, meter and CTs. Installation and site backup wiring excluded. Actual equipment total A$17131.24 divided by 20 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBH350 35 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -7952,19 +6838,7 @@
       {
         "title": "Australian equipment listing: SUNGROW T Hybrid HV Three Phase 15kW 3mppt 5-String Inverter, w/ DC, in-built Backup, w/ WiFi w/ 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH 5kWh Rechargeable Li-ion Battery Module (SMR050)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-5kwh-rechargeable-li-ion-battery-module-smr050",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH Battery Accessories (Cover & Foundation)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-battery-accessories-cover-foundation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -7987,16 +6861,6 @@
       "The battery cannot charge below freezing."
     ],
     "measurements": {
-      "cost": {
-        "value": 856.562,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBH200 + SH15T 15 kW + cover and foundation",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Four SMR050 modules, SBH system parts and SH15T. Maker user manual delivery list includes Wi-Fi, meter and CTs. Installation and site backup wiring excluded. Actual equipment total A$17131.24 divided by 20 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBH400 40 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8093,19 +6957,7 @@
       {
         "title": "Australian equipment listing: SUNGROW T Hybrid HV Three Phase 15kW 3mppt 5-String Inverter, w/ DC, in-built Backup, w/ WiFi w/ 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH 5kWh Rechargeable Li-ion Battery Module (SMR050)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-5kwh-rechargeable-li-ion-battery-module-smr050",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow SBH Battery Accessories (Cover & Foundation)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-sbh-battery-accessories-cover-foundation",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ]
@@ -8137,19 +6989,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8165,16 +7005,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR064 6.4 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8271,19 +7101,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8299,16 +7117,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR096 9.6 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8405,19 +7213,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8433,16 +7229,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR128 12.8 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8539,19 +7325,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8567,16 +7341,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR160 16 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8673,19 +7437,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8701,16 +7453,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR192 19.2 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8807,19 +7549,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8835,16 +7565,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR224 22.4 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -8941,19 +7661,7 @@
       {
         "title": "Australian equipment listing: SUNGROW Hybrid Single Phase 5kW 2mppt Inverter, w/ DC, in-built Backup, w/ WiFi w/ & DTSU666-20 meter & 2 x CTs, 10 Years Warranty",
         "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Module 3.2kWh",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-module-3-2kwh",
-        "kind": "published_equipment_price",
-        "revision": "Current public equipment listing; GST basis recorded privately"
-      },
-      {
-        "title": "Australian equipment listing: Sungrow Battery Accessory Kits (Switchgear/Cover/Base)",
-        "url": "https://dzelectricalproducts.com/products/sungrow-battery-accessory-kits-switchgear-cover-base",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current public equipment listing; GST basis recorded privately"
       }
     ],
@@ -8969,16 +7677,6 @@
       "Requires a separate compatible Sungrow inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 834.5104,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "SBR096 + SH5.0RS-ADA 5 kW + switchgear, cover and base",
-        "basis": "Supply-only complete equipment component sum including GST, before installation, shipping or rebates. Includes supplied inverter Wi-Fi, meter and CTs, three battery modules, SBR switchgear, cover and base. Grid-connected storage; extra backup wiring is installation. Actual equipment total A$8011.30 divided by 9.6 usable kWh.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Sungrow SBR256 25.6 kWh"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,
@@ -9068,15 +7766,6 @@
       "Its 130 kg weight needs substantial wall or floor support."
     ],
     "measurements": {
-      "cost": {
-        "value": 848.1481,
-        "unit": "aud-per-kwh",
-        "basisId": "complete-battery-system-gst-no-rebate",
-        "variant": "One AU Powerwall 3 1707000, 13.5 kWh, with Gateway and accessories",
-        "basis": "Manufacturer Australia equipment configuration includes Powerwall 3 and Backup Gateway, including GST, before installation or rebates. Actual equipment total A$11450 divided by 13.5 usable kWh.",
-        "sourceUrl": "https://www.tesla.com/en_AU/powerwall/get",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": null,
       "warranty": {
         "value": 10,

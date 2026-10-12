@@ -42,15 +42,6 @@
       "note": "Maker introduced the upgraded Australian-made 475 W G4P in August 2025."
     },
     "measurements": {
-      "cost": {
-        "value": 0.4884,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "Walara-475G4P-BL",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/tindo-475w-black-n-type-topcon-3-2mm-double-arc-glass-120hc-35mm-staubli-mc4-evo2-1200mm-cable",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 21.9,
         "unit": "panel-efficiency-percent",
@@ -153,15 +144,6 @@
       "note": "Maker dates the new WBC range to September 2025 and identifies Oceania availability. Current Australian B2 specification is January 2026."
     },
     "measurements": {
-      "cost": {
-        "value": 0.669072,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "WST-485BDX54-B2",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Published equipment price excluding GST converted with Australian 10% GST; no installation or rebate.",
-        "sourceUrl": "https://solarshop.baywa-re.com.au/WINAICO-485W-Bifacial-Ultra-Black",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 23.8,
         "unit": "panel-efficiency-percent",
@@ -252,7 +234,6 @@
       "note": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 21.1,
         "unit": "panel-efficiency-percent",
@@ -326,13 +307,7 @@
     "cons": [
       "Large, heavy panels are awkward on small roofs with lots of obstructions.",
       "Standard fault cover is 20 years; the longer warranty has eligibility conditions."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.recgroup.com/en/node/22887"
-      }
-    }
+    ]
   },
   {
     "id": "rec-alpha-pro-m-610",
@@ -365,7 +340,6 @@
       "note": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 21.5,
         "unit": "panel-efficiency-percent",
@@ -439,13 +413,7 @@
     "cons": [
       "Large, heavy panels are awkward on small roofs with lots of obstructions.",
       "Standard fault cover is 20 years; the longer warranty has eligibility conditions."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.recgroup.com/en/node/22887"
-      }
-    }
+    ]
   },
   {
     "id": "rec-alpha-pro-m-620",
@@ -478,7 +446,6 @@
       "note": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 21.8,
         "unit": "panel-efficiency-percent",
@@ -552,13 +519,7 @@
     "cons": [
       "Large, heavy panels are awkward on small roofs with lots of obstructions.",
       "Standard fault cover is 20 years; the longer warranty has eligibility conditions."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.recgroup.com/en/node/22887"
-      }
-    }
+    ]
   },
   {
     "id": "rec-alpha-pro-m-630",
@@ -591,7 +552,6 @@
       "note": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 22.2,
         "unit": "panel-efficiency-percent",
@@ -665,13 +625,7 @@
     "cons": [
       "Large, heavy panels are awkward on small roofs with lots of obstructions.",
       "Standard fault cover is 20 years; the longer warranty has eligibility conditions."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.recgroup.com/en/node/22887"
-      }
-    }
+    ]
   },
   {
     "id": "rec-alpha-pro-m",
@@ -704,7 +658,6 @@
       "note": "Manufacturer production announcement dates this large-panel generation to December 2024. First Australian arrival was not verified; current AU-specific sheet confirms identity."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 22.5,
         "unit": "panel-efficiency-percent",
@@ -778,13 +731,7 @@
     "cons": [
       "Large, heavy panels are awkward on small roofs with lots of obstructions.",
       "Standard fault cover is 20 years; the longer warranty has eligibility conditions."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.recgroup.com/en/node/22887"
-      }
-    }
+    ]
   },
   {
     "id": "tongwei-tnc2-48hd-470",
@@ -823,7 +770,6 @@
       "note": "Maker introduced TNC 2.0 globally in March 2025. Australian 48HD sheet confirms the selected model; exact first Australian arrival was not verified."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.52,
         "unit": "panel-efficiency-percent",
@@ -884,13 +830,7 @@
       "Lets some light through, useful over a carport.",
       "Can also collect sunlight reaching the back of the panel."
     ],
-    "cons": [],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.tongwei.com/news/detail/167700.html"
-      }
-    }
+    "cons": []
   },
   {
     "id": "tongwei-tnc2-48hd-475",
@@ -929,7 +869,6 @@
       "note": "Maker introduced TNC 2.0 globally in March 2025. Australian 48HD sheet confirms the selected model; exact first Australian arrival was not verified."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.77,
         "unit": "panel-efficiency-percent",
@@ -990,13 +929,7 @@
       "Lets some light through, useful over a carport.",
       "Can also collect sunlight reaching the back of the panel."
     ],
-    "cons": [],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.tongwei.com/news/detail/167700.html"
-      }
-    }
+    "cons": []
   },
   {
     "id": "tongwei-tnc2-48hd",
@@ -1035,7 +968,6 @@
       "note": "Maker introduced TNC 2.0 globally in March 2025. Australian 48HD sheet confirms the selected model; exact first Australian arrival was not verified."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 24.02,
         "unit": "panel-efficiency-percent",
@@ -1096,13 +1028,7 @@
       "Lets some light through, useful over a carport.",
       "Can also collect sunlight reaching the back of the panel."
     ],
-    "cons": [],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.tongwei.com/news/detail/167700.html"
-      }
-    }
+    "cons": []
   },
   {
     "id": "dmegc-g12rt-g48hbb-455",
@@ -1147,7 +1073,6 @@
       "note": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 22.8,
         "unit": "panel-efficiency-percent",
@@ -1209,13 +1134,7 @@
     ],
     "cons": [
       "Over an open carport, it cannot collect extra sunlight from underneath."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html"
-      }
-    }
+    ]
   },
   {
     "id": "dmegc-g12rt-g48hbb-460",
@@ -1260,7 +1179,6 @@
       "note": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23,
         "unit": "panel-efficiency-percent",
@@ -1322,13 +1240,7 @@
     ],
     "cons": [
       "Over an open carport, it cannot collect extra sunlight from underneath."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html"
-      }
-    }
+    ]
   },
   {
     "id": "dmegc-g12rt-g48hbb-465",
@@ -1373,7 +1285,6 @@
       "note": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.3,
         "unit": "panel-efficiency-percent",
@@ -1435,13 +1346,7 @@
     ],
     "cons": [
       "Over an open carport, it cannot collect extra sunlight from underneath."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html"
-      }
-    }
+    ]
   },
   {
     "id": "dmegc-g12rt-g48hbb-470",
@@ -1486,7 +1391,6 @@
       "note": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.5,
         "unit": "panel-efficiency-percent",
@@ -1548,13 +1452,7 @@
     ],
     "cons": [
       "Over an open carport, it cannot collect extra sunlight from underneath."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html"
-      }
-    }
+    ]
   },
   {
     "id": "dmegc-g12rt-g48hbb",
@@ -1599,7 +1497,6 @@
       "note": "Maker dates the upgraded Infinity RT platform to April 2024. The exact G48HBB AU sheet is December 2025; exact SKU introduction is not confirmed."
     },
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.8,
         "unit": "panel-efficiency-percent",
@@ -1661,13 +1558,7 @@
     ],
     "cons": [
       "Over an open carport, it cannot collect extra sunlight from underneath."
-    ],
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://www.dmegcsolar.com/news/detail-dmegc-solar-exhibits-infinity-rt-modules-at-solar-storage-live-london-2024.html"
-      }
-    }
+    ]
   },
   {
     "id": "aiko-neostar-3p54-475",
@@ -1706,15 +1597,6 @@
       "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
     },
     "measurements": {
-      "cost": {
-        "value": 0.5894736842105263,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "AIKO-A475-MCE54Mw",
-        "basis": "Real current single-panel Tax included retailer price for the stated exact reference power bin, divided by its actual rated watts. Same-generation power-bin reference only where marked; no target panel retail amount is invented.",
-        "sourceUrl": "https://growenergy.com.au/collections/aiko/products/aiko-neostar-3p54",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 23.8,
         "unit": "panel-efficiency-percent",
@@ -1809,16 +1691,6 @@
       "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
     },
     "measurements": {
-      "cost": {
-        "value": 0.5894736842105263,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "AIKO-A475-MCE54Mw",
-        "basis": "Real current single-panel Tax included retailer price for the stated exact reference power bin, divided by its actual rated watts. Same-generation power-bin reference only where marked; no target panel retail amount is invented.",
-        "sourceUrl": "https://growenergy.com.au/collections/aiko/products/aiko-neostar-3p54",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "AIKO-A480-MCE54Mw"
-      },
       "efficiency": {
         "value": 24,
         "unit": "panel-efficiency-percent",
@@ -1918,16 +1790,6 @@
       "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
     },
     "measurements": {
-      "cost": {
-        "value": 0.5894736842105263,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "AIKO-A475-MCE54Mw",
-        "basis": "Real current single-panel Tax included retailer price for the stated exact reference power bin, divided by its actual rated watts. Same-generation power-bin reference only where marked; no target panel retail amount is invented.",
-        "sourceUrl": "https://growenergy.com.au/collections/aiko/products/aiko-neostar-3p54",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "AIKO-A485-MCE54Mw"
-      },
       "efficiency": {
         "value": 24.3,
         "unit": "panel-efficiency-percent",
@@ -2027,16 +1889,6 @@
       "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
     },
     "measurements": {
-      "cost": {
-        "value": 0.5894736842105263,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "AIKO-A475-MCE54Mw",
-        "basis": "Real current single-panel Tax included retailer price for the stated exact reference power bin, divided by its actual rated watts. Same-generation power-bin reference only where marked; no target panel retail amount is invented.",
-        "sourceUrl": "https://growenergy.com.au/collections/aiko/products/aiko-neostar-3p54",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "AIKO-A490-MCE54Mw"
-      },
       "efficiency": {
         "value": 24.5,
         "unit": "panel-efficiency-percent",
@@ -2136,16 +1988,6 @@
       "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
     },
     "measurements": {
-      "cost": {
-        "value": 0.5894736842105263,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "AIKO-A475-MCE54Mw",
-        "basis": "Real current single-panel Tax included retailer price for the stated exact reference power bin, divided by its actual rated watts. Same-generation power-bin reference only where marked; no target panel retail amount is invented.",
-        "sourceUrl": "https://growenergy.com.au/collections/aiko/products/aiko-neostar-3p54",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "AIKO-A495-MCE54Mw"
-      },
       "efficiency": {
         "value": 24.8,
         "unit": "panel-efficiency-percent",
@@ -2245,15 +2087,6 @@
       "note": "Maker presented its third generation in Australia in October 2025. This is Australian introduction evidence, not the first global launch date."
     },
     "measurements": {
-      "cost": {
-        "value": 0.64,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "AIKO-A500-MCE54Mw",
-        "basis": "Real current single-panel Tax included retailer price for the stated exact reference power bin, divided by its actual rated watts. Same-generation power-bin reference only where marked; no target panel retail amount is invented.",
-        "sourceUrl": "https://growenergy.com.au/collections/aiko/products/aiko-neostar-3p54",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 25,
         "unit": "panel-efficiency-percent",
@@ -2330,12 +2163,6 @@
         "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Australian panel cost guide",
         "url": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
         "kind": "Published Australian equipment price guide",
@@ -2354,17 +2181,6 @@
       "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3684210526315789,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JKM475N-48QL6-DV-F2-OC",
-        "basis": "SolarQuotes public exact-model table lists approximate retail single-panel price 175 AUD inclGST for JKM475N-48QL6-DV-F2-OC. Divide by its actual475W. A published guide estimate, not current stock, installation cost or a live retailer sale. Other same-generation power bins use this named reference without manufacturing target retail prices.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide",
-        "referenceFor": "JKM460N-48QL6-DV-F2-OC"
-      },
       "efficiency": {
         "value": 23.02,
         "unit": "panel-efficiency-percent",
@@ -2452,12 +2268,6 @@
         "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Australian panel cost guide",
         "url": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
         "kind": "Published Australian equipment price guide",
@@ -2476,17 +2286,6 @@
       "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3684210526315789,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JKM475N-48QL6-DV-F2-OC",
-        "basis": "SolarQuotes public exact-model table lists approximate retail single-panel price 175 AUD inclGST for JKM475N-48QL6-DV-F2-OC. Divide by its actual475W. A published guide estimate, not current stock, installation cost or a live retailer sale. Other same-generation power bins use this named reference without manufacturing target retail prices.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide",
-        "referenceFor": "JKM465N-48QL6-DV-F2-OC"
-      },
       "efficiency": {
         "value": 23.27,
         "unit": "panel-efficiency-percent",
@@ -2574,12 +2373,6 @@
         "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Australian panel cost guide",
         "url": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
         "kind": "Published Australian equipment price guide",
@@ -2598,17 +2391,6 @@
       "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3684210526315789,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JKM475N-48QL6-DV-F2-OC",
-        "basis": "SolarQuotes public exact-model table lists approximate retail single-panel price 175 AUD inclGST for JKM475N-48QL6-DV-F2-OC. Divide by its actual475W. A published guide estimate, not current stock, installation cost or a live retailer sale. Other same-generation power bins use this named reference without manufacturing target retail prices.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide",
-        "referenceFor": "JKM470N-48QL6-DV-F2-OC"
-      },
       "efficiency": {
         "value": 23.52,
         "unit": "panel-efficiency-percent",
@@ -2696,12 +2478,6 @@
         "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Australian panel cost guide",
         "url": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
         "kind": "Published Australian equipment price guide",
@@ -2720,16 +2496,6 @@
       "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3684210526315789,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JKM475N-48QL6-DV-F2-OC",
-        "basis": "SolarQuotes public exact-model table lists approximate retail single-panel price 175 AUD inclGST for JKM475N-48QL6-DV-F2-OC. Divide by its actual475W. A published guide estimate, not current stock, installation cost or a live retailer sale. Other same-generation power bins use this named reference without manufacturing target retail prices.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide"
-      },
       "efficiency": {
         "value": 23.77,
         "unit": "panel-efficiency-percent",
@@ -2812,12 +2578,6 @@
         "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Australian panel cost guide",
         "url": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
         "kind": "Published Australian equipment price guide",
@@ -2836,17 +2596,6 @@
       "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3684210526315789,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JKM475N-48QL6-DV-F2-OC",
-        "basis": "SolarQuotes public exact-model table lists approximate retail single-panel price 175 AUD inclGST for JKM475N-48QL6-DV-F2-OC. Divide by its actual475W. A published guide estimate, not current stock, installation cost or a live retailer sale. Other same-generation power bins use this named reference without manufacturing target retail prices.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide",
-        "referenceFor": "JKM480N-48QL6-DV-F2-OC"
-      },
       "efficiency": {
         "value": 24.02,
         "unit": "panel-efficiency-percent",
@@ -2934,12 +2683,6 @@
         "revision": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Australian panel cost guide",
         "url": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
         "kind": "Published Australian equipment price guide",
@@ -2958,17 +2701,6 @@
       "note": "Maker announced Tiger Neo III at All Energy Australia in October 2025. The selected F2-OC model uses 1.6 mm glass; other similarly named variants differ."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3684210526315789,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JKM475N-48QL6-DV-F2-OC",
-        "basis": "SolarQuotes public exact-model table lists approximate retail single-panel price 175 AUD inclGST for JKM475N-48QL6-DV-F2-OC. Divide by its actual475W. A published guide estimate, not current stock, installation cost or a live retailer sale. Other same-generation power bins use this named reference without manufacturing target retail prices.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/jinko-solar-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide",
-        "referenceFor": "JKM485N-48QL6-DV-F2-OC"
-      },
       "efficiency": {
         "value": 24.27,
         "unit": "panel-efficiency-percent",
@@ -3074,16 +2806,6 @@
       "note": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
     },
     "measurements": {
-      "cost": {
-        "value": 0.316792,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-505NEG10R.28Z",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-505w-n-type-i-topcon-ultra-monocrystalline-156-cells-dual-glass-blackframe-30mm-1200mm-cable-mc4-evo2-tsm-505neg10r-28z-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-495NEG10R.28Z"
-      },
       "efficiency": {
         "value": 23.7,
         "unit": "panel-efficiency-percent",
@@ -3183,16 +2905,6 @@
       "note": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
     },
     "measurements": {
-      "cost": {
-        "value": 0.316792,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-505NEG10R.28Z",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-505w-n-type-i-topcon-ultra-monocrystalline-156-cells-dual-glass-blackframe-30mm-1200mm-cable-mc4-evo2-tsm-505neg10r-28z-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-500NEG10R.28Z"
-      },
       "efficiency": {
         "value": 23.94,
         "unit": "panel-efficiency-percent",
@@ -3292,15 +3004,6 @@
       "note": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
     },
     "measurements": {
-      "cost": {
-        "value": 0.316792,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-505NEG10R.28Z",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-505w-n-type-i-topcon-ultra-monocrystalline-156-cells-dual-glass-blackframe-30mm-1200mm-cable-mc4-evo2-tsm-505neg10r-28z-iec-61215-2021",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 24.18,
         "unit": "panel-efficiency-percent",
@@ -3395,16 +3098,6 @@
       "note": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
     },
     "measurements": {
-      "cost": {
-        "value": 0.316792,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-505NEG10R.28Z",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-505w-n-type-i-topcon-ultra-monocrystalline-156-cells-dual-glass-blackframe-30mm-1200mm-cable-mc4-evo2-tsm-505neg10r-28z-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-510NEG10R.28Z"
-      },
       "efficiency": {
         "value": 24.42,
         "unit": "panel-efficiency-percent",
@@ -3504,16 +3197,6 @@
       "note": "Maker announced mass production of the Australian G3 generation in July 2026. Use the exact NEG10R.28Z AU sheet, not earlier Vertex S+ figures."
     },
     "measurements": {
-      "cost": {
-        "value": 0.316792,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-505NEG10R.28Z",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-505w-n-type-i-topcon-ultra-monocrystalline-156-cells-dual-glass-blackframe-30mm-1200mm-cable-mc4-evo2-tsm-505neg10r-28z-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-515NEG10R.28Z"
-      },
       "efficiency": {
         "value": 24.65,
         "unit": "panel-efficiency-percent",
@@ -3595,12 +3278,6 @@
         "revision": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Latest Australian Performance 7 product warranty",
         "url": "https://pub-493f128c789642909ff4ab27a5f41128.r2.dev/warranty-documents-and-leaflets/au/AU_Limited_Warranty_for_PV_Modules_Australia_Purchased%20After%2001-Jan-2026.pdf",
         "kind": "Manufacturer AU warranty",
@@ -3625,16 +3302,6 @@
       "note": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
     },
     "measurements": {
-      "cost": {
-        "value": 0.32954545454545453,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "SPR-P7-440-BLK-1500",
-        "basis": "SolarQuotes own public comparison table publishes approximate single-panel retail price 145 AUD including GST for this exact model. Divided by its actual front-side watts. A published estimate, not live stock, an installer quote or our manufactured price.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/sunpower-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide"
-      },
       "efficiency": {
         "value": 21.7,
         "unit": "panel-efficiency-percent",
@@ -3718,12 +3385,6 @@
         "revision": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Latest Australian Performance 7 product warranty",
         "url": "https://pub-493f128c789642909ff4ab27a5f41128.r2.dev/warranty-documents-and-leaflets/au/AU_Limited_Warranty_for_PV_Modules_Australia_Purchased%20After%2001-Jan-2026.pdf",
         "kind": "Manufacturer AU warranty",
@@ -3748,16 +3409,6 @@
       "note": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
     },
     "measurements": {
-      "cost": {
-        "value": 0.3258426966292135,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "SPR-P7-445-BLK-1500",
-        "basis": "SolarQuotes own public comparison table publishes approximate single-panel retail price 145 AUD including GST for this exact model. Divided by its actual front-side watts. A published estimate, not live stock, an installer quote or our manufactured price.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/sunpower-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide"
-      },
       "efficiency": {
         "value": 21.9,
         "unit": "panel-efficiency-percent",
@@ -3841,12 +3492,6 @@
         "revision": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Latest Australian Performance 7 product warranty",
         "url": "https://pub-493f128c789642909ff4ab27a5f41128.r2.dev/warranty-documents-and-leaflets/au/AU_Limited_Warranty_for_PV_Modules_Australia_Purchased%20After%2001-Jan-2026.pdf",
         "kind": "Manufacturer AU warranty",
@@ -3871,16 +3516,6 @@
       "note": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
     },
     "measurements": {
-      "cost": {
-        "value": 0.32222222222222224,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "SPR-P7-450-BLK-1500",
-        "basis": "SolarQuotes own public comparison table publishes approximate single-panel retail price 145 AUD including GST for this exact model. Divided by its actual front-side watts. A published estimate, not live stock, an installer quote or our manufactured price.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/sunpower-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide"
-      },
       "efficiency": {
         "value": 22.2,
         "unit": "panel-efficiency-percent",
@@ -3964,12 +3599,6 @@
         "revision": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
       },
       {
-        "title": "SolarQuotes panel equipment-price comparison",
-        "url": "https://www.solarquotes.com.au/panels/comparison/compare-solar-panels/",
-        "kind": "published_equipment_price",
-        "revision": "Table updated 8 April 2026; approximate retail including GST"
-      },
-      {
         "title": "Latest Australian Performance 7 product warranty",
         "url": "https://pub-493f128c789642909ff4ab27a5f41128.r2.dev/warranty-documents-and-leaflets/au/AU_Limited_Warranty_for_PV_Modules_Australia_Purchased%20After%2001-Jan-2026.pdf",
         "kind": "Manufacturer AU warranty",
@@ -3994,16 +3623,6 @@
       "note": "Manufacturer announced Performance 7 globally in April 2024. An Australian partner roadshow presented it earlier in February 2024; the current measured sheet is August 2024."
     },
     "measurements": {
-      "cost": {
-        "value": 0.31868131868131866,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "SPR-P7-455-BLK-1500",
-        "basis": "SolarQuotes own public comparison table publishes approximate single-panel retail price 145 AUD including GST for this exact model. Divided by its actual front-side watts. A published estimate, not live stock, an installer quote or our manufactured price.",
-        "sourceUrl": "https://www.solarquotes.com.au/panels/sunpower-review.html",
-        "checkedAt": "2026-10-10",
-        "priceEvidence": "published-guide"
-      },
       "efficiency": {
         "value": 22.4,
         "unit": "panel-efficiency-percent",
@@ -4116,15 +3735,6 @@
     ],
     "cons": [],
     "measurements": {
-      "cost": {
-        "value": 0.296989,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "RSM96-11-475BNDG",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/risen-rsm96-11-475w-n-type-topcon-bifacial-96half-cells-black-30mm-mc4-evo2-pv-sy02-rsm96-11-475bndg-iec-61215-2021",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 23.8,
         "unit": "panel-efficiency-percent",
@@ -4237,7 +3847,6 @@
       "Standard glass version weighs 24.5 kg; the lighter 21.5 kg option uses thinner glass."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 22.5,
         "unit": "panel-efficiency-percent",
@@ -4309,12 +3918,6 @@
       "released": null,
       "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
       "note": "Maker describes its new TOPCon 5.0 platform in 2025; the current AU page identifies N7s 2.0 and its September 2025 sheet. Exact first Australian sale date is unverified."
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/"
-      }
     }
   },
   {
@@ -4361,7 +3964,6 @@
       "Standard glass version weighs 24.5 kg; the lighter 21.5 kg option uses thinner glass."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 22.8,
         "unit": "panel-efficiency-percent",
@@ -4433,12 +4035,6 @@
       "released": null,
       "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
       "note": "Maker describes its new TOPCon 5.0 platform in 2025; the current AU page identifies N7s 2.0 and its September 2025 sheet. Exact first Australian sale date is unverified."
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/"
-      }
     }
   },
   {
@@ -4485,7 +4081,6 @@
       "Standard glass version weighs 24.5 kg; the lighter 21.5 kg option uses thinner glass."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23,
         "unit": "panel-efficiency-percent",
@@ -4557,12 +4152,6 @@
       "released": null,
       "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
       "note": "Maker describes its new TOPCon 5.0 platform in 2025; the current AU page identifies N7s 2.0 and its September 2025 sheet. Exact first Australian sale date is unverified."
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/"
-      }
     }
   },
   {
@@ -4609,7 +4198,6 @@
       "Standard glass version weighs 24.5 kg; the lighter 21.5 kg option uses thinner glass."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.3,
         "unit": "panel-efficiency-percent",
@@ -4681,12 +4269,6 @@
       "released": null,
       "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
       "note": "Maker describes its new TOPCon 5.0 platform in 2025; the current AU page identifies N7s 2.0 and its September 2025 sheet. Exact first Australian sale date is unverified."
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/"
-      }
     }
   },
   {
@@ -4733,7 +4315,6 @@
       "Standard glass version weighs 24.5 kg; the lighter 21.5 kg option uses thinner glass."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 23.5,
         "unit": "panel-efficiency-percent",
@@ -4805,12 +4386,6 @@
       "released": null,
       "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/",
       "note": "Maker describes its new TOPCon 5.0 platform in 2025; the current AU page identifies N7s 2.0 and its September 2025 sheet. Exact first Australian sale date is unverified."
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://astronergy.com.au/astronergy-consolidates-its-leadership-at-intersolar-europe-2025-through-advanced-technology-and-strategic-expansion-in-europe/"
-      }
     }
   },
   {
@@ -4851,7 +4426,6 @@
       "440 W output needs more panels than 475 W models for the same system size."
     ],
     "measurements": {
-      "cost": null,
       "efficiency": {
         "value": 22.02,
         "unit": "panel-efficiency-percent",
@@ -4923,12 +4497,6 @@
       "released": null,
       "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf",
       "note": "The maker’s 2025 brochure explicitly describes the cell-wiring update. Its publication is not treated as proof of an exact launch day; older L12 models are not substituted."
-    },
-    "measurementGaps": {
-      "cost": {
-        "reason": "No current GST-inclusive Australian equipment price or exact-model published cost guide was verified for this panel range.",
-        "sourceUrl": "https://phonosolar.com.au/wp-content/uploads/2025/04/7dcc4908-1046-4dc0-a77f-9e2b10fc6647.pdf"
-      }
     }
   },
   {
@@ -4981,16 +4549,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "CS6.2-48TD-455"
-      },
       "efficiency": {
         "value": 22.8,
         "unit": "panel-efficiency-percent",
@@ -5119,16 +4677,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "CS6.2-48TD-460"
-      },
       "efficiency": {
         "value": 23,
         "unit": "panel-efficiency-percent",
@@ -5257,16 +4805,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "CS6.2-48TD-465"
-      },
       "efficiency": {
         "value": 23.3,
         "unit": "panel-efficiency-percent",
@@ -5395,16 +4933,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "CS6.2-48TD-470"
-      },
       "efficiency": {
         "value": 23.5,
         "unit": "panel-efficiency-percent",
@@ -5533,15 +5061,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 23.8,
         "unit": "panel-efficiency-percent",
@@ -5665,16 +5184,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "CS6.2-48TD-480"
-      },
       "efficiency": {
         "value": 24,
         "unit": "panel-efficiency-percent",
@@ -5803,16 +5312,6 @@
       "At 24.6 kg, each panel is heavier than several similar-sized models here."
     ],
     "measurements": {
-      "cost": {
-        "value": 0.629474,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "CS6.2-48TD-475",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://www.springers.com.au/shop/cs475-canadian-solar-475w-n-type-topcon-technology-dual-glass-tophiku6-19255",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "CS6.2-48TD-485"
-      },
       "efficiency": {
         "value": 24.3,
         "unit": "panel-efficiency-percent",
@@ -5945,15 +5444,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.longi.com/Limited_Warranty_for_LON_Gi_Hi_MOX_10_Solar_Modules_Distributed_Generation_AU_1_c8a7831c18.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.407011,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "LR7-54HVH-475M",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/longi-475w-hi-mo-x10-n-type-solar-panel-lr7-54hvh-475m",
-        "checkedAt": "2026-10-10"
       }
     },
     "technicalSpecs": [
@@ -6048,16 +5538,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.longi.com/Limited_Warranty_for_LON_Gi_Hi_MOX_10_Solar_Modules_Distributed_Generation_AU_1_c8a7831c18.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.407011,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "LR7-54HVH-475M",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/longi-475w-hi-mo-x10-n-type-solar-panel-lr7-54hvh-475m",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "LR7-54HVH-480M"
       }
     },
     "technicalSpecs": [
@@ -6157,16 +5637,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.longi.com/Limited_Warranty_for_LON_Gi_Hi_MOX_10_Solar_Modules_Distributed_Generation_AU_1_c8a7831c18.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.407011,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "LR7-54HVH-475M",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/longi-475w-hi-mo-x10-n-type-solar-panel-lr7-54hvh-475m",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "LR7-54HVH-485M"
       }
     },
     "technicalSpecs": [
@@ -6266,16 +5736,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.longi.com/Limited_Warranty_for_LON_Gi_Hi_MOX_10_Solar_Modules_Distributed_Generation_AU_1_c8a7831c18.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.407011,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "LR7-54HVH-475M",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/longi-475w-hi-mo-x10-n-type-solar-panel-lr7-54hvh-475m",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "LR7-54HVH-490M"
       }
     },
     "technicalSpecs": [
@@ -6369,16 +5829,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-440NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -6472,16 +5922,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-445NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -6575,16 +6015,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-450NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -6678,16 +6108,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-455NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -6781,16 +6201,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-460NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -6884,16 +6294,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-465NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -6987,16 +6387,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "TSM-470NEG9RH.28"
       }
     },
     "technicalSpecs": [
@@ -7089,15 +6479,6 @@
         "variant": "TSM-475NEG9RH.28",
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://static.trinasolar.com/sites/default/files/1_DT-M-0124-AUS%20EN%20A%20Datasheet_VertexS+_NEG9RH.28_2025_PA5(Final).pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.3036,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "TSM-475NEG9RH.28",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/trina-solar-475w-n-type-i-topcon-ultra-monocrystalline-96-halfcells-dual-glass-blackframe-30mm-1100mm-cable-mc4-evo2-iec-61215-2021",
         "checkedAt": "2026-10-10"
       }
     },
@@ -7193,16 +6574,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://www.jasolar.com/uploadfile/fujian/2025/0924/e4e9df3aeb2b979.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.341874,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JAM54D40-475/LR",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/ja-solar-475w-mono-solar-panel-jam54d40-475-lr",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "JAM54D40-450/LR"
       }
     },
     "technicalSpecs": [
@@ -7304,16 +6675,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://www.jasolar.com/uploadfile/fujian/2025/0924/e4e9df3aeb2b979.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.341874,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JAM54D40-475/LR",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/ja-solar-475w-mono-solar-panel-jam54d40-475-lr",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "JAM54D40-455/LR"
       }
     },
     "technicalSpecs": [
@@ -7415,16 +6776,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://www.jasolar.com/uploadfile/fujian/2025/0924/e4e9df3aeb2b979.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.341874,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JAM54D40-475/LR",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/ja-solar-475w-mono-solar-panel-jam54d40-475-lr",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "JAM54D40-460/LR"
       }
     },
     "technicalSpecs": [
@@ -7526,16 +6877,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://www.jasolar.com/uploadfile/fujian/2025/0924/e4e9df3aeb2b979.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.341874,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JAM54D40-475/LR",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/ja-solar-475w-mono-solar-panel-jam54d40-475-lr",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "JAM54D40-465/LR"
       }
     },
     "technicalSpecs": [
@@ -7637,16 +6978,6 @@
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://www.jasolar.com/uploadfile/fujian/2025/0924/e4e9df3aeb2b979.pdf",
         "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.341874,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JAM54D40-475/LR",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/ja-solar-475w-mono-solar-panel-jam54d40-475-lr",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "JAM54D40-470/LR"
       }
     },
     "technicalSpecs": [
@@ -7747,15 +7078,6 @@
         "variant": "JAM54D40-475/LR",
         "basis": "Included main panel material/workmanship fault cover; excludes conditional extensions and output-retention, installation, inverter and labour warranties.",
         "sourceUrl": "https://www.jasolar.com/uploadfile/fujian/2025/0924/e4e9df3aeb2b979.pdf",
-        "checkedAt": "2026-10-10"
-      },
-      "cost": {
-        "value": 0.341874,
-        "unit": "aud-per-w",
-        "basisId": "panel-unit-gst",
-        "variant": "JAM54D40-475/LR",
-        "basis": "Public Australian single-panel equipment retail including GST, before installation or rebates. Other range variants may cost differently.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/ja-solar-475w-mono-solar-panel-jam54d40-475-lr",
         "checkedAt": "2026-10-10"
       }
     },

@@ -20,7 +20,7 @@
       {
         "title": "Australian equipment listing GW-GW5000-DNS-40",
         "url": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -43,16 +43,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 137.328,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW5000-DNS-40",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "GW3K-DNS-G40"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -141,7 +131,7 @@
       {
         "title": "Australian equipment listing GW-GW5000-DNS-40",
         "url": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -164,16 +154,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 137.328,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW5000-DNS-40",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "GW3.6K-DNS-G40"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -262,7 +242,7 @@
       {
         "title": "Australian equipment listing GW-GW5000-DNS-40",
         "url": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -285,16 +265,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 137.328,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW5000-DNS-40",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "GW4.2K-DNS-G40"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -395,7 +365,7 @@
       {
         "title": "Australian equipment listing GW-GW5000-DNS-40",
         "url": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -411,16 +381,6 @@
       "note": "Maker unveiled DNS G4 globally in August 2025. Current Australian sheet confirms GW5K-DNS-G40; exact AU first arrival is unverified."
     },
     "measurements": {
-      "cost": {
-        "value": 137.328,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW5000-DNS-40",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "GW5K-DNS-G40"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -516,7 +476,7 @@
       {
         "title": "Australian equipment listing GW-GW5000-DNS-40",
         "url": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -539,16 +499,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Ftp/EN/Downloads/ZUO/GW_DNS-G4_Datasheet-AU-C.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 137.328,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW5000-DNS-40",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-dns-g40-5kw-single-phase-string-inverter-2mppts-200-pv-oversizing-w-wifi-w-dci-w-inbuilt-meter-1-ct",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "GW6K-DNS-G40"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -633,12 +583,6 @@
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20Inverter%20System-AU&NZ.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing GW-GW6000-ET-20",
-        "url": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-6kw-3-phase-2-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw6000-et-20",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -660,15 +604,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20240925/ET-G2-31.png"
     },
     "measurements": {
-      "cost": {
-        "value": 447.81,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW6000-ET-20",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-6kw-3-phase-2-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw6000-et-20",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98,
         "unit": "peak-efficiency-percent",
@@ -748,12 +683,6 @@
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20Inverter%20System-AU&NZ.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing GW-GW8000-ET-20",
-        "url": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-8kw-3-phase-2-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw8000-et-20",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -775,15 +704,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20240925/ET-G2-31.png"
     },
     "measurements": {
-      "cost": {
-        "value": 370.74125,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW8000-ET-20",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-8kw-3-phase-2-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw8000-et-20",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98,
         "unit": "peak-efficiency-percent",
@@ -870,12 +790,6 @@
         "revision": "AU 2.1, 26 September 2024"
       },
       {
-        "title": "Exact AU equipment-only retail bundle",
-        "url": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-9-9kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw9900-et-20",
-        "kind": "published_equipment_price",
-        "revision": "Public price including GST checked 10 October 2026"
-      },
-      {
         "title": "GoodWe AU/NZ included fault warranty",
         "url": "https://www.goodwe.com.au/Skippower/downloadFileF?id=10&mid=176",
         "kind": "manufacturer_specification",
@@ -901,15 +815,6 @@
       "note": "Maker announced the second generation in Australia in December 2024; specifications here are the exact 9.99 kW variant."
     },
     "measurements": {
-      "cost": {
-        "value": 306.5045045045045,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW9900-ET-20",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-9-9kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw9900-et-20",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.2,
         "unit": "peak-efficiency-percent",
@@ -1001,7 +906,7 @@
       {
         "title": "Australian equipment listing GW-GW9900-ET-20",
         "url": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-9-9kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw9900-et-20",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -1024,16 +929,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20240925/ET-G2-31.png"
     },
     "measurements": {
-      "cost": {
-        "value": 306.5045045045045,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW9900-ET-20",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-9-9kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw9900-et-20",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "GW12K-ET-20"
-      },
       "efficiency": {
         "value": 98.2,
         "unit": "peak-efficiency-percent",
@@ -1118,12 +1013,6 @@
         "url": "https://www.goodwe.com.au/Ftp/Downloads/Warranty/GOODWE%20Limited%20Warranty%20for%20Inverter%20System-AU&NZ.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing GW-GW15K-ET-20",
-        "url": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-15kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw15k-et-20",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -1145,15 +1034,6 @@
       "sourceUrl": "https://www.goodwe.com.au/Public/Uploads/uploadfile4/images/20240925/ET-G2-31.png"
     },
     "measurements": {
-      "cost": {
-        "value": 216.42000000000002,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "GW-GW15K-ET-20",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/goodwe-et-g2-hybrid-hv-15kw-3-phase-3-mppt-w-wifi-w-dci-w-inbuilt-meter-w-3xcts-w-backup-gw15k-et-20",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.2,
         "unit": "peak-efficiency-percent",
@@ -1227,12 +1107,6 @@
         "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20251219/ENH3SmartDatasheetAUV1.220250702.pdf",
         "kind": "manufacturer_specification",
         "revision": "AU V1.2, 2 July 2025"
-      },
-      {
-        "title": "Australian equipment listing FOX-H3-5.0-Smart-6CTs",
-        "url": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -1254,15 +1128,6 @@
       "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 409.908,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-5.0-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.3,
         "unit": "peak-efficiency-percent",
@@ -1340,7 +1205,7 @@
       {
         "title": "Australian equipment listing FOX-H3-5.0-Smart-6CTs",
         "url": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -1363,16 +1228,6 @@
       "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 409.908,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-5.0-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "H3-6.0-Smart"
-      },
       "efficiency": {
         "value": 97.7,
         "unit": "peak-efficiency-percent",
@@ -1455,7 +1310,7 @@
       {
         "title": "Australian equipment listing FOX-H3-5.0-Smart-6CTs",
         "url": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -1478,16 +1333,6 @@
       "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 409.908,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-5.0-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "H3-8.0-Smart"
-      },
       "efficiency": {
         "value": 97.7,
         "unit": "peak-efficiency-percent",
@@ -1578,12 +1423,6 @@
         "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20251219/ENH3SmartDatasheetAUV1.220250702.pdf",
         "kind": "manufacturer_specification",
         "revision": "AU V1.2, 2 July 2025"
-      },
-      {
-        "title": "Australian equipment listing FOX-H3-9.9-Smart-6CTs",
-        "url": "https://dzelectricalproducts.com/products/foxess-three-phase-9-9kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "image": {
@@ -1598,15 +1437,6 @@
       "note": "Maker announced H3 Smart in June 2025. Current AU sheet verifies the selected9.9 kW model."
     },
     "measurements": {
-      "cost": {
-        "value": 227.01999999999998,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-9.9-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-9-9kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -1693,12 +1523,6 @@
         "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20251219/ENH3SmartDatasheetAUV1.220250702.pdf",
         "kind": "manufacturer_specification",
         "revision": "AU V1.2, 2 July 2025"
-      },
-      {
-        "title": "Australian equipment listing FOX-H3-10.0-Smart-6CTs",
-        "url": "https://dzelectricalproducts.com/products/foxess-three-phase-10-0kw-hybrid-inverter-3mppts-200-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -1720,15 +1544,6 @@
       "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 227.01999999999998,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-10.0-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-10-0kw-hybrid-inverter-3mppts-200-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -1806,7 +1621,7 @@
       {
         "title": "Australian equipment listing FOX-H3-5.0-Smart-6CTs",
         "url": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -1829,16 +1644,6 @@
       "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 409.908,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-5.0-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-5-0kw-hybrid-inverter-3mppts-220-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "H3-12.0-Smart"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -1917,12 +1722,6 @@
         "url": "https://au.fox-ess.com/Public/Uploads/uploadfile/files/20251219/ENH3SmartDatasheetAUV1.220250702.pdf",
         "kind": "manufacturer_specification",
         "revision": "AU V1.2, 2 July 2025"
-      },
-      {
-        "title": "Australian equipment listing FOX-H3-15.0-Smart-6CTs",
-        "url": "https://dzelectricalproducts.com/products/foxess-three-phase-15-0kw-hybrid-inverter-3mppts-200-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -1944,15 +1743,6 @@
       "sourceUrl": "https://au.fox-ess.com/wp-content/uploads/2025/08/EN-H3-Smart-DatasheetAU-V1.2-20250702.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 155.67333333333332,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FOX-H3-15.0-Smart-6CTs",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/foxess-three-phase-15-0kw-hybrid-inverter-3mppts-200-oversizing-w-meter-6cts-w-wifi-w-dci-w-backup",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -2036,7 +1826,7 @@
       {
         "title": "Australian equipment listing SOL-S6-EH1P8K-L-PLUS-AU",
         "url": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2059,16 +1849,6 @@
       "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 275.825,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SOL-S6-EH1P8K-L-PLUS-AU",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "S6-EH1P3K-L-PLUS-AU"
-      },
       "efficiency": {
         "value": 96.2,
         "unit": "peak-efficiency-percent",
@@ -2157,7 +1937,7 @@
       {
         "title": "Australian equipment listing SOL-S6-EH1P8K-L-PLUS-AU",
         "url": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2180,16 +1960,6 @@
       "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 275.825,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SOL-S6-EH1P8K-L-PLUS-AU",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "S6-EH1P3.6K-L-PLUS-AU"
-      },
       "efficiency": {
         "value": 96.2,
         "unit": "peak-efficiency-percent",
@@ -2289,7 +2059,7 @@
       {
         "title": "Australian equipment listing SOL-S6-EH1P8K-L-PLUS-AU",
         "url": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2306,16 +2076,6 @@
       "note": "Australian maker launch dated February 2025. Uses the PLUS generation, not earlier S6 variants."
     },
     "measurements": {
-      "cost": {
-        "value": 275.825,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SOL-S6-EH1P8K-L-PLUS-AU",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "S6-EH1P5K-L-PLUS-AU"
-      },
       "efficiency": {
         "value": 96.2,
         "unit": "peak-efficiency-percent",
@@ -2411,7 +2171,7 @@
       {
         "title": "Australian equipment listing SOL-S6-EH1P8K-L-PLUS-AU",
         "url": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2434,16 +2194,6 @@
       "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 275.825,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SOL-S6-EH1P8K-L-PLUS-AU",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "S6-EH1P6K-L-PLUS-AU"
-      },
       "efficiency": {
         "value": 96.2,
         "unit": "peak-efficiency-percent",
@@ -2528,12 +2278,6 @@
         "url": "https://www.solisinverters.au/uploads/files/202408/WARRANTY_TERMS_AND_CONDITIONS_FOR_AUS%26NZ_ONLY_20240802.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SOL-S6-EH1P8K-L-PLUS-AU",
-        "url": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -2555,15 +2299,6 @@
       "sourceUrl": "https://www.solisinverters.au/uploads/files/202506/Solis_datasheet_S6-EH1P(3-8)K-L-PLUS-AU_AUS_V1,6_202505.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 275.825,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SOL-S6-EH1P8K-L-PLUS-AU",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/solis-hybrid-s6-lv-8kw-1-phase-2-mppt-4-strings-w-dci-w-wi-fi-w-meter",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 96.2,
         "unit": "peak-efficiency-percent",
@@ -2647,7 +2382,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SG2.0RS-G3",
         "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2669,16 +2404,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 422.0,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG2.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SG2.0RS-S"
-      },
       "efficiency": {
         "value": 97.8,
         "unit": "peak-efficiency-percent",
@@ -2767,7 +2492,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SG2.0RS-G3",
         "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2789,16 +2514,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 422.0,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG2.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SG2.5RS-S"
-      },
       "efficiency": {
         "value": 97.8,
         "unit": "peak-efficiency-percent",
@@ -2887,7 +2602,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SG2.0RS-G3",
         "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -2909,16 +2624,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 422.0,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG2.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-2-0kw-1mppt-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SG3.0RS-S"
-      },
       "efficiency": {
         "value": 97.8,
         "unit": "peak-efficiency-percent",
@@ -3003,12 +2708,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG3.0RS-G3",
-        "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-3-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -3030,15 +2729,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 331.05333333333334,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG3.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-3-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -3122,7 +2812,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SG5.0RS-G3",
         "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -3145,16 +2835,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 218.81176235247048,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG5.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SG3.6RS"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -3243,7 +2923,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SG5.0RS-G3",
         "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -3266,16 +2946,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 218.81176235247048,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG5.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SG4.0RS"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -3360,12 +3030,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG5.0RS-G3",
-        "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -3387,15 +3051,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 218.81176235247048,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG5.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -3479,7 +3134,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SG5.0RS-G3",
         "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -3502,16 +3157,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new"
     },
     "measurements": {
-      "cost": {
-        "value": 218.81176235247048,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG5.0RS-G3",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5-0kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty-new",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SG6.0RS"
-      },
       "efficiency": {
         "value": 97.9,
         "unit": "peak-efficiency-percent",
@@ -3596,12 +3241,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG5.0RS-ADA",
-        "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-5kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-and-wireless-meter-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -3623,15 +3262,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-10kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 310.8121624324865,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG5.0RS-ADA",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-5kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-and-wireless-meter-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.8,
         "unit": "peak-efficiency-percent",
@@ -3711,12 +3341,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG8.0RS-ADA",
-        "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-8kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -3738,15 +3362,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-10kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 256.36875,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG8.0RS-ADA",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-8kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.8,
         "unit": "peak-efficiency-percent",
@@ -3826,12 +3441,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG10RS-ADA",
-        "url": "https://dzelectricalproducts.com/products/sungrow-single-phase-10kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -3853,15 +3462,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-10kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 217.54675467546753,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG10RS-ADA",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-single-phase-10kw-3mppt-inverter-w-dc-cover-in-built-dc-w-wifi-s100-meter-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.8,
         "unit": "peak-efficiency-percent",
@@ -3941,12 +3541,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG5.0RT",
-        "url": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -3968,15 +3562,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 323.18,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG5.0RT",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.4,
         "unit": "peak-efficiency-percent",
@@ -4056,12 +3641,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG8.0RT",
-        "url": "https://dzelectricalproducts.com/products/sungrow-three-phase-8kw-2mppt-3-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4083,15 +3662,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 217.525,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG8.0RT",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-8kw-2mppt-3-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.5,
         "unit": "peak-efficiency-percent",
@@ -4171,12 +3741,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG10RT",
-        "url": "https://dzelectricalproducts.com/products/sungrow-three-phase-10kw-2mppt-3-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4198,15 +3762,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 205.1155115511551,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG10RT",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-10kw-2mppt-3-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.5,
         "unit": "peak-efficiency-percent",
@@ -4286,12 +3841,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG15RT",
-        "url": "https://dzelectricalproducts.com/products/sungrow-three-phase-15kw-2mppt-4-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4313,15 +3862,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 161.59,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG15RT",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-15kw-2mppt-4-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.5,
         "unit": "peak-efficiency-percent",
@@ -4401,12 +3941,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SG20RT",
-        "url": "https://dzelectricalproducts.com/products/sungrow-three-phase-20kw-2mppt-4-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4428,15 +3962,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-5kw-2mppt-2-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 133.6225,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SG20RT",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-three-phase-20kw-2mppt-4-string-inverter-w-dc-in-built-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.5,
         "unit": "peak-efficiency-percent",
@@ -4516,12 +4041,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SH5.0RS-ADA",
-        "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4543,15 +4062,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 435.13702740548115,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH5.0RS-ADA",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.7,
         "unit": "peak-efficiency-percent",
@@ -4631,12 +4141,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SH6.0RS-ADA",
-        "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-6kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4658,15 +4162,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-5kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 403.97499999999997,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH6.0RS-ADA",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-6kw-2mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.7,
         "unit": "peak-efficiency-percent",
@@ -4746,12 +4241,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SH8.0RS",
-        "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-8kw-4mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4773,15 +4262,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-10kw-4mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 372.9,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH8.0RS",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-8kw-4mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.4,
         "unit": "peak-efficiency-percent",
@@ -4861,12 +4341,6 @@
         "url": "https://service.sungrowpower.com.au/New%20knowledge%20base%20file/warranty/WD_202510_Term_Sungrow-s%20Inverters%2010-Year%20Limited%20Warraty_V4.32.pdf",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SH10RS",
-        "url": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-10kw-4mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -4888,15 +4362,6 @@
       "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-10kw-4mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty"
     },
     "measurements": {
-      "cost": {
-        "value": 341.85918591859183,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH10RS",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-hybrid-single-phase-10kw-4mppt-inverter-w-dc-in-built-backup-w-wifi-w-dtsu666-20-meter-2-x-cts-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.5,
         "unit": "peak-efficiency-percent",
@@ -4979,15 +4444,6 @@
       "Included monitoring and meter accessories have shorter fault cover than the inverter."
     ],
     "measurements": {
-      "cost": {
-        "value": 331.05266666666665,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH15T",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -5085,12 +4541,6 @@
         "url": "https://www.powerproductsdirect.com.au/shop/sh15t-sungrow-hybrid-15kw-three-phase-solar-inverter-17770",
         "kind": "australian_retailer_price",
         "revision": "GST inclusive unit price checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing SUNGROW-SH15T",
-        "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ]
   },
@@ -5115,7 +4565,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SH15T",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -5138,16 +4588,6 @@
       "sourceUrl": "https://info-support.sungrowpower.com/application/pdf/2024/03/29/DS_20240328_SH15_20_25T_Datasheet_V3_EN(AU).pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 331.05266666666665,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH15T",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SH20T"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -5236,7 +4676,7 @@
       {
         "title": "Australian equipment listing SUNGROW-SH15T",
         "url": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -5259,16 +4699,6 @@
       "sourceUrl": "https://info-support.sungrowpower.com/application/pdf/2024/03/29/DS_20240328_SH15_20_25T_Datasheet_V3_EN(AU).pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 331.05266666666665,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SUNGROW-SH15T",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sungrow-t-hybrid-hv-three-phase-15kw-3mppt-5-string-inverter-w-dc-in-built-backup-w-wifi-w-10-years-warranty",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SH25T"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -5357,7 +4787,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -5386,16 +4816,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 3.0"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -5484,7 +4904,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -5513,16 +4933,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 3.6"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -5611,7 +5021,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -5640,16 +5050,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 4.0"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -5738,7 +5138,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -5767,16 +5167,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 4.6"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -5865,7 +5255,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -5894,16 +5284,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 5.0"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -5992,7 +5372,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6021,16 +5401,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 6.0"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -6119,7 +5489,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6148,16 +5518,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-8-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 8.0"
-      },
       "efficiency": {
         "value": 97.3,
         "unit": "peak-efficiency-percent",
@@ -6246,7 +5606,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0",
         "url": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6275,16 +5635,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-8-0"
     },
     "measurements": {
-      "cost": {
-        "value": 490.64399999999995,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-gen24-primo-5-kw-1-phase-2-mppt-w-dm",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 10.0"
-      },
       "efficiency": {
         "value": 97.3,
         "unit": "peak-efficiency-percent",
@@ -6373,7 +5723,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6402,16 +5752,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 3.0 Plus"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -6500,7 +5840,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6529,16 +5869,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 3.6 Plus"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -6627,7 +5957,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6656,16 +5986,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 4.0 Plus"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -6754,7 +6074,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6783,16 +6103,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 4.6 Plus"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -6881,7 +6191,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -6910,16 +6220,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 5.0 Plus"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -7008,7 +6308,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -7037,16 +6337,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-3-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 6.0 Plus"
-      },
       "efficiency": {
         "value": 97.6,
         "unit": "peak-efficiency-percent",
@@ -7135,7 +6425,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -7164,16 +6454,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-8-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 8.0 Plus"
-      },
       "efficiency": {
         "value": 97.3,
         "unit": "peak-efficiency-percent",
@@ -7262,7 +6542,7 @@
       {
         "title": "Australian equipment listing FNS-Primo GEN24 5.0 PLUS",
         "url": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       },
       {
@@ -7291,16 +6571,6 @@
       "sourceUrl": "https://bessaustralia.com.au/products/primo-gen24-8-0"
     },
     "measurements": {
-      "cost": {
-        "value": 791.78,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "FNS-Primo GEN24 5.0 PLUS",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/fronius-primo-hybrid-inverter-5-0kw-single-phase-2-mppt-w-full-backup-w-pv-point",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Primo GEN24 10.0 Plus"
-      },
       "efficiency": {
         "value": 97.3,
         "unit": "peak-efficiency-percent",
@@ -7395,7 +6665,7 @@
       {
         "title": "Australian equipment listing VERTO PLUS 25.0",
         "url": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -7411,16 +6681,6 @@
       "note": "Maker premiered Verto Plus in March 2025. Current AU product page confirms the range; first AU arrival is unverified.15 kW fits large homes, sheds or business loads."
     },
     "measurements": {
-      "cost": {
-        "value": 305.4076,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "VERTO PLUS 25.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Verto 15.0 Plus"
-      },
       "efficiency": {
         "value": 98.03,
         "unit": "peak-efficiency-percent",
@@ -7518,7 +6778,7 @@
       {
         "title": "Australian equipment listing VERTO PLUS 25.0",
         "url": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -7542,16 +6802,6 @@
       "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 305.4076,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "VERTO PLUS 25.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Verto 17.5 Plus"
-      },
       "efficiency": {
         "value": 98.06,
         "unit": "peak-efficiency-percent",
@@ -7640,7 +6890,7 @@
       {
         "title": "Australian equipment listing VERTO PLUS 25.0",
         "url": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
@@ -7664,16 +6914,6 @@
       "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 305.4076,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "VERTO PLUS 25.0",
-        "basis": "Australian equipment-only unit listing including GST. This is the same-generation range reference, not a price for the selected size. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "Verto 20.0 Plus"
-      },
       "efficiency": {
         "value": 98.15,
         "unit": "peak-efficiency-percent",
@@ -7758,12 +6998,6 @@
         "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/service-support/warranty-models?bt=m",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing VERTO PLUS 25.0",
-        "url": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -7786,15 +7020,6 @@
       "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 305.4076,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "VERTO PLUS 25.0",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://bessaustralia.com.au/products/verto-25-0-plus-spd-1-2",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.16,
         "unit": "peak-efficiency-percent",
@@ -7874,12 +7099,6 @@
         "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/service-support/warranty-models?bt=m",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing VERTO PLUS 30.0",
-        "url": "https://bessaustralia.com.au/products/verto-30-0-plus-spd-1-2",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -7902,15 +7121,6 @@
       "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 290.96765588529513,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "VERTO PLUS 30.0",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://bessaustralia.com.au/products/verto-30-0-plus-spd-1-2",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.15,
         "unit": "peak-efficiency-percent",
@@ -7990,12 +7200,6 @@
         "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/service-support/warranty-models?bt=m",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment listing VERTO PLUS 33.3",
-        "url": "https://bessaustralia.com.au/products/verto-33-3-plus-spd-1-2",
-        "kind": "published_equipment_price",
-        "revision": "Public AUD listing checked 10 October 2026; DZ prices include GST, BESS catalogue prices exclude GST and are multiplied by 1.10"
       }
     ],
     "pros": [
@@ -8018,15 +7222,6 @@
       "sourceUrl": "https://index.gosolar.com.au/wp-content/uploads/2026/03/Verto-Plus.pdf"
     },
     "measurements": {
-      "cost": {
-        "value": 270.23603603603607,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "VERTO PLUS 33.3",
-        "basis": "Australian equipment-only unit listing including GST. Installation, batteries and optional backup equipment are excluded.",
-        "sourceUrl": "https://bessaustralia.com.au/products/verto-33-3-plus-spd-1-2",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.15,
         "unit": "peak-efficiency-percent",
@@ -8112,12 +7307,6 @@
         "url": "https://www.fronius.com/en-au/australia/solar-energy/installers-partners/service-support/warranty-models?bt=m",
         "kind": "manufacturer_warranty",
         "revision": "Current Australian source checked 10 October 2026"
-      },
-      {
-        "title": "Exact Australian equipment-only retail listing",
-        "url": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "kind": "published_equipment_price",
-        "revision": "Current Australian source checked 10 October 2026"
       }
     ],
     "image": {
@@ -8132,15 +7321,6 @@
       "note": "The SC hardware refresh has a current exact Australian model and2025 AU sheet. UK announcement isAugust 2026; first global/Australian release is not confirmed."
     },
     "measurements": {
-      "cost": {
-        "value": 436.15166666666664,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "Symo GEN24 12.0 Plus SC",
-        "basis": "BESS Australia equipment-only price excluding GST multiplied by 1.10; inverter only, without battery, meter, switching or installation.",
-        "sourceUrl": "https://bessaustralia.com.au/products/symo-gen24-12-0-plus-sc",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.2,
         "unit": "peak-efficiency-percent",
@@ -8225,15 +7405,6 @@
       "Blackout power needs an Enphase battery and extra backup equipment."
     ],
     "measurements": {
-      "cost": {
-        "value": 646.0526315789474,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "One IQ8X-80-M-INT, 380 W rated AC output",
-        "basis": "Exact microinverter unit price A$245.50, divided by 0.38 kW rated AC power. Retailer terms state AUD prices include applicable GST. Gateway, relays, cabling, installation and delivery are separate; this is not a whole-array package price.",
-        "sourceUrl": "https://www.solarbatteriesonline.com.au/product/enphase-iq8x-microinverter/",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 97.5,
         "unit": "peak-efficiency-percent",
@@ -8375,15 +7546,6 @@
       "The standard fault warranty is shorter than its advertised registered warranty."
     ],
     "measurements": {
-      "cost": {
-        "value": 612.6560000000001,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SBSE5.0-50",
-        "basis": "DZ Electrical Australian equipment-only inverter listing including GST; external battery and backup hardware excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sma-sunny-boy-smart-energy-single-phase-5-0kw-hybrid-inverter-3-mppt-3-strings-w-wi-fi-w-dci-sbse5-0-50",
-        "checkedAt": "2026-10-10"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -8486,12 +7648,6 @@
         "url": "https://www.sma-australia.com.au/newsroom/news-details/sunny-central-storage-4600-up-s-battery-inverter",
         "kind": "manufacturer",
         "revision": "23 October 2024; residential product described as forthcoming"
-      },
-      {
-        "title": "Current Australian equipment-only inverter listing",
-        "url": "https://dzelectricalproducts.com/products/sma-sunny-boy-smart-energy-single-phase-5-0kw-hybrid-inverter-3-mppt-3-strings-w-wi-fi-w-dci-sbse5-0-50",
-        "kind": "published_equipment_price",
-        "revision": "Current Australian source checked 10 October 2026"
       }
     ]
   },
@@ -8514,16 +7670,6 @@
       "The standard fault warranty is shorter than its advertised registered warranty."
     ],
     "measurements": {
-      "cost": {
-        "value": 612.6560000000001,
-        "unit": "aud-per-kw",
-        "basisId": "inverter-unit-gst",
-        "variant": "SBSE5.0-50",
-        "basis": "DZ Electrical Australian equipment-only inverter listing including GST; external battery and backup hardware excluded.",
-        "sourceUrl": "https://dzelectricalproducts.com/products/sma-sunny-boy-smart-energy-single-phase-5-0kw-hybrid-inverter-3-mppt-3-strings-w-wi-fi-w-dci-sbse5-0-50",
-        "checkedAt": "2026-10-10",
-        "referenceFor": "SBSE6.0-50"
-      },
       "efficiency": {
         "value": 98.1,
         "unit": "peak-efficiency-percent",
@@ -8620,7 +7766,7 @@
       {
         "title": "Current Australian equipment-only inverter listing",
         "url": "https://dzelectricalproducts.com/products/sma-sunny-boy-smart-energy-single-phase-5-0kw-hybrid-inverter-3-mppt-3-strings-w-wi-fi-w-dci-sbse5-0-50",
-        "kind": "published_equipment_price",
+        "kind": "product_information",
         "revision": "Current Australian source checked 10 October 2026"
       }
     ]

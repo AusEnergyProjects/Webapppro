@@ -23,9 +23,7 @@ export function hotWaterComparisonFacts(performance: HotWaterPerformance): Produ
   if (performance.noise) {
     const figure = performance.noise;
     if (!Number.isFinite(figure.value) || figure.value < 0 || !["sound-pressure", "sound-power", "not-stated"].includes(figure.metric) || !figure.mode.trim() || !/^https:\/\//.test(figure.sourceUrl) || (figure.distanceMetres !== null && (!Number.isFinite(figure.distanceMetres) || figure.distanceMetres <= 0))) throw new Error("Invalid published heat-pump noise measurement");
-    const distance = figure.distanceMetres === null ? "distance not specified" : `at ${figure.distanceMetres} m`;
-    const basis = figure.metric === "sound-power" ? "sound power, not a distance reading" : figure.metric === "not-stated" ? `${distance}; noise test type not specified` : distance;
-    noise = `${figure.value} dB(A), ${basis}; ${figure.mode}`;
+    noise = `${figure.value} dB`;
   }
   const recovery = performance.recovery;
   if (!recovery) return { noise, recovery: "Not published with usable test conditions", conditions: "No recovery time inferred from tank size alone.", recoverySourceUrl: null };

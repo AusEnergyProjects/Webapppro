@@ -1,0 +1,1520 @@
+{
+  "checkedAt": "2026-10-12",
+  "solarVictoria": {
+    "rules": {
+      "effectiveIncomeFrom": "2026-07-01",
+      "combinedOwnerTaxableIncomeExclusiveMaximum": 150000,
+      "propertyValueExclusiveMaximum": 3000000,
+      "ownerOccupierExistingPropertyRequired": true,
+      "minimumExistingSystemAgeYears": 3,
+      "previousSolarHomesHotWaterOrBatteryRebateAtAddressBlocks": true,
+      "standardCap": 1000,
+      "localContentCap": 1400,
+      "shareOfPostDiscountSystemCost": 0.5,
+      "certificateDiscountsAppliedBeforeRebate": true,
+      "authorisedRetailerAndEligibleProductRequired": true,
+      "installationWithinQrApprovalDays": 120,
+      "emergencyInstallationSpecialProcess": true,
+      "solsticeAffectedCustomersRequireSeparateAssessment": true
+    },
+    "rulesSourceUrl": "https://www.solar.vic.gov.au/hot-water-rebate",
+    "generalSourceUrl": "https://www.solar.vic.gov.au/sites/default/files/2026-10/Solar-Victoria-hot-water-product-list-as-of-6-October-2026.xlsx",
+    "localSourceUrl": "https://www.solar.vic.gov.au/sites/default/files/2026-10/Solar-Victoria-hot-water-local-content-product-list-as-of-6-October-2026_0.xlsx",
+    "sourceDate": "2026-10-06",
+    "generalSha256": "249b05521aef0836e08cabefb61eebef71b79c91c54f4bd4872e8cd6e206fc3e",
+    "localSha256": "db2312defc52d42181fd0ddb2ada8f27e1ebf486a3386403c11a4745601ab84f"
+  },
+  "products": [
+    {
+      "id": "reclaim-eco-r290",
+      "name": "Reclaim ECO 300REC25P",
+      "brand": "Reclaim Energy",
+      "models": [
+        "300REC25P"
+      ],
+      "brands": [
+        "Reclaim Energy"
+      ],
+      "modelSourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/H4148-E-Reclaim-Heat-Pump-Manual.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Reclaim Energy",
+          "model": "300REC25P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-24",
+          "localContentRemoved": null,
+          "excelRow": 261
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Reclaim Energy",
+          "model": "300REC25P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-24",
+          "localContentRemoved": null,
+          "excelRow": 33
+        }
+      ]
+    },
+    {
+      "id": "rheem-ambipower-280e",
+      "name": "Rheem AmbiPower 280e 551E280G5",
+      "brand": "Rheem",
+      "models": [
+        "551E280G5"
+      ],
+      "brands": [
+        "Rheem"
+      ],
+      "modelSourceUrl": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-Heat-Pump/p/551E280G5",
+      "solarVictoria": [],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "ecogenica-econova-rvw",
+      "name": "Ecogenica Econova 300 RVW2.0E",
+      "brand": "Econova",
+      "models": [
+        "ECON-300RVW-2.0E"
+      ],
+      "brands": [
+        "Econova"
+      ],
+      "modelSourceUrl": "https://ecogenica.com.au/images/14.05.25-Brochure-ECON-RVW2.0E-2.pdf",
+      "solarVictoria": [
+        {
+          "brand": "ECONOVA",
+          "model": "ECON-300RVW-2.0E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 93
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "evoheat-evo270-e",
+      "name": "EvoHeat EVO270-E 270L",
+      "brand": "EvoHeat",
+      "models": [
+        "EVO270-E"
+      ],
+      "brands": [
+        "EvoHeat",
+        "EVO HEAT"
+      ],
+      "modelSourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf",
+      "solarVictoria": [
+        {
+          "brand": "EVOHEAT",
+          "model": "EVO270-E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 161
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rheem-ambipower-280e-wifi",
+      "name": "Rheem AmbiPower Wi-Fi 551E280NT",
+      "brand": "Rheem",
+      "models": [
+        "551E280R5NT"
+      ],
+      "brands": [
+        "Rheem"
+      ],
+      "modelSourceUrl": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-WiFi-Heat-Pump-/p/551E280R5NT",
+      "solarVictoria": [],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "hydrotherm-fusion-x8-320",
+      "name": "Hydrotherm Fusion X8 320 L",
+      "brand": "Hydrotherm",
+      "models": [
+        "Fusion X8 320"
+      ],
+      "brands": [
+        "Hydrotherm"
+      ],
+      "modelSourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf",
+      "solarVictoria": [],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rinnai-enviroflo-ar",
+      "name": "Rinnai Enviroflo AR 300L",
+      "brand": "Rinnai",
+      "models": [
+        "EHPA300VM"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA300VM",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 314
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA300VM",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 76
+        }
+      ]
+    },
+    {
+      "id": "rinnai-ehpa300vmh",
+      "name": "Rinnai Enviroflo AR 300L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "EHPA300VMH"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA300VMH",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 315
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA300VMH",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 77
+        }
+      ]
+    },
+    {
+      "id": "rinnai-ehpa340vm",
+      "name": "Rinnai Enviroflo AR 340L",
+      "brand": "Rinnai",
+      "models": [
+        "EHPA340VM"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA340VM",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 318
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA340VM",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 80
+        }
+      ]
+    },
+    {
+      "id": "rinnai-ehpa340vmh",
+      "name": "Rinnai Enviroflo AR 340L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "EHPA340VMH"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA340VMH",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 319
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPA340VMH",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-11",
+          "localContentRemoved": null,
+          "excelRow": 81
+        }
+      ]
+    },
+    {
+      "id": "rinnai-enviroflo-gr",
+      "name": "Rinnai Enviroflo GR 180L 10 A",
+      "brand": "Rinnai",
+      "models": [
+        "EHPG180VM10"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPG180VM10",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2029-04-02",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 320
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rinnai-ehpg215vm",
+      "name": "Rinnai Enviroflo GR 215L 15 A",
+      "brand": "Rinnai",
+      "models": [
+        "EHPG215VM"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPG215VM",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 321
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rinnai-ehpg265vm10",
+      "name": "Rinnai Enviroflo GR 265L 10 A",
+      "brand": "Rinnai",
+      "models": [
+        "EHPG265VM10"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPG265VM10",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2029-04-02",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 325
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rinnai-ehpg280vm",
+      "name": "Rinnai Enviroflo GR 280L 15 A",
+      "brand": "Rinnai",
+      "models": [
+        "EHPG280VM"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPG280VM",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 327
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rinnai-ehpg300vm10",
+      "name": "Rinnai Enviroflo GR 300L 10 A",
+      "brand": "Rinnai",
+      "models": [
+        "EHPG300VM10"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "EHPG300VM10",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2029-04-02",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 330
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rinnai-enviroflo-split",
+      "name": "Rinnai Enviroflo S5 250L",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP250M24R50"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24R50",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 336
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24R50",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 84
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp250m24r50h",
+      "name": "Rinnai Enviroflo S5 250L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP250M24R50H"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24R50H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 337
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24R50H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 85
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp315m24r50",
+      "name": "Rinnai Enviroflo S5 315L",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP315M24R50"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24R50",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 341
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24R50",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 88
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp315m24r50h",
+      "name": "Rinnai Enviroflo S5 315L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP315M24R50H"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24R50H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 342
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24R50H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2026-12-13",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 89
+        }
+      ]
+    },
+    {
+      "id": "emerald-hpa1-s220",
+      "name": "Emerald Select 220L",
+      "brand": "Emerald",
+      "models": [
+        "HPA1-S220"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPA1-S220",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 120
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpa1-s270",
+      "name": "Emerald Select 270L",
+      "brand": "Emerald",
+      "models": [
+        "HPA1-S270"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPA1-S270",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 122
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-all-in-one-select",
+      "name": "Emerald Select 270L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "HPA1-S270E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPA1-S270E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 123
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpa1-s320",
+      "name": "Emerald Select 320L",
+      "brand": "Emerald",
+      "models": [
+        "HPA1-S320"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPA1-S320",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 124
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpa1-s320e",
+      "name": "Emerald Select 320L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "HPA1-S320E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPA1-S320E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 125
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-ee-hws-a1-220",
+      "name": "Emerald Pro 220L",
+      "brand": "Emerald",
+      "models": [
+        "EE-HWS-A1-220"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "EE-HWS-A1-220",
+          "approvedFrom": "2018-10-12",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 108
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-ee-hws-a1-220e",
+      "name": "Emerald Pro 220L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "EE-HWS-A1-220E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "EE-HWS-A1-220E",
+          "approvedFrom": "2018-10-12",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 110
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-ee-hws-a1-270",
+      "name": "Emerald Pro 270L",
+      "brand": "Emerald",
+      "models": [
+        "EE-HWS-A1-270"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "EE-HWS-A1-270",
+          "approvedFrom": "2018-10-12",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 112
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-ee-hws-a1-270e",
+      "name": "Emerald Pro 270L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "EE-HWS-A1-270E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "EE-HWS-A1-270E",
+          "approvedFrom": "2018-10-12",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 114
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-ee-hws-a1-320",
+      "name": "Emerald Pro 320L",
+      "brand": "Emerald",
+      "models": [
+        "EE-HWS-A1-320"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "EE-HWS-A1-320",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 116
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-ee-hws-a1-320e",
+      "name": "Emerald Pro 320L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "EE-HWS-A1-320E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "EE-HWS-A1-320E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-03-21",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 118
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpr200",
+      "name": "Emerald Split 200L",
+      "brand": "Emerald",
+      "models": [
+        "HPR200"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPR200",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 129
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpr200e",
+      "name": "Emerald Split 200L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "HPR200E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPR200E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 131
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpr300",
+      "name": "Emerald Split 300L",
+      "brand": "Emerald",
+      "models": [
+        "HPR300"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPR300",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 133
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "emerald-hpr300e",
+      "name": "Emerald Split 300L with electric boost",
+      "brand": "Emerald",
+      "models": [
+        "HPR300E"
+      ],
+      "brands": [
+        "Emerald",
+        "Emerald Energy"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Emerald Energy",
+          "model": "HPR300E",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 135
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "stiebel-shp-o-200-plus",
+      "name": "Stiebel Eltron SHP-O 200 Plus",
+      "brand": "Stiebel Eltron",
+      "models": [
+        "SHP-O 200 Plus"
+      ],
+      "brands": [
+        "Stiebel Eltron"
+      ],
+      "modelSourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
+      "solarVictoria": [
+        {
+          "brand": "Stiebel Eltron",
+          "model": "SHP-O 200 Plus",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 399
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "stiebel-shp-o-300-plus",
+      "name": "Stiebel Eltron SHP-O 300 Plus",
+      "brand": "Stiebel Eltron",
+      "models": [
+        "SHP-O 300 Plus"
+      ],
+      "brands": [
+        "Stiebel Eltron"
+      ],
+      "modelSourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
+      "solarVictoria": [
+        {
+          "brand": "Stiebel Eltron",
+          "model": "SHP-O 300 Plus",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 401
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "stiebel-shp-o-201-premium",
+      "name": "Stiebel Eltron SHP-O 201 Premium",
+      "brand": "Stiebel Eltron",
+      "models": [
+        "SHP-O 201 Premium"
+      ],
+      "brands": [
+        "Stiebel Eltron"
+      ],
+      "modelSourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
+      "solarVictoria": [
+        {
+          "brand": "Stiebel Eltron",
+          "model": "SHP-O 201 Premium",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-10-26",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 400
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "stiebel-shp-o-301-premium",
+      "name": "Stiebel Eltron SHP-O 301 Premium",
+      "brand": "Stiebel Eltron",
+      "models": [
+        "SHP-O 301 Premium"
+      ],
+      "brands": [
+        "Stiebel Eltron"
+      ],
+      "modelSourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
+      "solarVictoria": [
+        {
+          "brand": "Stiebel Eltron",
+          "model": "SHP-O 301 Premium",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-10-26",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 402
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "haier-hp200m1u1p",
+      "name": "Haier Monoblock 200L HP200M1U1P",
+      "brand": "Haier",
+      "models": [
+        "HP200M1U1P"
+      ],
+      "brands": [
+        "Haier"
+      ],
+      "modelSourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/9st8kvwpfccjr7tf3wmcs5k/HaierHome-SpecificationGuide-en-HP200M1U1P-HP250M1U1P-HP330M1U1-Monoblock-0-90003428E-AU-NZ.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Haier",
+          "model": "HP200M1U1P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2028-03-26",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 172
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "haier-500-monoblock",
+      "name": "Haier Monoblock 250L HP250M1U1P",
+      "brand": "Haier",
+      "models": [
+        "HP250M1U1P"
+      ],
+      "brands": [
+        "Haier"
+      ],
+      "modelSourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/9st8kvwpfccjr7tf3wmcs5k/HaierHome-SpecificationGuide-en-HP200M1U1P-HP250M1U1P-HP330M1U1-Monoblock-0-90003428E-AU-NZ.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Haier",
+          "model": "HP250M1U1P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2028-03-26",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 174
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "haier-hp330m1u1",
+      "name": "Haier Monoblock 330L HP330M1U1",
+      "brand": "Haier",
+      "models": [
+        "HP330M1U1"
+      ],
+      "brands": [
+        "Haier"
+      ],
+      "modelSourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/9st8kvwpfccjr7tf3wmcs5k/HaierHome-SpecificationGuide-en-HP200M1U1P-HP250M1U1P-HP330M1U1-Monoblock-0-90003428E-AU-NZ.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Haier",
+          "model": "HP330M1U1",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 176
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "dux-ecosmart-pro-series",
+      "name": "Dux Pro 270L plug-in",
+      "brand": "Dux",
+      "models": [
+        "270DHB36P"
+      ],
+      "brands": [
+        "Dux"
+      ],
+      "modelSourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Dux",
+          "model": "270DHB36P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 55
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "dux-270dhb36",
+      "name": "Dux Pro 270L hardwired",
+      "brand": "Dux",
+      "models": [
+        "270DHB36"
+      ],
+      "brands": [
+        "Dux"
+      ],
+      "modelSourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Dux",
+          "model": "270DHB36",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 54
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "earthworker-neo-250",
+      "name": "Earthworker NEO 250L",
+      "brand": "Earthworker Energy",
+      "models": [
+        "NA41-SS250A"
+      ],
+      "brands": [
+        "Earthworker Energy"
+      ],
+      "modelSourceUrl": "https://earthworkerenergy.coop/wp-content/uploads/NEO-Heat-Pump-Water-System-Brochure-2026.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Earthworker Energy",
+          "model": "NA41-SS250A",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-04-18",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2026-03-10",
+          "localContentRemoved": null,
+          "excelRow": 63
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Earthworker Energy",
+          "model": "NA41-SS250A",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-04-18",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2026-03-10",
+          "localContentRemoved": null,
+          "excelRow": 15
+        }
+      ]
+    },
+    {
+      "id": "earthworker-neo-315",
+      "name": "Earthworker NEO 315L",
+      "brand": "Earthworker Energy",
+      "models": [
+        "NA42-SS315A"
+      ],
+      "brands": [
+        "Earthworker Energy"
+      ],
+      "modelSourceUrl": "https://earthworkerenergy.coop/wp-content/uploads/NEO-Heat-Pump-Water-System-Brochure-2026.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Earthworker Energy",
+          "model": "NA42-SS315A",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-04-18",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2026-03-10",
+          "localContentRemoved": null,
+          "excelRow": 64
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Earthworker Energy",
+          "model": "NA42-SS315A",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2031-04-18",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2026-03-10",
+          "localContentRemoved": null,
+          "excelRow": 16
+        }
+      ]
+    },
+    {
+      "id": "istore-r290-180",
+      "name": "iStore R290 180L",
+      "brand": "iStore",
+      "models": [
+        "PASHW008-180LD-NM-R290"
+      ],
+      "brands": [
+        "iStore",
+        "IHEAT/ISTORE"
+      ],
+      "modelSourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf",
+      "solarVictoria": [
+        {
+          "brand": "iStore",
+          "model": "PASHW008-180LD-NM-R290",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 184
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "istore-r290-270",
+      "name": "iStore R290 270L",
+      "brand": "iStore",
+      "models": [
+        "PASHW015-270LD-FL02-R290"
+      ],
+      "brands": [
+        "iStore",
+        "IHEAT/ISTORE"
+      ],
+      "modelSourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf",
+      "solarVictoria": [
+        {
+          "brand": "IHEAT/ISTORE",
+          "model": "PASHW015-270LD-FL02-R290",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 183
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "evoheat-evo150-1",
+      "name": "EvoHeat Evo150-1 150L",
+      "brand": "EvoHeat",
+      "models": [
+        "EVO150-1"
+      ],
+      "brands": [
+        "EvoHeat",
+        "EVO HEAT"
+      ],
+      "modelSourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/08/BROCHURE-Evoheat-150-1.pdf",
+      "solarVictoria": [],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "rheem-ambipower-split",
+      "name": "Rheem AmbiPower Split 315L VE",
+      "brand": "Rheem",
+      "models": [
+        "565E315R0"
+      ],
+      "brands": [
+        "Rheem"
+      ],
+      "modelSourceUrl": "https://admin.rheem.com.au/sites/default/files/2025-11/RHE625%20AmbiPower%20Split%205kW%20-%202pp%20Datasheet%20Oct%202025.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rheem",
+          "model": "565E315R0",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-09",
+          "localContentRemoved": null,
+          "excelRow": 304
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rheem",
+          "model": "565E315R0",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-09",
+          "localContentRemoved": null,
+          "excelRow": 68
+        }
+      ]
+    },
+    {
+      "id": "rheem-ambipower-split-325-ss",
+      "name": "Rheem AmbiPower Split 325L stainless",
+      "brand": "Rheem",
+      "models": [
+        "565E32AM0"
+      ],
+      "brands": [
+        "Rheem"
+      ],
+      "modelSourceUrl": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower-5kW-Split-Heat-Pump-System---Stainless-Steel/p/565E32AM0",
+      "solarVictoria": [
+        {
+          "brand": "Rheem",
+          "model": "565E32AM0",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-09",
+          "localContentRemoved": null,
+          "excelRow": 306
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rheem",
+          "model": "565E32AM0",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-07-09",
+          "localContentRemoved": null,
+          "excelRow": 70
+        }
+      ]
+    },
+    {
+      "id": "econova-300rvw",
+      "name": "Econova RVW 290L without electric boost",
+      "brand": "Econova",
+      "models": [
+        "ECON-300RVW"
+      ],
+      "brands": [
+        "Econova"
+      ],
+      "modelSourceUrl": "https://ecogenica.com.au/images/14.05.25-Brochure-ECON-RVW2.0E-2.pdf",
+      "solarVictoria": [
+        {
+          "brand": "ECONOVA",
+          "model": "ECON-300RVW",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 92
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "reclaim-eco-200",
+      "name": "Reclaim ECO 200REC25P",
+      "brand": "Reclaim Energy",
+      "models": [
+        "200REC25P"
+      ],
+      "brands": [
+        "Reclaim Energy"
+      ],
+      "modelSourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/H4148-E-Reclaim-Heat-Pump-Manual.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Reclaim Energy",
+          "model": "200REC25P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-24",
+          "localContentRemoved": null,
+          "excelRow": 257
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Reclaim Energy",
+          "model": "200REC25P",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-24",
+          "localContentRemoved": null,
+          "excelRow": 31
+        }
+      ]
+    }
+  ]
+}
