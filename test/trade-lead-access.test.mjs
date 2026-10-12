@@ -6,6 +6,39 @@ import ts from "typescript";
 import { certificateTestDependency } from "./helpers/creditex-training-fixture.mjs";
 import { migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
 import { canViewLeads, canManageLeads } from "../src/lib/trade-team-permission-policy.mjs";
+import { TLINK_SCHEMA_GUARD_DEFINITIONS } from "../src/lib/tlink-schema-guards.ts";
+
+const LEAD_GUARDS = TLINK_SCHEMA_GUARD_DEFINITIONS.filter(guard => [
+  "trade_team_members_leads_insert_guard", "trade_team_members_leads_update_guard",
+].includes(guard.name));
+
+function pendingLeadMigrationDatabase() {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`CREATE TABLE trade_team_members (id text PRIMARY KEY NOT NULL,owner_uid text,member_uid text,status text,role text,
+    can_manage_team integer,can_edit_team_permissions integer,job_scope text,schedule_scope text,can_manage_jobs integer,
+    can_view_customers integer,can_view_quotes integer,can_manage_quotes integer,updated_at text NOT NULL DEFAULT '2026-10-12T00:00:00.000Z');
+    CREATE TABLE trade_crew_members(owner_uid text,member_id text);
+    CREATE TABLE public_trade_lead_quote_photo_events(id text); CREATE TABLE trade_work_order_events(id text);`);
+  return db;
+}
+
+function replaySitesStatements(db, sql) {
+  db.exec("BEGIN");
+  try {
+    for (const statement of sql.split(";")) {
+      if (statement.replace(/--[^\n]*/g, "").trim()) db.prepare(statement).run();
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function installLeadGuards(db) {
+  assert.equal(LEAD_GUARDS.length, 2);
+  for (const guard of LEAD_GUARDS) db.prepare(guard.sql).run();
+}
 
 function load(path, dependencies) {
   const compiled = ts.transpileModule(fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8"), {
@@ -123,19 +156,16 @@ test("quote, handoff and arrival guards recheck their separate permission and te
 });
 
 test("only the saved highest office permission bundle is backfilled, independent of role labels", () => {
-  const db = new DatabaseSync(":memory:");
+  const db = pendingLeadMigrationDatabase();
   try {
-    db.exec(`CREATE TABLE trade_team_members (id text PRIMARY KEY NOT NULL,owner_uid text,member_uid text,status text,role text,
-      can_manage_team integer,can_edit_team_permissions integer,job_scope text,schedule_scope text,can_manage_jobs integer,
-      can_view_customers integer,can_view_quotes integer,can_manage_quotes integer,updated_at text NOT NULL DEFAULT '2026-10-12T00:00:00.000Z');
-      CREATE TABLE trade_crew_members(owner_uid text,member_id text);
-      CREATE TABLE public_trade_lead_quote_photo_events(id text); CREATE TABLE trade_work_order_events(id text);`);
     const insert = db.prepare("INSERT INTO trade_team_members (id,owner_uid,member_uid,status,role,can_manage_team,can_edit_team_permissions,job_scope,schedule_scope,can_manage_jobs,can_view_customers,can_view_quotes,can_manage_quotes) VALUES (?,?,?,'active',?,1,1,'team','team',1,1,1,1)");
     for (const id of ["full-office", "custom-limited", "suspended", "crew"]) insert.run(id, "owner", `uid-${id}`, "field");
     insert.run("owner", "owner", "owner", "manager");
     db.exec("UPDATE trade_team_members SET can_view_customers=0 WHERE id='custom-limited'; UPDATE trade_team_members SET status='suspended' WHERE id='suspended'; INSERT INTO trade_crew_members VALUES ('owner','crew')");
     const migration = fs.readFileSync(new URL("../drizzle/0261_trade_team_leads_access.sql", import.meta.url), "utf8");
-    for (const sql of migration.split("--> statement-breakpoint")) if (sql.trim()) db.exec(sql);
+    assert.doesNotMatch(migration, /CREATE\s+TRIGGER/i);
+    replaySitesStatements(db, migration);
+    installLeadGuards(db);
     for (const id of ["owner", "full-office"]) assert.equal(db.prepare("SELECT can_manage_leads FROM trade_team_members WHERE id=?").get(id).can_manage_leads, 1);
     for (const id of ["custom-limited", "suspended", "crew"]) assert.equal(db.prepare("SELECT can_view_leads FROM trade_team_members WHERE id=?").get(id).can_view_leads, 0);
     for (const id of ["owner", "full-office"]) assert.notEqual(db.prepare("SELECT updated_at FROM trade_team_members WHERE id=?").get(id).updated_at, "2026-10-12T00:00:00.000Z");
@@ -144,6 +174,34 @@ test("only the saved highest office permission bundle is backfilled, independent
       "a stale permission editor cannot erase a migrated grant");
     assert.throws(() => db.exec("UPDATE trade_team_members SET can_manage_leads=1 WHERE id='custom-limited'"), /invalid team lead permissions/);
     assert.throws(() => db.exec("UPDATE trade_team_members SET can_view_leads=2 WHERE id='custom-limited'"), /invalid team lead permissions/);
+  } finally { db.close(); }
+});
+
+test("Sites' semicolon boundary rolls back trigger-bearing migrations and applies the corrected pending lead migration", () => {
+  const db = pendingLeadMigrationDatabase();
+  try {
+    const migration = fs.readFileSync(new URL("../drizzle/0261_trade_team_leads_access.sql", import.meta.url), "utf8");
+    const insertion = migration.indexOf("ALTER TABLE `public_trade_lead_quote_photo_events`");
+    assert.ok(insertion > 0);
+    // Reproduce the rejected shape using the unchanged canonical trigger bodies.
+    const triggerBearing = migration.slice(0, insertion)
+      + LEAD_GUARDS.map(guard => guard.sql).join("\n--> statement-breakpoint\n")
+      + "\n--> statement-breakpoint\n" + migration.slice(insertion);
+    assert.throws(() => replaySitesStatements(db, triggerBearing), /incomplete input/);
+    assert.equal(db.prepare("PRAGMA table_info(trade_team_members)").all().some(row => row.name === "can_view_leads"), false);
+    for (const table of ["public_trade_lead_quote_photo_events", "trade_work_order_events"]) {
+      assert.equal(db.prepare(`PRAGMA table_info(${table})`).all().some(row => row.name === "actor_uid"), false);
+    }
+    replaySitesStatements(db, migration);
+    for (const table of ["public_trade_lead_quote_photo_events", "trade_work_order_events"]) {
+      assert.equal(db.prepare(`PRAGMA table_info(${table})`).all().some(row => row.name === "actor_uid"), true);
+    }
+    installLeadGuards(db);
+    assert.throws(() => db.prepare("INSERT INTO trade_team_members(id,can_view_leads,can_manage_leads) VALUES ('bad',0,1)").run(), /invalid team lead permissions/);
+    db.prepare("INSERT INTO trade_team_members(id,can_view_leads,can_manage_leads) VALUES ('valid',1,1)").run();
+    assert.throws(() => db.exec("UPDATE trade_team_members SET can_view_leads=0 WHERE id='valid'"), /invalid team lead permissions/);
+    db.exec("UPDATE trade_team_members SET can_manage_leads=0,can_view_leads=0 WHERE id='valid'");
+    assert.deepEqual({ ...db.prepare("SELECT can_view_leads,can_manage_leads FROM trade_team_members WHERE id='valid'").get() }, { can_view_leads: 0, can_manage_leads: 0 });
   } finally { db.close(); }
 });
 

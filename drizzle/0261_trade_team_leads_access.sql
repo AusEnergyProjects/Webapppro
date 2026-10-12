@@ -15,16 +15,6 @@ WHERE `member_uid` = `owner_uid` OR (
     WHERE crew.owner_uid = trade_team_members.owner_uid AND crew.member_id = trade_team_members.id)
 );
 --> statement-breakpoint
-CREATE TRIGGER `trade_team_members_leads_insert_guard` BEFORE INSERT ON `trade_team_members`
-BEGIN SELECT CASE WHEN NEW.can_view_leads NOT IN (0, 1) OR NEW.can_manage_leads NOT IN (0, 1)
-  OR (NEW.can_manage_leads = 1 AND NEW.can_view_leads = 0)
-  THEN RAISE(ABORT, 'invalid team lead permissions') END; END;
---> statement-breakpoint
-CREATE TRIGGER `trade_team_members_leads_update_guard` BEFORE UPDATE OF `can_view_leads`, `can_manage_leads` ON `trade_team_members`
-BEGIN SELECT CASE WHEN NEW.can_view_leads NOT IN (0, 1) OR NEW.can_manage_leads NOT IN (0, 1)
-  OR (NEW.can_manage_leads = 1 AND NEW.can_view_leads = 0)
-  THEN RAISE(ABORT, 'invalid team lead permissions') END; END;
---> statement-breakpoint
 ALTER TABLE `public_trade_lead_quote_photo_events` ADD `actor_uid` text NOT NULL DEFAULT '';
 
 --> statement-breakpoint
