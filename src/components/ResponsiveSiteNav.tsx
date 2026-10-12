@@ -15,6 +15,17 @@ const DESKTOP_SHORTCUTS = [
   { href: "/calculator", label: "Rebate calculator", active: "calculator" },
 ] as const;
 
+const PRODUCT_NAVIGATION_LINKS: readonly NavigationLink[] = [
+  ["/guides/products", "All products"],
+  ["/guides/products/solar", "Solar panels"],
+  ["/guides/products/inverters", "Inverters"],
+  ["/guides/products/batteries", "Batteries"],
+  ["/guides/products/hot-water", "Heat-pump hot water"],
+  ["/guides/products/air-conditioning", "Air conditioners"],
+  ["/guides/products/multi-split", "Multi-room air conditioners"],
+  ["/guides/products/ev-chargers", "EV chargers"],
+];
+
 const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
   {
     label: "Services",
@@ -98,7 +109,12 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
           >
             Home
           </Link>
-          <Link href="/guides/products" className={`site-nav-home${active === "products" ? " active" : ""}`} aria-current={active === "products" ? "page" : undefined}>Compare products</Link>
+          <details className={`site-nav-category site-nav-products${active === "products" ? " active-category" : ""}`} name="site-navigation-categories">
+            <summary className="site-nav-home site-nav-category-trigger" aria-current={active === "products" ? "true" : undefined}>
+              <span>Compare products</span><span className="site-nav-chevron" aria-hidden="true">&#9662;</span>
+            </summary>
+            <div className="site-nav-panel">{PRODUCT_NAVIGATION_LINKS.map(([href, label]) => <Link href={href} key={href}><strong>{label}</strong></Link>)}</div>
+          </details>
         </div>
 
         <div className="site-nav-desktop-categories">
@@ -129,7 +145,7 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
           })}
         </div>
 
-        <details className="site-nav-mobile-disclosure">
+        <details className="site-nav-mobile-disclosure" name="site-navigation-categories">
           <summary className="site-nav-mobile-trigger">
             Browse pages
             <span className="site-nav-chevron" aria-hidden="true">&#9662;</span>
@@ -137,6 +153,7 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
           <div aria-label="Browse pages" className="site-nav-mobile-panel">
             <div className="site-nav-mobile-heading"><strong>Choose a page</strong></div>
             <div className="site-nav-mobile-groups">
+              <section><h2>Compare products</h2><div>{PRODUCT_NAVIGATION_LINKS.map(([href, label]) => <Link href={href} key={href}>{label}</Link>)}</div></section>
               <section><h2>Start here</h2><div><Link href="/guides">Find a guide</Link><Link href="/case-studies">Energy savings examples</Link><Link href="/platform">How AEA helps</Link><Link href="/direct-trade/for-trades">TLink for trades</Link><Link href="/direct-trade/for-councils">TLink for councils</Link></div></section>
               {NAVIGATION_CATEGORIES.map((category) => (
                 <section key={category.label}>

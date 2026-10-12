@@ -3,8 +3,9 @@
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ProductComparisonItem } from "@/lib/product-guides";
-import type { ProductRatingExplanation } from "@/lib/product-ratings";
+import type { ProductRatingExplanation, ProductRatingId } from "@/lib/product-ratings";
 import { ProductRebateChecker, ProductRebateResult, useProductRebateCheck } from "./ProductRebateChecker";
+import { filterProductComparisons, productComparisonFilterOptions } from "./product-comparison-filters";
 import "./product-comparison.css";
 
 // Keep server-rendered controls inert until their event handlers attach.
@@ -20,11 +21,11 @@ function VisualRatings({ product }: { product: ProductComparisonItem }) {
     {product.ratings.map(rating => <section key={rating.id} className={`product-comparison-rating product-comparison-rating-${rating.id}`} data-rating={rating.id}>
       <div className="product-comparison-rating-label"><h3>{rating.label}</h3><span>{rating.score === null ? "Not scored" : `${rating.score.toFixed(1)} / 5`}</span></div>
       {rating.score === null ? <div className="product-comparison-rating-track product-comparison-rating-unavailable" aria-hidden="true" /> : <div className="product-comparison-rating-track" role="meter" aria-label={`${product.name}: ${rating.label}`} aria-valuemin={0} aria-valuemax={5} aria-valuenow={rating.score} aria-valuetext={`${rating.score.toFixed(1)} out of 5`}><span style={{ width: `${rating.score * 20}%` }} /></div>}
-      {rating.score !== null && rating.measurement && <small className="product-comparison-rating-figure"><MeasurementValue value={rating.measurement.value} unit={rating.measurement.unit} /></small>}
+      {rating.score !== null && rating.measurement && <small className="product-comparison-rating-figure"><MeasurementValue value={rating.measurement.value} valueMaximum={rating.measurement.valueMaximum} unit={rating.measurement.unit} /></small>}
     </section>)}
   </div>;
 }
-function MeasurementValue({ value, unit }: { value: number; unit: string }) {
+function MeasurementValue({ value, valueMaximum, unit }: { value: number; valueMaximum?: number; unit: string }) {
   const number = value.toLocaleString("en-AU", { maximumFractionDigits: 2 });
   if (unit === "included-product-years") return <>{number} {value === 1 ? "year" : "years"} of main-product parts cover</>;
   if (unit === "usable-kwh") return <>{number} kWh usable storage</>;
@@ -33,6 +34,8 @@ function MeasurementValue({ value, unit }: { value: number; unit: string }) {
   if (unit === "zoned-heating-stars") return <>{number} heating stars</>;
   if (unit === "cop-a20-w15-55") return <>{number} units of heat per unit of electricity</>;
   if (unit === "ev-ac-kw") return <>{number} kW rated charging power</>;
+  if (unit === "published-noise-db") return <>{number} dB</>;
+  if (unit === "recovery-litres-per-hour") return <>{number}{valueMaximum !== undefined && valueMaximum > value && <> to {valueMaximum.toLocaleString("en-AU", { maximumFractionDigits: 2 })}</>} litres per hour</>;
   return <>{number}%</>;
 }
 function ComparisonFacts({ product }: { product: ProductComparisonItem }) {
@@ -46,44 +49,56 @@ function ComparisonFacts({ product }: { product: ProductComparisonItem }) {
 function HotWaterFacts({ product }: { product: ProductComparisonItem }) {
   if (!product.hotWaterFacts) return null;
   const facts = product.hotWaterFacts;
-  return <div className="product-comparison-hot-water" data-hot-water-facts><dl><div><dt>Noise</dt><dd>{facts.noise}</dd></div><div><dt>Reheat 100 litres</dt><dd>{facts.recovery}</dd></div></dl><p>{facts.conditions}{facts.recoverySourceUrl && <> <a href={facts.recoverySourceUrl} target="_blank" rel="noopener noreferrer">Test source ↗</a></>}</p></div>;
+  return <div className="product-comparison-hot-water" data-hot-water-facts><p>{facts.conditions}{facts.recoverySourceUrl && <> <a href={facts.recoverySourceUrl} target="_blank" rel="noopener noreferrer">Recovery source ↗</a></>}</p></div>;
 }
-export function ProductComparisonBrowser({ products, methods }: { products: ProductComparisonItem[]; methods: ProductRatingExplanation[] }) {
+export function ProductComparisonBrowser({ category, products, methods }: { category: string; products: ProductComparisonItem[]; methods: ProductRatingExplanation[] }) {
   const ready = useSyncExternalStore(subscribeToClient, clientReadySnapshot, serverReadySnapshot);
   const [query, setQuery] = useState("");
   const [brand, setBrand] = useState("");
+  const [figureLimits, setFigureLimits] = useState<Partial<Record<ProductRatingId, number>>>({});
   const [selection, setSelection] = useState<string[]>([]);
   const [information, setInformation] = useState<ProductComparisonItem | null>(null);
   const compareDialog = useRef<HTMLDialogElement>(null);
   const informationDialog = useRef<HTMLDialogElement>(null);
   const methodDialog = useRef<HTMLDialogElement>(null);
-  const rebates = useProductRebateCheck();
+  const rebateCategory = category === "hot-water" || category === "air-conditioning" || category === "multi-split" ? category : undefined;
+  const rebates = useProductRebateCheck(rebateCategory);
   const hasHotWater = products.some(product => product.hotWaterFacts);
   const brands = [...new Set(products.map(p => p.brand))].sort((a, b) => a.localeCompare(b));
-  const search = query.trim().toLocaleLowerCase("en-AU");
-  const visible = products.filter(p => (!brand || p.brand === brand) && `${p.name} ${p.brand} ${p.technicalSpecs.map(spec => spec.value).join(" ")}`.toLocaleLowerCase("en-AU").includes(search));
+  const hasFilters = Boolean(query || brand || Object.keys(figureLimits).length);
+  const visible = filterProductComparisons(products, { query, brand, figureLimits });
+  const comparisonRows = 7 + methods.length + (hasHotWater ? 1 : 0) + (rebateCategory ? 1 : 0);
   const selected = selection.map(id => products.find(p => p.id === id)).filter((p): p is ProductComparisonItem => Boolean(p));
   useEffect(() => { if (information && !informationDialog.current?.open) informationDialog.current?.showModal(); }, [information]);
   function toggleSelection(id: string) { setSelection(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 3 ? [...current, id] : current); }
+  function resetFilters() { setQuery(""); setBrand(""); setFigureLimits({}); }
+  function updateFigureLimit(id: ProductRatingId, value: string) {
+    setFigureLimits(current => { const next = { ...current }; if (value === "") delete next[id]; else next[id] = Number(value); return next; });
+  }
   return <>
-    {hasHotWater && <ProductRebateChecker check={rebates} ready={ready} />}
+    {rebateCategory && <ProductRebateChecker check={rebates} ready={ready} />}
     <div className="product-comparison-toolbar" aria-busy={!ready}>
       <label>Search products<input type="search" value={query} placeholder="Brand or model" disabled={!ready} onChange={e => setQuery(e.target.value)} /></label>
-      <label>Brand<select value={brand} disabled={!ready} onChange={e => setBrand(e.target.value)}><option value="">All brands</option>{brands.map(value => <option key={value}>{value}</option>)}</select></label>
+      <label>Brand<select aria-label="Brand" value={brand} disabled={!ready} onChange={e => setBrand(e.target.value)}><option value="">All brands</option>{brands.map(value => <option key={value}>{value}</option>)}</select></label>
       <div className="product-comparison-toolbar-help"><p>Pick two or three to compare side by side.</p><button type="button" disabled={!ready} onClick={() => methodDialog.current?.showModal()}>How the bars work</button></div>
     </div>
+    <div className={`product-comparison-metric-filters${methods.length > 2 ? " product-comparison-metric-filters-multiple" : ""}`} role="group" aria-label="Filter by product figures">
+      {methods.map(method => { const options = productComparisonFilterOptions(products, method.id); return <label key={method.id}>{method.label}<select aria-label={method.label} value={figureLimits[method.id] ?? ""} disabled={!ready || !options.length} onChange={event => updateFigureLimit(method.id, event.target.value)}><option value="">Any</option>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>; })}
+      <button type="button" disabled={!ready || !hasFilters} onClick={resetFilters}>Reset filters</button>
+    </div>
+    {hasFilters && selection.length > 0 && <p className="product-comparison-filter-note">Your selected products stay in the comparison when filters change.</p>}
     <p className="product-comparison-count" role="status">{visible.length} {visible.length === 1 ? "model" : "models"}{visible.length !== products.length ? ` of ${products.length}` : ""}</p>
-    <p className="product-comparison-rating-key">For {methods.map(method => method.label.toLowerCase()).join(" and ")}, more bars means a higher published figure.</p>
+    <p className="product-comparison-rating-key">For {methods.filter(method => method.id !== "noise").map(method => method.label.toLowerCase()).join(" and ")}, more bars means a higher published figure.{methods.some(method => method.id === "noise") && " For noise, more bars means lower published dB."}</p>
     <div className="product-comparison-grid" aria-label="Product options">{visible.map((product, index) => {
       const picked = selection.includes(product.id);
       return <article key={product.id} id={product.id} className={`product-comparison-card${picked ? " product-comparison-selected" : ""}`}>
         <div className="product-comparison-photo"><ProductPhoto product={product} eager={index < 3} /><span>{product.brand}</span></div>
-        <div className="product-comparison-card-body"><h2>{product.name}</h2><VisualRatings product={product} /><HotWaterFacts product={product} />{product.hotWaterFacts && <ProductRebateResult product={product} check={rebates} ready={ready} />}<ComparisonFacts product={product} />
+        <div className="product-comparison-card-body"><h2>{product.name}</h2><VisualRatings product={product} /><HotWaterFacts product={product} />{rebateCategory && <ProductRebateResult product={product} check={rebates} ready={ready} />}<ComparisonFacts product={product} />
           <div className="product-comparison-card-actions"><button type="button" aria-label={`${picked ? "Remove" : "Select"} ${product.name} ${picked ? "from" : "for"} comparison`} aria-pressed={picked} disabled={!ready || (!picked && selection.length === 3)} onClick={() => toggleSelection(product.id)}>{picked ? "✓ Selected" : "+ Compare"}</button><button type="button" className="product-comparison-info-button" aria-label={`Technical specifications for ${product.name}`} disabled={!ready} onClick={() => setInformation(product)}>Specs ↗</button></div>
         </div>
       </article>;
     })}</div>
-    {visible.length === 0 && <div className="product-comparison-empty"><h2>No matching products</h2><button type="button" onClick={() => { setQuery(""); setBrand(""); }}>Show all products</button></div>}
+    {visible.length === 0 && <div className="product-comparison-empty"><h2>No matching products</h2><button type="button" onClick={resetFilters}>Show all products</button></div>}
     <p className="product-comparison-note">Products are listed alphabetically. Confirm the exact model, installation and warranty with your installer.</p>
     {selection.length > 0 && <aside className="product-comparison-tray" aria-label="Selected products">
       <div className="product-comparison-picks">{selected.map(product => <button key={product.id} type="button" onClick={() => toggleSelection(product.id)} aria-label={`Remove ${product.name} from comparison`}><ProductPhoto product={product} /><span>{product.name}</span><b aria-hidden="true">×</b></button>)}</div>
@@ -92,7 +107,7 @@ export function ProductComparisonBrowser({ products, methods }: { products: Prod
     </aside>}
     <dialog ref={compareDialog} className="product-comparison-dialog" aria-labelledby="product-comparison-title">
       <header className="product-comparison-dialog-header"><h2 id="product-comparison-title">Side by side</h2><button type="button" autoFocus onClick={() => compareDialog.current?.close()} aria-label="Close product comparison">Close ×</button></header>
-      <div className="product-comparison-comparison-scroll" tabIndex={0} role="region" aria-label="Side-by-side product comparison"><div className={`product-comparison-comparison-grid${selected.some(product => product.hotWaterFacts) ? " product-comparison-comparison-grid-hot-water" : ""}`} style={{ gridTemplateColumns: `repeat(${Math.max(selected.length, 1)}, minmax(260px, 1fr))` }}>{selected.map(product => <article key={product.id}><div className="product-comparison-photo"><ProductPhoto product={product} eager /><span>{product.brand}</span></div><h2>{product.name}</h2><VisualRatings product={product} /><HotWaterFacts product={product} />{product.hotWaterFacts && <ProductRebateResult product={product} check={rebates} ready={ready} />}<ComparisonFacts product={product} /></article>)}</div></div>
+      <div className="product-comparison-comparison-scroll" tabIndex={0} role="region" aria-label="Side-by-side product comparison"><div className="product-comparison-comparison-grid" style={{ gridTemplateColumns: `repeat(${Math.max(selected.length, 1)}, minmax(260px, 1fr))`, gridTemplateRows: `180px repeat(${comparisonRows - 1}, auto)` }}>{selected.map(product => <article key={product.id} style={{ gridRow: `span ${comparisonRows}` }}><div className="product-comparison-photo"><ProductPhoto product={product} eager /><span>{product.brand}</span></div><h2>{product.name}</h2><VisualRatings product={product} /><HotWaterFacts product={product} />{rebateCategory && <ProductRebateResult product={product} check={rebates} ready={ready} />}<ComparisonFacts product={product} /></article>)}</div></div>
       <p className="product-comparison-note">Swipe across on a small screen.</p>
     </dialog>
     <dialog ref={informationDialog} className="product-comparison-dialog product-comparison-information" aria-labelledby="product-information-title" onClose={() => setInformation(null)}>
@@ -105,7 +120,7 @@ export function ProductComparisonBrowser({ products, methods }: { products: Prod
         {information.ratings.map(rating => <section key={rating.id} className="product-comparison-measurement">
           <h4>{rating.label}</h4>
           {rating.measurement ? <>
-            <p><strong><MeasurementValue value={rating.measurement.value} unit={rating.measurement.unit} /></strong> for {rating.measurement.variant}.</p>
+            <p><strong><MeasurementValue value={rating.measurement.value} valueMaximum={rating.measurement.valueMaximum} unit={rating.measurement.unit} /></strong> for {rating.measurement.variant}.</p>
             <p>{rating.measurement.basis}</p>
             <a href={rating.measurement.sourceUrl} target="_blank" rel="noopener noreferrer">Figure source ↗</a>
             {rating.reason && <p>{rating.reason}. This figure has no bar score.</p>}
@@ -119,7 +134,7 @@ export function ProductComparisonBrowser({ products, methods }: { products: Prod
     </dialog>
     <dialog ref={methodDialog} className="product-comparison-dialog product-comparison-information" aria-labelledby="product-rating-method-title">
       <header className="product-comparison-dialog-header"><h2 id="product-rating-method-title">How the bars work</h2><button type="button" autoFocus onClick={() => methodDialog.current?.close()} aria-label="Close rating explanation">Close ×</button></header>
-      <div className="product-comparison-information-body"><p>Each bar puts a published figure on our fixed 0 to 5 visual scale. These are not official product ratings, customer review stars or an overall recommendation. Scores are rounded to one decimal and capped at 5. Search and selection do not change them.</p>{methods.map(method => <section key={method.id} className="product-comparison-measurement"><h3>{method.label}</h3><p>{method.explanation}</p></section>)}<p><strong>Not scored</strong> means we could not verify a comparable figure. It does not mean poor quality. Specs shows the exact model, source and conditions.</p><p>Larger capacity is not automatically a better match. Choose equipment sized for your home and needs.</p><p>Creditex is <a href="https://esia.asn.au/members/creditex" target="_blank" rel="noopener noreferrer">listed by ESIA as part of the Emerald Group</a>. Emerald products use the same comparison criteria as other brands.</p></div>
+      <div className="product-comparison-information-body"><p>Each bar puts a published figure on our fixed 0 to 5 visual scale. These are not official product ratings, customer review stars or an overall recommendation. Scores are rounded to one decimal and stay between 0 and 5. Search and selection do not change them.</p>{methods.map(method => <section key={method.id} className="product-comparison-measurement"><h3>{method.label}</h3><p>{method.explanation}</p></section>)}<p><strong>Not scored</strong> means we could not verify a comparable figure. It does not mean poor quality. Specs shows the exact model, source and conditions.</p><p>Larger capacity is not automatically a better match. Choose equipment sized for your home and needs.</p><p>Creditex is <a href="https://esia.asn.au/members/creditex" target="_blank" rel="noopener noreferrer">listed by ESIA as part of the Emerald Group</a>. Emerald products use the same comparison criteria as other brands.</p></div>
     </dialog>
   </>;
 }

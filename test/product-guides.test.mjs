@@ -8,7 +8,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { PUBLIC_SITE, buildPlatformMetadata } from "../src/lib/public-site.ts";
 import { searchPublicSite } from "../src/lib/public-site-search.ts";
 import { calculateProductRating, productRatingMethods } from "../src/lib/product-ratings.ts";
-import { hotWaterComparisonFacts } from "../src/lib/product-hot-water.ts";
+import { hotWaterComparisonFacts, hotWaterComparisonMeasurements } from "../src/lib/product-hot-water.ts";
+import { filterProductComparisons, productComparisonFilterOptions } from "../src/components/product-comparison-filters.ts";
 function compile(relative, dependencies) {
   const compiled = ts.transpileModule(readFileSync(new URL(relative, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const loaded = {};
@@ -22,8 +23,9 @@ const browser = compile("../src/components/ProductComparisonBrowser.tsx", {
   react,
   "react/jsx-runtime": jsx,
   "./product-comparison.css": {},
+  "./product-comparison-filters": { filterProductComparisons, productComparisonFilterOptions },
   "./ProductRebateChecker": {
-    useProductRebateCheck: () => ({ profile: {}, lookup: {}, readyToCheck: false, entryFor: () => undefined }),
+    useProductRebateCheck: category => ({ category, profile: {}, lookup: {}, readyToCheck: false, entryFor: () => undefined }),
     ProductRebateChecker: () => jsx.jsx("section", { "data-testid": "product-rebate-checker" }),
     ProductRebateResult: ({ product }) => jsx.jsx("section", { "data-product-rebates": product.id }),
   },
@@ -34,7 +36,7 @@ const dependencies = {
   "next/navigation": { notFound() { throw new Error("NOT_FOUND"); } },
   "@/lib/product-guides": guide,
   "@/lib/product-ratings": { calculateProductRating, productRatingMethods },
-  "@/lib/product-hot-water": { hotWaterComparisonFacts },
+  "@/lib/product-hot-water": { hotWaterComparisonFacts, hotWaterComparisonMeasurements },
   "@/lib/public-site": { PUBLIC_SITE, buildPlatformMetadata },
   "./ComparatorChrome": { SiteHeader: () => jsx.jsx("nav", { children: "Navigation" }), SiteFooter: ({ children }) => jsx.jsx("footer", { children }) },
   "./JsonLd": { JsonLd: ({ data }) => jsx.jsx("script", { type: "application/ld+json", dangerouslySetInnerHTML: { __html: JSON.stringify(data) } }) },
@@ -44,6 +46,11 @@ const page = compile("../src/components/ProductComparisonPage.tsx", dependencies
 dependencies["@/components/ProductComparisonPage"] = page;
 const categoryPage = compile("../src/app/guides/products/[category]/page.tsx", dependencies);
 const overview = compile("../src/app/guides/products/page.tsx", dependencies);
+function measurementsFor(category, product) {
+  return category.slug === "hot-water"
+    ? { ...product.measurements, ...hotWaterComparisonMeasurements(product.hotWaterPerformance, product.name, product.checkedAt) }
+    : product.measurements;
+}
 
 test("the authored JSON boundary rejects unsupported evidence labels without type casts", () => {
   const noise = structuredClone(datasets);
@@ -99,7 +106,7 @@ test("all seven categories provide verified model-specific trade-offs, real phot
           assert.doesNotMatch(text, /same-sunlight laboratory|usable roof space|actual roof layout determines|phone access needs internet|installer must check|confirm the exact|ask which appliances/i);
         }
       }
-      assert.equal(product.checkedAt, "2026-10-10");
+      assert.ok(["2026-10-10", "2026-10-12"].includes(product.checkedAt), product.id + ": actual catalogue evidence review date");
       assert.ok(product.sources.length);
       for (const source of product.sources) assert.equal(new URL(source.url).protocol, "https:");
       assert.ok(product.freshness.generation.trim());
@@ -107,7 +114,7 @@ test("all seven categories provide verified model-specific trade-offs, real phot
       assert.equal(new URL(product.freshness.sourceUrl).protocol, "https:");
       if (product.freshness.released !== null) {
         assert.match(product.freshness.released, /^20\d{2}-\d{2}(?:-\d{2})?$/);
-        assert.ok(product.freshness.released <= "2026-10-10");
+        assert.ok(product.freshness.released <= guide.PRODUCT_GUIDE_REVIEW_DATE);
       }
       assert.ok(product.technicalSpecs.length >= 4 && product.technicalSpecs.length <= 14);
       assert.equal(new Set(product.technicalSpecs.map(spec => spec.label)).size, product.technicalSpecs.length);
@@ -115,10 +122,16 @@ test("all seven categories provide verified model-specific trade-offs, real phot
         assert.ok(spec.label.trim() && spec.value.trim());
         assert.equal(new URL(spec.sourceUrl).protocol, "https:");
       }
-      for (const method of productRatingMethods(category.slug)) assert.ok(Object.hasOwn(product.measurements, method.id), product.id + ": missing comparable row");
+      const measurements = measurementsFor(category, product);
+      for (const method of productRatingMethods(category.slug)) assert.ok(Object.hasOwn(measurements, method.id), product.id + ": missing comparable row");
       for (const method of productRatingMethods(category.slug)) {
-        const figure = product.measurements[method.id];
+        const figure = measurements[method.id];
         if (!figure) {
+          if (method.id === "noise" || method.id === "recovery") {
+            assert.equal(product.hotWaterPerformance[method.id], null, product.id + ": unavailable source must not produce a scored bar");
+            assert.equal(calculateProductRating(method, figure).score, null);
+            continue;
+          }
           const gap = product.measurementGaps?.[method.id];
           assert.ok(gap?.reason.trim(), product.id + ": unresolved " + method.id + " requires an audited reason");
           assert.equal(new URL(gap.sourceUrl).protocol, "https:");
@@ -127,12 +140,12 @@ test("all seven categories provide verified model-specific trade-offs, real phot
           continue;
         }
         assert.equal(product.measurementGaps?.[method.id], undefined, product.id + ": stale measurement gap");
-        assert.equal(figure.checkedAt, "2026-10-10");
+        assert.ok(["2026-10-10", "2026-10-12"].includes(figure.checkedAt), product.id + ": actual measurement review date");
         assert.equal(new URL(figure.sourceUrl).protocol, "https:");
         assert.ok(product.sources.some(source => source.url === figure.sourceUrl), product.id + ": figure must link to its reviewed source");
         assert.equal(typeof calculateProductRating(method, figure).score, "number", product.id + ": comparable measurement basis");
       }
-      if (productRatingMethods(category.slug).every(method => product.measurements[method.id])) fullyMeasured++;
+      if (productRatingMethods(category.slug).every(method => measurements[method.id])) fullyMeasured++;
       for (const field of ["rank", "score", "price", "rating", "reviewCount", "comparisons"]) assert.equal(Object.hasOwn(product, field), false);
     }
   }
@@ -158,24 +171,48 @@ test("heat-pump noise and recovery are visible and use exact published test cond
     assert.deepEqual(listing.props.products.find(item => item.id === product.id).hotWaterFacts, facts);
     const card = html.split('id="' + product.id + '"')[1].split("</article>")[0];
     assert.ok(card.includes("Noise"));
-    assert.ok(card.includes(facts.noise));
+    const item = listing.props.products.find(item => item.id === product.id);
+    assert.deepEqual(item.ratings.map(rating => rating.id), ["capacity", "warranty", "noise", "recovery"]);
+    const noiseRating = item.ratings.find(rating => rating.id === "noise");
+    const recoveryRating = item.ratings.find(rating => rating.id === "recovery");
+    if (noiseRating.measurement) assert.ok(card.includes(facts.noise));
+    else assert.equal(noiseRating.score, null);
     assert.equal(facts.noise, product.hotWaterPerformance.noise ? `${product.hotWaterPerformance.noise.value} dB` : "Not published for this model");
-    assert.ok(card.includes("Reheat 100 litres"));
-    assert.ok(card.includes(facts.recovery));
+    assert.ok(card.includes("Reheating speed"));
+    if (recoveryRating.measurement) {
+      assert.ok(card.includes(facts.recovery.replace(/^About /, "")), product.id + ": visible litres-per-hour rate");
+      assert.match(recoveryRating.measurement.unit, /^recovery-litres-per-hour$/);
+    } else assert.equal(recoveryRating.score, null);
+    assert.doesNotMatch(card, /minutes per 100|full.tank recovery/i);
     const noise = product.hotWaterPerformance.noise;
     if (noise) {
       // Combined noise/recovery rows can link their recovery source; both original
       // documents remain available in the product's source list below.
       const detail = product.technicalSpecs.find(spec => /Noise and heating test/.test(spec.label));
       assert.ok(detail, product.id + ": simplified card must retain the sourced noise test in Specs");
-      assert.ok(detail.value.includes(`${noise.value} dB(A)`), product.id + ": original noise number");
+      assert.ok(detail.value.includes(`${noise.value} dB`), product.id + ": original noise number; frequency weighting is retained when the maker names it");
       assert.ok(detail.value.includes(noise.distanceMetres === null ? "test distance not stated" : `at ${noise.distanceMetres} m`), product.id + ": original test distance");
       assert.ok(detail.value.includes(noise.metric === "sound-pressure" ? "sound pressure" : noise.metric === "sound-power" ? "sound power" : "pressure/power method not stated"), product.id + ": original measurement type");
     }
-    for (const figure of [product.hotWaterPerformance.noise, product.hotWaterPerformance.recovery].filter(Boolean)) {
+    for (const figure of [product.hotWaterPerformance.noise, product.hotWaterPerformance.recovery, product.hotWaterPerformance.recoveryTimeEstimate].filter(Boolean)) {
       assert.equal(new URL(figure.sourceUrl).protocol, "https:");
       assert.ok(product.sources.some(source => source.url === figure.sourceUrl), product.id + ": performance source");
     }
+  }
+});
+
+test("Panasonic outdoor profiles do not invent room-unit packages or retain withdrawn specification links", () => {
+  const products = guide.findProductGuideCategory("multi-split").options.filter(product => product.brand === "Panasonic");
+  assert.equal(products.length, 5);
+  for (const product of products) {
+    const model = product.technicalSpecs.find(spec => spec.label === "Outdoor model")?.value;
+    assert.match(model, /^CU-(?:2Z52|3Z54|4Z71|4Z80|5Z100)VBR$/);
+    assert.ok(product.name.includes(model));
+    assert.equal(product.measurements.capacity.variant, model);
+    assert.ok(product.measurements.capacity.basis.includes("selected indoor units"));
+    assert.equal(product.technicalSpecs.some(spec => /Exact equipment combination|Selected room units/.test(spec.label)), false);
+    assert.doesNotMatch(JSON.stringify(product), /CS-MRZ25WKR|PANASONIC-2020-R32|PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE/);
+    assert.ok(product.image.alt.includes("outdoor unit"));
   }
 });
 
@@ -190,7 +227,7 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
     assert.equal((html.match(/No model-specific drawback verified\./g) || []).length, category.options.filter(p => p.cons.length === 0).length);
     assert.doesNotMatch(html, /data-criterion=|No confirmed benefit\./);
     const methods = productRatingMethods(category.slug);
-    const ratings = category.options.flatMap(product => methods.map(method => calculateProductRating(method, product.measurements[method.id])));
+    const ratings = category.options.flatMap(product => methods.map(method => calculateProductRating(method, measurementsFor(category, product)[method.id])));
     assert.equal((html.match(/role="meter"/g) || []).length, ratings.filter(rating => rating.score !== null).length);
     assert.equal((html.match(/Not scored<\/span>/g) || []).length, ratings.filter(rating => rating.score === null).length);
     for (const method of methods) assert.equal(html.split(`data-rating="${method.id}"`).length - 1, count);
@@ -215,7 +252,7 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
       assert.equal(Object.hasOwn(product, "fit"), false);
       assert.ok(product.pros.length);
       assert.ok(Array.isArray(product.cons));
-      assert.equal(product.ratings.length, 2);
+      assert.equal(product.ratings.length, category.slug === "hot-water" ? 4 : 2);
       assert.ok(product.ratings.every(rating => rating.id !== "cost"));
       assert.ok(!product.sources.some(source => source.kind === "published_equipment_price"));
       assert.doesNotMatch(JSON.stringify(product), /(?:A?\$|AUD\s*)\s*\d/, product.id + ": public price anchor");
@@ -233,11 +270,12 @@ test("missing verified benefits are rejected instead of silently showing an empt
   assert.throws(() => renderToStaticMarkup(jsx.jsx(browser.ProductComparisonBrowser, { products: [product], methods: productRatingMethods(category.slug) })), /Missing verified benefits/);
 });
 
-test("rebate intake is shown only with hot-water products without gating their immediate cards", async () => {
+test("rebate intake is shown only with supported heating categories without gating their immediate cards", async () => {
   for (const category of guide.PRODUCT_GUIDE_CATEGORIES) {
     const html = renderToStaticMarkup(await categoryPage.default({ params: Promise.resolve({ category: category.slug }) }));
-    assert.equal((html.match(/data-testid="product-rebate-checker"/g) || []).length, category.slug === "hot-water" ? 1 : 0);
-    assert.equal((html.match(/data-product-rebates=/g) || []).length, category.slug === "hot-water" ? category.options.length : 0);
+    const supported = ["hot-water", "air-conditioning", "multi-split"].includes(category.slug);
+    assert.equal((html.match(/data-testid="product-rebate-checker"/g) || []).length, supported ? 1 : 0);
+    assert.equal((html.match(/data-product-rebates=/g) || []).length, supported ? category.options.length : 0);
     assert.equal((html.match(/<article /g) || []).length, category.options.length);
     assert.equal((html.match(/<img /g) || []).length, category.options.length);
   }
@@ -315,7 +353,7 @@ test("server-rendered controls stay disabled until the client can respond", () =
   assert.match(html, /aria-busy="true"/);
   assert.match(html, /<input[^>]*type="search"[^>]*disabled=""/);
   assert.match(html, /<select[^>]*disabled=""/);
-  assert.equal((html.match(/<button[^>]*disabled=""/g) || []).length, category.options.length * 2 + 1);
+  assert.equal((html.match(/<button[^>]*disabled=""/g) || []).length, category.options.length * 2 + 2);
   assert.equal((html.match(/<article /g) || []).length, category.options.length);
 });
 

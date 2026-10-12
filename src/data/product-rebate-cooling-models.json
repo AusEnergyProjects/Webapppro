@@ -1,0 +1,1974 @@
+{
+  "checkedAt": "2026-10-12",
+  "products": [
+    {
+      "id": "mitsubishi-electric-ap",
+      "name": "Mitsubishi Electric AP 3.5 kW Wi-Fi",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP35VGKD2-A2 / MUZ-AP35VGD2-A2",
+        "MSZ-AP35VGKD2-A2/MUZ-AP35VGD2-A2",
+        "MUZ-AP35VGD2-A2 / MSZ-AP35VGKD2-A2",
+        "MUZ-AP35VGD2-A2/MSZ-AP35VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mitsubishi-electric-ef",
+      "name": "Mitsubishi Electric EF 3.5 kW Wi-Fi",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-EF35VGKDW-A1 / MUZ-EF35VGD-A1",
+        "MSZ-EF35VGKDW-A1/MUZ-EF35VGD-A1",
+        "MUZ-EF35VGD-A1 / MSZ-EF35VGKDW-A1",
+        "MUZ-EF35VGD-A1/MSZ-EF35VGKDW-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mitsubishi-electric-kw",
+      "name": "Mitsubishi Electric KW 3.5 kW Wi-Fi",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MFZ-KW35VGK-A1 / MUFZ-KW35VG2-A1",
+        "MFZ-KW35VGK-A1/MUFZ-KW35VG2-A1",
+        "MUFZ-KW35VG2-A1 / MFZ-KW35VGK-A1",
+        "MUFZ-KW35VG2-A1/MFZ-KW35VGK-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-avanti",
+      "name": "Mitsubishi Heavy Industries Avanti WF1 3.5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK12ZSA-WF1 / DXC12ZSA-W",
+        "DXK12ZSA-WF1/DXC12ZSA-W",
+        "DXC12ZSA-W / DXK12ZSA-WF1",
+        "DXC12ZSA-W/DXK12ZSA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-avanti-plus",
+      "name": "Mitsubishi Heavy Industries Avanti Plus WF 3.5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK35ZSXA-WF / SRC35ZSXA-W",
+        "SRK35ZSXA-WF/SRC35ZSXA-W",
+        "SRC35ZSXA-W / SRK35ZSXA-WF",
+        "SRC35ZSXA-W/SRK35ZSXA-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-bronte",
+      "name": "Mitsubishi Heavy Industries Bronte WF1 7.1 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK24ZRA-WF1 / DXC24ZRA-W",
+        "DXK24ZRA-WF1/DXC24ZRA-W",
+        "DXC24ZRA-W / DXK24ZRA-WF1",
+        "DXC24ZRA-W/DXK24ZRA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "general-lifestyle-next",
+      "name": "GENERAL Lifestyle Next 2.5 kW",
+      "brand": "GENERAL",
+      "category": "air-conditioning",
+      "models": [
+        "ASTG09KMTC / AOTG09KMTC",
+        "ASTG09KMTC/AOTG09KMTC",
+        "AOTG09KMTC / ASTG09KMTC",
+        "AOTG09KMTC/ASTG09KMTC"
+      ],
+      "brands": [
+        "GENERAL"
+      ],
+      "modelSourceUrl": "https://www.generalairstage.com.au/product/set-astg09kmtc-nxt",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "lg-dualcool-ai-standard",
+      "name": "LG DUALCOOL AI Standard 3.5 kW",
+      "brand": "LG",
+      "category": "air-conditioning",
+      "models": [
+        "AS12S0N / AS12S0U",
+        "AS12S0N/AS12S0U",
+        "AS12S0U / AS12S0N",
+        "AS12S0U/AS12S0N"
+      ],
+      "brands": [
+        "LG"
+      ],
+      "modelSourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/as12s0s/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "samsung-geo-windfree",
+      "name": "Samsung Geo WindFree AR12DX",
+      "brand": "Samsung",
+      "category": "air-conditioning",
+      "models": [
+        "AR12DXEANWKNSA",
+        "AR12DXEANWKNSA / AR12DXEANWKXSA",
+        "AR12DXEANWKNSA/AR12DXEANWKXSA",
+        "AR12DXEANWKXSA / AR12DXEANWKNSA",
+        "AR12DXEANWKXSA/AR12DXEANWKNSA"
+      ],
+      "brands": [
+        "Samsung"
+      ],
+      "modelSourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "emerald-select-split",
+      "name": "Emerald Select 3.5 kW",
+      "brand": "Emerald",
+      "category": "air-conditioning",
+      "models": [
+        "ACSS35"
+      ],
+      "brands": [
+        "Emerald"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/08/Emerald-Air-Con-Split-System-data-sheet.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "lg-dualcool-ai-deluxe",
+      "name": "LG DUALCOOL AI Deluxe 3.5 kW",
+      "brand": "LG",
+      "category": "air-conditioning",
+      "models": [
+        "AH12S1N / AH12S1U",
+        "AH12S1N/AH12S1U",
+        "AH12S1U / AH12S1N",
+        "AH12S1U/AH12S1N"
+      ],
+      "brands": [
+        "LG"
+      ],
+      "modelSourceUrl": "https://www.lg.com/au/residential-air-conditioner/single-split-inverter-air-conditioners/ah12s1s/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "rinnai-px",
+      "name": "Rinnai PX 3.5 kW",
+      "brand": "Rinnai",
+      "category": "air-conditioning",
+      "models": [
+        "HINRPX35M / HONRPX35",
+        "HINRPX35M/HONRPX35",
+        "HONRPX35 / HINRPX35M",
+        "HONRPX35/HINRPX35M"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/trade/catalogue/products/px-series/px-3-5kw",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-floor-standing-35-y",
+      "name": "Daikin floor-standing 3.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FVXM35YVMA / RXM35YFVMA",
+        "FVXM35YVMA/RXM35YFVMA",
+        "RXM35YFVMA / FVXM35YVMA",
+        "RXM35YFVMA/FVXM35YVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z35akr",
+      "name": "Panasonic Z35 AKR 3.5 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z35AKRW / CU-Z35AKR",
+        "CS-Z35AKRW/CU-Z35AKR",
+        "CU-Z35AKR / CS-Z35AKRW",
+        "CU-Z35AKR/CS-Z35AKRW"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ap-25-vgkd2-a2",
+      "name": "Mitsubishi Electric AP Wi-Fi 2.5 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP25VGKD2-A2 / MUZ-AP25VGD2-A2",
+        "MSZ-AP25VGKD2-A2/MUZ-AP25VGD2-A2",
+        "MUZ-AP25VGD2-A2 / MSZ-AP25VGKD2-A2",
+        "MUZ-AP25VGD2-A2/MSZ-AP25VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ap-42-vgkd2-a2",
+      "name": "Mitsubishi Electric AP Wi-Fi 4.2 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP42VGKD2-A2 / MUZ-AP42VGD2-A2",
+        "MSZ-AP42VGKD2-A2/MUZ-AP42VGD2-A2",
+        "MUZ-AP42VGD2-A2 / MSZ-AP42VGKD2-A2",
+        "MUZ-AP42VGD2-A2/MSZ-AP42VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ap-50-vgkd2-a2",
+      "name": "Mitsubishi Electric AP Wi-Fi 5 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP50VGKD2-A2 / MUZ-AP50VGD2-A2",
+        "MSZ-AP50VGKD2-A2/MUZ-AP50VGD2-A2",
+        "MUZ-AP50VGD2-A2 / MSZ-AP50VGKD2-A2",
+        "MUZ-AP50VGD2-A2/MSZ-AP50VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ap-60-vgkd2-a2",
+      "name": "Mitsubishi Electric AP Wi-Fi 6 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP60VGKD2-A2 / MUZ-AP60VGD2-A2",
+        "MSZ-AP60VGKD2-A2/MUZ-AP60VGD2-A2",
+        "MUZ-AP60VGD2-A2 / MSZ-AP60VGKD2-A2",
+        "MUZ-AP60VGD2-A2/MSZ-AP60VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ap-71-vgkd2-a2",
+      "name": "Mitsubishi Electric AP Wi-Fi 7.1 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP71VGKD2-A2 / MUZ-AP71VGD2-A2",
+        "MSZ-AP71VGKD2-A2/MUZ-AP71VGD2-A2",
+        "MUZ-AP71VGD2-A2 / MSZ-AP71VGKD2-A2",
+        "MUZ-AP71VGD2-A2/MSZ-AP71VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ap-80-vgkd2-a2",
+      "name": "Mitsubishi Electric AP Wi-Fi 7.8 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-AP80VGKD2-A2 / MUZ-AP80VGD2-A2",
+        "MSZ-AP80VGKD2-A2/MUZ-AP80VGD2-A2",
+        "MUZ-AP80VGD2-A2 / MSZ-AP80VGKD2-A2",
+        "MUZ-AP80VGD2-A2/MSZ-AP80VGKD2-A2"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ef-25-vgkdw-a1",
+      "name": "Mitsubishi Electric EF white Wi-Fi 2.5 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-EF25VGKDW-A1 / MUZ-EF25VGD-A1",
+        "MSZ-EF25VGKDW-A1/MUZ-EF25VGD-A1",
+        "MUZ-EF25VGD-A1 / MSZ-EF25VGKDW-A1",
+        "MUZ-EF25VGD-A1/MSZ-EF25VGKDW-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ef-42-vgkdw-a1",
+      "name": "Mitsubishi Electric EF white Wi-Fi 4.2 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-EF42VGKDW-A1 / MUZ-EF42VGD-A1",
+        "MSZ-EF42VGKDW-A1/MUZ-EF42VGD-A1",
+        "MUZ-EF42VGD-A1 / MSZ-EF42VGKDW-A1",
+        "MUZ-EF42VGD-A1/MSZ-EF42VGKDW-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-ef-50-vgkdw-a1",
+      "name": "Mitsubishi Electric EF white Wi-Fi 5 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MSZ-EF50VGKDW-A1 / MUZ-EF50VGD-A1",
+        "MSZ-EF50VGKDW-A1/MUZ-EF50VGD-A1",
+        "MUZ-EF50VGD-A1 / MSZ-EF50VGKDW-A1",
+        "MUZ-EF50VGD-A1/MSZ-EF50VGKDW-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-kw-25-vgk-a1",
+      "name": "Mitsubishi Electric KW floor console Wi-Fi 2.5 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MFZ-KW25VGK-A1 / MUFZ-KW25VG2-A1",
+        "MFZ-KW25VGK-A1/MUFZ-KW25VG2-A1",
+        "MUFZ-KW25VG2-A1 / MFZ-KW25VGK-A1",
+        "MUFZ-KW25VG2-A1/MFZ-KW25VGK-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-kw-42-vgk-a1",
+      "name": "Mitsubishi Electric KW floor console Wi-Fi 4.2 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MFZ-KW42VGK-A1 / MUFZ-KW42VG2-A1",
+        "MFZ-KW42VGK-A1/MUFZ-KW42VG2-A1",
+        "MUFZ-KW42VG2-A1 / MFZ-KW42VGK-A1",
+        "MUFZ-KW42VG2-A1/MFZ-KW42VGK-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-kw-50-vgk-a1",
+      "name": "Mitsubishi Electric KW floor console Wi-Fi 5 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MFZ-KW50VGK-A1 / MUFZ-KW50VG2-A1",
+        "MFZ-KW50VGK-A1/MUFZ-KW50VG2-A1",
+        "MUFZ-KW50VG2-A1 / MFZ-KW50VGK-A1",
+        "MUFZ-KW50VG2-A1/MFZ-KW50VGK-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "me-kw-60-vgk-a1",
+      "name": "Mitsubishi Electric KW floor console Wi-Fi 6.1 kW",
+      "brand": "Mitsubishi Electric",
+      "category": "air-conditioning",
+      "models": [
+        "MFZ-KW60VGK-A1 / MUFZ-KW60VG2-A1",
+        "MFZ-KW60VGK-A1/MUFZ-KW60VG2-A1",
+        "MUFZ-KW60VG2-A1 / MFZ-KW60VGK-A1",
+        "MUFZ-KW60VG2-A1/MFZ-KW60VGK-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-avanti-06-wf1",
+      "name": "Mitsubishi Heavy Industries Avanti WF1 2 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK06ZSA-WF1 / DXC06ZSA-W",
+        "DXK06ZSA-WF1/DXC06ZSA-W",
+        "DXC06ZSA-W / DXK06ZSA-WF1",
+        "DXC06ZSA-W/DXK06ZSA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-avanti-09-wf1",
+      "name": "Mitsubishi Heavy Industries Avanti WF1 2.5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK09ZSA-WF1 / DXC09ZSA-W",
+        "DXK09ZSA-WF1/DXC09ZSA-W",
+        "DXC09ZSA-W / DXK09ZSA-WF1",
+        "DXC09ZSA-W/DXK09ZSA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-avanti-18-wf1",
+      "name": "Mitsubishi Heavy Industries Avanti WF1 5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK18ZSA-WF1 / DXC18ZSA-W",
+        "DXK18ZSA-WF1/DXC18ZSA-W",
+        "DXC18ZSA-W / DXK18ZSA-WF1",
+        "DXC18ZSA-W/DXK18ZSA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-plus-20-wf",
+      "name": "Mitsubishi Heavy Industries Avanti Plus WF 2 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK20ZSXA-WF / SRC20ZSXA-W",
+        "SRK20ZSXA-WF/SRC20ZSXA-W",
+        "SRC20ZSXA-W / SRK20ZSXA-WF",
+        "SRC20ZSXA-W/SRK20ZSXA-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-plus-25-wf",
+      "name": "Mitsubishi Heavy Industries Avanti Plus WF 2.5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK25ZSXA-WF / SRC25ZSXA-W",
+        "SRK25ZSXA-WF/SRC25ZSXA-W",
+        "SRC25ZSXA-W / SRK25ZSXA-WF",
+        "SRC25ZSXA-W/SRK25ZSXA-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-plus-50-wf",
+      "name": "Mitsubishi Heavy Industries Avanti Plus WF 5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK50ZSXA-WF / SRC50ZSXA-W",
+        "SRK50ZSXA-WF/SRC50ZSXA-W",
+        "SRC50ZSXA-W / SRK50ZSXA-WF",
+        "SRC50ZSXA-W/SRK50ZSXA-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-plus-60-wf",
+      "name": "Mitsubishi Heavy Industries Avanti Plus WF 6.1 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK60ZSXA-WF / SRC60ZSXA-W",
+        "SRK60ZSXA-WF/SRC60ZSXA-W",
+        "SRC60ZSXA-W / SRK60ZSXA-WF",
+        "SRC60ZSXA-W/SRK60ZSXA-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-plus-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-bronte-21-wf1",
+      "name": "Mitsubishi Heavy Industries Bronte WF1 6.3 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK21ZRA-WF1 / DXC21ZRA-W",
+        "DXK21ZRA-WF1/DXC21ZRA-W",
+        "DXC21ZRA-W / DXK21ZRA-WF1",
+        "DXC21ZRA-W/DXK21ZRA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-bronte-28-wf1",
+      "name": "Mitsubishi Heavy Industries Bronte WF1 8 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK28ZRA-WF1 / DXC28ZRA-W",
+        "DXK28ZRA-WF1/DXC28ZRA-W",
+        "DXC28ZRA-W / DXK28ZRA-WF1",
+        "DXC28ZRA-W/DXK28ZRA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-bronte-33-wf1",
+      "name": "Mitsubishi Heavy Industries Bronte WF1 9.5 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "DXK33ZRA-WF1 / DXC33ZRA-W",
+        "DXK33ZRA-WF1/DXC33ZRA-W",
+        "DXC33ZRA-W / DXK33ZRA-WF1",
+        "DXC33ZRA-W/DXK33ZRA-WF1"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-bronte-100-wf-vna",
+      "name": "Mitsubishi Heavy Industries Bronte 10 kW single-phase 10 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK100ZR-WF / FDCA100VNA-W",
+        "SRK100ZR-WF/FDCA100VNA-W",
+        "FDCA100VNA-W / SRK100ZR-WF",
+        "FDCA100VNA-W/SRK100ZR-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "mhi-bronte-100-wf-vsa",
+      "name": "Mitsubishi Heavy Industries Bronte 10 kW three-phase 10 kW",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "air-conditioning",
+      "models": [
+        "SRK100ZR-WF / FDCA100VSA-W",
+        "SRK100ZR-WF/FDCA100VSA-W",
+        "FDCA100VSA-W / SRK100ZR-WF",
+        "FDCA100VSA-W/SRK100ZR-WF"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-bronte-series/",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-20",
+      "name": "Daikin Alira X 2.2 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM20AVMA / RXM20AVMA",
+        "FTXM20AVMA/RXM20AVMA",
+        "RXM20AVMA / FTXM20AVMA",
+        "RXM20AVMA/FTXM20AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-25",
+      "name": "Daikin Alira X 2.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM25AVMA / RXM25AVMA",
+        "FTXM25AVMA/RXM25AVMA",
+        "RXM25AVMA / FTXM25AVMA",
+        "RXM25AVMA/FTXM25AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-35",
+      "name": "Daikin Alira X 3.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM35AVMA / RXM35AVMA",
+        "FTXM35AVMA/RXM35AVMA",
+        "RXM35AVMA / FTXM35AVMA",
+        "RXM35AVMA/FTXM35AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-46",
+      "name": "Daikin Alira X 4.6 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM46AVMA / RXM46AVMA",
+        "FTXM46AVMA/RXM46AVMA",
+        "RXM46AVMA / FTXM46AVMA",
+        "RXM46AVMA/FTXM46AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-50",
+      "name": "Daikin Alira X 5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM50AVMA / RXM50AVMA",
+        "FTXM50AVMA/RXM50AVMA",
+        "RXM50AVMA / FTXM50AVMA",
+        "RXM50AVMA/FTXM50AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-60",
+      "name": "Daikin Alira X 6 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM60AVMA / RXM60AVMA",
+        "FTXM60AVMA/RXM60AVMA",
+        "RXM60AVMA / FTXM60AVMA",
+        "RXM60AVMA/FTXM60AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-alira-x-71",
+      "name": "Daikin Alira X 7.1 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXM71AVMA / RXM71AVMA",
+        "FTXM71AVMA/RXM71AVMA",
+        "RXM71AVMA / FTXM71AVMA",
+        "RXM71AVMA/FTXM71AVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-20",
+      "name": "Daikin Cora 2 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV20WVMA / RXV20WVMA",
+        "FTXV20WVMA/RXV20WVMA",
+        "RXV20WVMA / FTXV20WVMA",
+        "RXV20WVMA/FTXV20WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-25",
+      "name": "Daikin Cora 2.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV25WVMA / RXV25WVMA",
+        "FTXV25WVMA/RXV25WVMA",
+        "RXV25WVMA / FTXV25WVMA",
+        "RXV25WVMA/FTXV25WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-35",
+      "name": "Daikin Cora 3.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV35WVMA / RXV35WVMA",
+        "FTXV35WVMA/RXV35WVMA",
+        "RXV35WVMA / FTXV35WVMA",
+        "RXV35WVMA/FTXV35WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-46",
+      "name": "Daikin Cora 4.6 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV46WVMA / RXV46WVMA",
+        "FTXV46WVMA/RXV46WVMA",
+        "RXV46WVMA / FTXV46WVMA",
+        "RXV46WVMA/FTXV46WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-50",
+      "name": "Daikin Cora 5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV50WVMA / RXV50WVMA",
+        "FTXV50WVMA/RXV50WVMA",
+        "RXV50WVMA / FTXV50WVMA",
+        "RXV50WVMA/FTXV50WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-60",
+      "name": "Daikin Cora 6 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV60WVMA / RXV60WVMA",
+        "FTXV60WVMA/RXV60WVMA",
+        "RXV60WVMA / FTXV60WVMA",
+        "RXV60WVMA/FTXV60WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-cora-71",
+      "name": "Daikin Cora 7.1 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FTXV71WVMA / RXV71WVMA",
+        "FTXV71WVMA/RXV71WVMA",
+        "RXV71WVMA / FTXV71WVMA",
+        "RXV71WVMA/FTXV71WVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-floor-25-y",
+      "name": "Daikin Floor Standing Y 2.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FVXM25YVMA / RXM25YFVMA",
+        "FVXM25YVMA/RXM25YFVMA",
+        "RXM25YFVMA / FVXM25YVMA",
+        "RXM25YFVMA/FVXM25YVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-floor-45-y",
+      "name": "Daikin Floor Standing Y 4.5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FVXM45YVMA / RXM45YFVMA",
+        "FVXM45YVMA/RXM45YFVMA",
+        "RXM45YFVMA / FVXM45YVMA",
+        "RXM45YFVMA/FVXM45YVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-floor-50-y",
+      "name": "Daikin Floor Standing Y 5 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FVXM50YVMA / RXM50YFVMA",
+        "FVXM50YVMA/RXM50YFVMA",
+        "RXM50YFVMA / FVXM50YVMA",
+        "RXM50YFVMA/FVXM50YVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-floor-60-y",
+      "name": "Daikin Floor Standing Y 6 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FVXM60YVMA / RXM60YFVMA",
+        "FVXM60YVMA/RXM60YFVMA",
+        "RXM60YFVMA / FVXM60YVMA",
+        "RXM60YFVMA/FVXM60YVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-floor-71-y",
+      "name": "Daikin Floor Standing Y 6.7 kW",
+      "brand": "Daikin",
+      "category": "air-conditioning",
+      "models": [
+        "FVXM71YVMA / RXM71YFVMA",
+        "FVXM71YVMA/RXM71YFVMA",
+        "RXM71YFVMA / FVXM71YVMA",
+        "RXM71YFVMA/FVXM71YVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_56b7501813ac4b488550418eaa329107.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z25akr",
+      "name": "Panasonic Z Premium AKR 2.5 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z25AKRW / CU-Z25AKR",
+        "CS-Z25AKRW/CU-Z25AKR",
+        "CU-Z25AKR / CS-Z25AKRW",
+        "CU-Z25AKR/CS-Z25AKRW"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z42akr",
+      "name": "Panasonic Z Premium AKR 4.2 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z42AKRW / CU-Z42AKR",
+        "CS-Z42AKRW/CU-Z42AKR",
+        "CU-Z42AKR / CS-Z42AKRW",
+        "CU-Z42AKR/CS-Z42AKRW"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z50akr",
+      "name": "Panasonic Z Premium AKR 5 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z50AKRW / CU-Z50AKR",
+        "CS-Z50AKRW/CU-Z50AKR",
+        "CU-Z50AKR / CS-Z50AKRW",
+        "CU-Z50AKR/CS-Z50AKRW"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z60akr",
+      "name": "Panasonic Z Premium AKR 6 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z60AKRW / CU-Z60AKR",
+        "CS-Z60AKRW/CU-Z60AKR",
+        "CU-Z60AKR / CS-Z60AKRW",
+        "CU-Z60AKR/CS-Z60AKRW"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z71akr",
+      "name": "Panasonic Z Premium AKR 7.1 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z71AKRW / CU-Z71AKR",
+        "CS-Z71AKRW/CU-Z71AKR",
+        "CU-Z71AKR / CS-Z71AKRW",
+        "CU-Z71AKR/CS-Z71AKRW"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-z80ykr",
+      "name": "Panasonic Z Premium YKR 8 kW",
+      "brand": "Panasonic",
+      "category": "air-conditioning",
+      "models": [
+        "CS-Z80YKR / CU-Z80YKR",
+        "CS-Z80YKR/CU-Z80YKR",
+        "CU-Z80YKR / CS-Z80YKR",
+        "CU-Z80YKR/CS-Z80YKR"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "emerald-multi-pro",
+      "name": "Emerald Multi Pro 12.6 kW",
+      "brand": "Emerald",
+      "category": "multi-split",
+      "models": [
+        "ACR126U"
+      ],
+      "brands": [
+        "Emerald"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "emerald-multi-ultra-18",
+      "name": "Emerald Multi Ultra 18.1 kW",
+      "brand": "Emerald",
+      "category": "multi-split",
+      "models": [
+        "ACV180U"
+      ],
+      "brands": [
+        "Emerald"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "emerald-multi-ultra-20",
+      "name": "Emerald Multi Ultra 20 kW",
+      "brand": "Emerald",
+      "category": "multi-split",
+      "models": [
+        "ACV200U"
+      ],
+      "brands": [
+        "Emerald"
+      ],
+      "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "rinnai-multi-px",
+      "name": "Rinnai PX three-room kit, MON3H07B1LA + 3 HINRPX25M",
+      "brand": "Rinnai",
+      "category": "multi-split",
+      "models": [
+        "MON3H07B1LA"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/wp-content/uploads/AC-MultiSplit-Combination-TAB.pdf",
+      "indoorUnits": [
+        {
+          "model": "HINRPX25M",
+          "quantity": "3",
+          "heatingCapacityKw": "3.25",
+          "coolingCapacityKw": "2.6",
+          "sourceUrl": "https://www.rinnai.com.au/documents/c5f5c97983/ac-multisplit-2604-bro.pdf"
+        }
+      ],
+      "combination": "MON3H07B1LA outdoor + 3 HINRPX25M wall-mounted indoor units."
+    },
+    {
+      "id": "mitsubishi-electric-ap-two-room-kit52",
+      "name": "Mitsubishi Electric AP two-room 5.2 kW kit",
+      "brand": "Mitsubishi Electric",
+      "category": "multi-split",
+      "models": [
+        "MXZ-2F52VGD-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "indoorUnits": [
+        {
+          "model": "MSZ-AP25VGKD2-A2",
+          "quantity": "2",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        }
+      ],
+      "combination": "1 x MXZ-2F52VGD-A1 + 2 x MSZ-AP25VGKD2-A2"
+    },
+    {
+      "id": "mhi-avanti-wf1-two-room-scm40",
+      "name": "MHI Avanti Wi-Fi two-room 4.0 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM40ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK06ZSA-WF1",
+          "quantity": "2",
+          "heatingCapacityKw": "2.7",
+          "coolingCapacityKw": "2",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM40ZS-W + 2 x DXK06ZSA-WF1"
+    },
+    {
+      "id": "me-ap-multi-kit-71a",
+      "name": "Mitsubishi Electric AP 3-room 7.1 kW kit 71A",
+      "brand": "Mitsubishi Electric",
+      "category": "multi-split",
+      "models": [
+        "MXZ-4F71VGD-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "indoorUnits": [
+        {
+          "model": "MSZ-AP25VGKD2-A2",
+          "quantity": "3",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        }
+      ],
+      "combination": "1 x MXZ-4F71VGD-A1 + 3 x MSZ-AP25VGKD2-A2"
+    },
+    {
+      "id": "me-ap-multi-kit-80a",
+      "name": "Mitsubishi Electric AP 4-room 8 kW kit 80A",
+      "brand": "Mitsubishi Electric",
+      "category": "multi-split",
+      "models": [
+        "MXZ-4F80VGD-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "indoorUnits": [
+        {
+          "model": "MSZ-AP25VGKD2-A2",
+          "quantity": "4",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        }
+      ],
+      "combination": "1 x MXZ-4F80VGD-A1 + 4 x MSZ-AP25VGKD2-A2"
+    },
+    {
+      "id": "me-ap-multi-kit-80b",
+      "name": "Mitsubishi Electric AP 3-room 8 kW kit 80B",
+      "brand": "Mitsubishi Electric",
+      "category": "multi-split",
+      "models": [
+        "MXZ-4F80VGD-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "indoorUnits": [
+        {
+          "model": "MSZ-AP25VGKD2-A2",
+          "quantity": "2",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        },
+        {
+          "model": "MSZ-AP35VGKD2-A2",
+          "quantity": "1",
+          "heatingCapacityKw": "3.7",
+          "coolingCapacityKw": "3.5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        }
+      ],
+      "combination": "1 x MXZ-4F80VGD-A1 + 2 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP35VGKD2-A2"
+    },
+    {
+      "id": "me-ap-multi-kit-100a",
+      "name": "Mitsubishi Electric AP 4-room 10 kW kit 100A",
+      "brand": "Mitsubishi Electric",
+      "category": "multi-split",
+      "models": [
+        "MXZ-5F100VGD-A1"
+      ],
+      "brands": [
+        "Mitsubishi Electric"
+      ],
+      "modelSourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf",
+      "indoorUnits": [
+        {
+          "model": "MSZ-AP25VGKD2-A2",
+          "quantity": "3",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        },
+        {
+          "model": "MSZ-AP50VGKD2-A2",
+          "quantity": "1",
+          "heatingCapacityKw": "6",
+          "coolingCapacityKw": "5",
+          "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
+        }
+      ],
+      "combination": "1 x MXZ-5F100VGD-A1 + 3 x MSZ-AP25VGKD2-A2 + 1 x MSZ-AP50VGKD2-A2"
+    },
+    {
+      "id": "mhi-multi-scm45zs-w-2-avanti",
+      "name": "MHI Avanti Wi-Fi 2-room 4.5 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM45ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK09ZSA-WF1",
+          "quantity": "2",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM45ZS-W + 2 x DXK09ZSA-WF1"
+    },
+    {
+      "id": "mhi-multi-scm50zs-w-2-avanti",
+      "name": "MHI Avanti Wi-Fi 2-room 5 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM50ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK12ZSA-WF1",
+          "quantity": "2",
+          "heatingCapacityKw": "3.7",
+          "coolingCapacityKw": "3.5",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM50ZS-W + 2 x DXK12ZSA-WF1"
+    },
+    {
+      "id": "mhi-multi-scm60zs-w-3-avanti",
+      "name": "MHI Avanti Wi-Fi 3-room 6 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM60ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK06ZSA-WF1",
+          "quantity": "3",
+          "heatingCapacityKw": "2.7",
+          "coolingCapacityKw": "2",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM60ZS-W + 3 x DXK06ZSA-WF1"
+    },
+    {
+      "id": "mhi-multi-scm71zs-w-3-avanti",
+      "name": "MHI Avanti Wi-Fi 3-room 7.1 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM71ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK09ZSA-WF1",
+          "quantity": "3",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM71ZS-W + 3 x DXK09ZSA-WF1"
+    },
+    {
+      "id": "mhi-multi-scm80zs-w-4-avanti",
+      "name": "MHI Avanti Wi-Fi 4-room 8 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM80ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK06ZSA-WF1",
+          "quantity": "4",
+          "heatingCapacityKw": "2.7",
+          "coolingCapacityKw": "2",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM80ZS-W + 4 x DXK06ZSA-WF1"
+    },
+    {
+      "id": "mhi-multi-scm100zs-w-4-avanti",
+      "name": "MHI Avanti Wi-Fi 4-room 10 kW combination",
+      "brand": "Mitsubishi Heavy Industries",
+      "category": "multi-split",
+      "models": [
+        "SCM100ZS-W"
+      ],
+      "brands": [
+        "Mitsubishi Heavy Industries"
+      ],
+      "modelSourceUrl": "https://www.mhiaa.com.au/document/multi-split-system-brochure/",
+      "indoorUnits": [
+        {
+          "model": "DXK09ZSA-WF1",
+          "quantity": "4",
+          "heatingCapacityKw": "3.2",
+          "coolingCapacityKw": "2.5",
+          "sourceUrl": "https://www.mhiaa.com.au/products/series/split-system-air-conditioners-avanti-series/"
+        }
+      ],
+      "combination": "1 x SCM100ZS-W + 4 x DXK09ZSA-WF1"
+    },
+    {
+      "id": "panasonic-multi-cu-2z52vbr-2-mrz",
+      "name": "Panasonic CU-2Z52VBR 5.2 kW",
+      "brand": "Panasonic",
+      "category": "multi-split",
+      "models": [
+        "CU-2Z52VBR"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-multi-cu-3z54vbr-3-mrz",
+      "name": "Panasonic CU-3Z54VBR 5.4 kW",
+      "brand": "Panasonic",
+      "category": "multi-split",
+      "models": [
+        "CU-3Z54VBR"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-multi-cu-4z71vbr-4-mrz",
+      "name": "Panasonic CU-4Z71VBR 7.1 kW",
+      "brand": "Panasonic",
+      "category": "multi-split",
+      "models": [
+        "CU-4Z71VBR"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-multi-cu-4z80vbr-4-mrz",
+      "name": "Panasonic CU-4Z80VBR 8 kW",
+      "brand": "Panasonic",
+      "category": "multi-split",
+      "models": [
+        "CU-4Z80VBR"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "panasonic-multi-cu-5z100vbr-5-mrz",
+      "name": "Panasonic CU-5Z100VBR 10 kW",
+      "brand": "Panasonic",
+      "category": "multi-split",
+      "models": [
+        "CU-5Z100VBR"
+      ],
+      "brands": [
+        "Panasonic"
+      ],
+      "modelSourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "daikin-multi-3mxm52rvma-cora-rated",
+      "name": "Daikin Cora 3-room 5.2 kW rated combination",
+      "brand": "Daikin",
+      "category": "multi-split",
+      "models": [
+        "3MXM52RVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "indoorUnits": [
+        {
+          "model": "CTXM20RVMA",
+          "quantity": "2",
+          "heatingCapacityKw": "1.51",
+          "coolingCapacityKw": "1.16",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        },
+        {
+          "model": "CTXM50RVMA",
+          "quantity": "1",
+          "heatingCapacityKw": "3.78",
+          "coolingCapacityKw": "2.89",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        }
+      ],
+      "combination": "1 x 3MXM52RVMA + 2 x CTXM20RVMA + 1 x CTXM50RVMA"
+    },
+    {
+      "id": "daikin-multi-4mxm68rvma-cora-rated",
+      "name": "Daikin Cora 4-room 6.8 kW rated combination",
+      "brand": "Daikin",
+      "category": "multi-split",
+      "models": [
+        "4MXM68RVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "indoorUnits": [
+        {
+          "model": "CTXM20RVMA",
+          "quantity": "3",
+          "heatingCapacityKw": "1.56",
+          "coolingCapacityKw": "1.24",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        },
+        {
+          "model": "CTXM50RVMA",
+          "quantity": "1",
+          "heatingCapacityKw": "3.91",
+          "coolingCapacityKw": "3.09",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        }
+      ],
+      "combination": "1 x 4MXM68RVMA + 3 x CTXM20RVMA + 1 x CTXM50RVMA"
+    },
+    {
+      "id": "daikin-multi-4mxm80rvma-cora-rated",
+      "name": "Daikin Cora 4-room 8 kW rated combination",
+      "brand": "Daikin",
+      "category": "multi-split",
+      "models": [
+        "4MXM80RVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "indoorUnits": [
+        {
+          "model": "CTXM25RVMA",
+          "quantity": "1",
+          "heatingCapacityKw": "1.66",
+          "coolingCapacityKw": "1.38",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        },
+        {
+          "model": "CTXM35RVMA",
+          "quantity": "2",
+          "heatingCapacityKw": "2.32",
+          "coolingCapacityKw": "1.93",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        },
+        {
+          "model": "CTXM50RVMA",
+          "quantity": "1",
+          "heatingCapacityKw": "3.31",
+          "coolingCapacityKw": "2.76",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        }
+      ],
+      "combination": "1 x 4MXM80RVMA + 1 x CTXM25RVMA + 2 x CTXM35RVMA + 1 x CTXM50RVMA"
+    },
+    {
+      "id": "daikin-multi-5mxm100rvma-cora-rated",
+      "name": "Daikin Cora 5-room 10 kW rated combination",
+      "brand": "Daikin",
+      "category": "multi-split",
+      "models": [
+        "5MXM100RVMA"
+      ],
+      "brands": [
+        "Daikin"
+      ],
+      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
+      "indoorUnits": [
+        {
+          "model": "CTXM20RVMA",
+          "quantity": "1",
+          "heatingCapacityKw": "1.42",
+          "coolingCapacityKw": "1.29",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        },
+        {
+          "model": "CTXM25RVMA",
+          "quantity": "3",
+          "heatingCapacityKw": "1.77",
+          "coolingCapacityKw": "1.61",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        },
+        {
+          "model": "CTXM60RVMA",
+          "quantity": "1",
+          "heatingCapacityKw": "4.26",
+          "coolingCapacityKw": "3.87",
+          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        }
+      ],
+      "combination": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA"
+    },
+    {
+      "id": "gree-pular-07",
+      "name": "Gree Pular 2.25 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH07AGAXB-K6DNA1A/I / GWH07AGAXB-K6DNA1A/O",
+        "GWH07AGAXB-K6DNA1A/I/GWH07AGAXB-K6DNA1A/O",
+        "GWH07AGAXB-K6DNA1A/O / GWH07AGAXB-K6DNA1A/I",
+        "GWH07AGAXB-K6DNA1A/O/GWH07AGAXB-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "gree-pular-09",
+      "name": "Gree Pular 2.65 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH09AGCXB-K6DNA1A/I / GWH09AGCXB-K6DNA1A/O",
+        "GWH09AGCXB-K6DNA1A/I/GWH09AGCXB-K6DNA1A/O",
+        "GWH09AGCXB-K6DNA1A/O / GWH09AGCXB-K6DNA1A/I",
+        "GWH09AGCXB-K6DNA1A/O/GWH09AGCXB-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "gree-pular-12",
+      "name": "Gree Pular 3.52 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH12AGCXD-K6DNA1A/I / GWH12AGCXD-K6DNA1A/O",
+        "GWH12AGCXD-K6DNA1A/I/GWH12AGCXD-K6DNA1A/O",
+        "GWH12AGCXD-K6DNA1A/O / GWH12AGCXD-K6DNA1A/I",
+        "GWH12AGCXD-K6DNA1A/O/GWH12AGCXD-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "gree-pular-18",
+      "name": "Gree Pular 5 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH18AGDXE-K6DNA1A/I / GWH18AGDXE-K6DNA1A/O",
+        "GWH18AGDXE-K6DNA1A/I/GWH18AGDXE-K6DNA1A/O",
+        "GWH18AGDXE-K6DNA1A/O / GWH18AGDXE-K6DNA1A/I",
+        "GWH18AGDXE-K6DNA1A/O/GWH18AGDXE-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "gree-pular-21",
+      "name": "Gree Pular 6.4 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH21AGEXF-K6DNA1A/I / GWH21AGEXF-K6DNA1A/O",
+        "GWH21AGEXF-K6DNA1A/I/GWH21AGEXF-K6DNA1A/O",
+        "GWH21AGEXF-K6DNA1A/O / GWH21AGEXF-K6DNA1A/I",
+        "GWH21AGEXF-K6DNA1A/O/GWH21AGEXF-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "gree-pular-24",
+      "name": "Gree Pular 7.1 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH24AGEXF-K6DNA1A/I / GWH24AGEXF-K6DNA1A/O",
+        "GWH24AGEXF-K6DNA1A/I/GWH24AGEXF-K6DNA1A/O",
+        "GWH24AGEXF-K6DNA1A/O / GWH24AGEXF-K6DNA1A/I",
+        "GWH24AGEXF-K6DNA1A/O/GWH24AGEXF-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "gree-pular-28",
+      "name": "Gree Pular 8.5 kW",
+      "brand": "Gree",
+      "category": "air-conditioning",
+      "models": [
+        "GWH28AGEXH-K6DNA1A/I / GWH28AGEXH-K6DNA1A/O",
+        "GWH28AGEXH-K6DNA1A/I/GWH28AGEXH-K6DNA1A/O",
+        "GWH28AGEXH-K6DNA1A/O / GWH28AGEXH-K6DNA1A/I",
+        "GWH28AGEXH-K6DNA1A/O/GWH28AGEXH-K6DNA1A/I"
+      ],
+      "brands": [
+        "Gree"
+      ],
+      "modelSourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-20",
+      "name": "Midea Xtreme 2 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS20N / MFXS20W",
+        "MFXS20N/MFXS20W",
+        "MFXS20W / MFXS20N",
+        "MFXS20W/MFXS20N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-26",
+      "name": "Midea Xtreme 2.65 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS26N / MFXS26W",
+        "MFXS26N/MFXS26W",
+        "MFXS26W / MFXS26N",
+        "MFXS26W/MFXS26N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-35",
+      "name": "Midea Xtreme 3.55 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS35N / MFXS35W",
+        "MFXS35N/MFXS35W",
+        "MFXS35W / MFXS35N",
+        "MFXS35W/MFXS35N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-50",
+      "name": "Midea Xtreme 5 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS50N / MFXS50W",
+        "MFXS50N/MFXS50W",
+        "MFXS50W / MFXS50N",
+        "MFXS50W/MFXS50N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-60",
+      "name": "Midea Xtreme 6 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS60N / MFXS60W",
+        "MFXS60N/MFXS60W",
+        "MFXS60W / MFXS60N",
+        "MFXS60W/MFXS60N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-70",
+      "name": "Midea Xtreme 7 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS70N / MFXS70W",
+        "MFXS70N/MFXS70W",
+        "MFXS70W / MFXS70N",
+        "MFXS70W/MFXS70N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    },
+    {
+      "id": "midea-xtreme-80",
+      "name": "Midea Xtreme 8 kW",
+      "brand": "Midea",
+      "category": "air-conditioning",
+      "models": [
+        "MFXS80N / MFXS80W",
+        "MFXS80N/MFXS80W",
+        "MFXS80W / MFXS80N",
+        "MFXS80W/MFXS80N"
+      ],
+      "brands": [
+        "Midea"
+      ],
+      "modelSourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "indoorUnits": null,
+      "combination": null
+    }
+  ]
+}

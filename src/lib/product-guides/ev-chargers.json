@@ -235,11 +235,6 @@
         "label": "Parts warranty",
         "value": "Three-year charger product warranty under the current Australian maker FAQ.",
         "sourceUrl": "https://www.fronius.com/en-au/australia/solar-energy/home-owners/contact/support-for-pv-system-owners/support-wattpilot"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "Fronius Wattpilot Flex Home 22 C6, MPN 4,240,187; this selected version may cost differently.",
-        "sourceUrl": "https://solarshop.baywa-re.com.au/Wattpilot-Flex-Home-22"
       }
     ],
     "freshness": {

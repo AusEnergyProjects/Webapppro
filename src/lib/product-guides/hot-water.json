@@ -2,7 +2,7 @@
   {
     "id": "reclaim-eco-r290",
     "name": "Reclaim ECO 300REC25P",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Reclaim ECO product",
@@ -29,10 +29,10 @@
         "revision": "Public model rows checked 10 October 2026; eligibility date is not launch date"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/reclaim-eco-r290-heat-pump-300l",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "title": "Reclaim ECO R290 exact-model specifications",
+        "url": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf",
+        "kind": "manufacturer_datasheet",
+        "revision": "Issue 03, July 2026"
       }
     ],
     "brand": "Reclaim Energy",
@@ -125,8 +125,13 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "No single comparable noise figure published in the checked exact-model maker sources. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/H4148-E-Reclaim-Heat-Pump-Manual.pdf"
+        "value": "The current maker manual and July 2026 sheet give no measured dB noise figure. Heating-water production rate: 54 litres per hour at 20 C air; the rate row does not state water temperatures. The separately specified COP uses water 20 to 60 C. The visible reheating speed is a maker-rate estimate.",
+        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Designed and manufactured in Australia, according to the current exact-range maker brochure.",
+        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf"
       }
     ],
     "pros": [
@@ -139,13 +144,18 @@
     ],
     "hotWaterPerformance": {
       "noise": null,
-      "recovery": null
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHour": 54,
+        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf",
+        "basis": "Maker production-rate estimate: 54 litres per hour at 20 C air. Start/end water temperatures are not stated for the production-rate row; the separate COP row tests water 20 to 60 C and is not assumed to apply to this rate."
+      }
     }
   },
   {
     "id": "rheem-ambipower-280e",
     "name": "Rheem AmbiPower 280e 551E280G5",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "AmbiPower 280e product",
@@ -166,10 +176,10 @@
         "revision": "1 July 2024 Australian announcement"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rheem-ambipower-280e-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "title": "Rheem AmbiPower 280e exact G5 and current range performance",
+        "url": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3",
+        "kind": "manufacturer_datasheet",
+        "revision": "RHE672-AUG2026-BELONG, August 2026"
       }
     ],
     "brand": "Rheem",
@@ -247,13 +257,18 @@
       },
       {
         "label": "Tank material",
-        "value": "Not established for this exact G5 variant in the checked current model sources.",
+        "value": "Enamel-lined cylinder, as specified on the exact G5 maker page.",
         "sourceUrl": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-Heat-Pump/p/551E280G5"
       },
       {
         "label": "Noise and heating test",
-        "value": "No single comparable noise figure published in the checked exact-model maker sources. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-Heat-Pump/p/551E280G5"
+        "value": "Noise 48 dB(A), sound pressure, at 1 m; LA90, GB/T 23137-2008 laboratory test, operating mode not specified. Reflections after installation can increase noise. Heat-pump recovery 56 litres/hour at a 45 C water rise, air 19 C and 66 percent relative humidity; electric boost excluded.",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3"
+      },
+      {
+        "label": "Size and weight",
+        "value": "1832 mm high x 696 mm wide x 725 mm deep; 135 kg cartoned, 402 kg full.",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3"
       }
     ],
     "pros": [
@@ -265,14 +280,26 @@
       "Standard cover for smaller parts and their repair labour is only one year."
     ],
     "hotWaterPerformance": {
-      "noise": null,
-      "recovery": null
+      "noise": {
+        "value": 48,
+        "metric": "sound-pressure",
+        "distanceMetres": 1,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3"
+      },
+      "recovery": {
+        "litresPerHour": 56,
+        "airTemperatureC": 19,
+        "waterTemperatureRiseC": 45,
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3",
+        "basis": "Published average heat-pump-only recovery for 551E280G5/G5B: 56 litres/hour, 45 C water rise, air 19 C and 66 percent relative humidity. The separate electric-element table is excluded. Source does not specify start/end water temperatures."
+      }
     }
   },
   {
     "id": "ecogenica-econova-rvw",
     "name": "Ecogenica Econova 300 RVW2.0E",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Current Ecogenica systems",
@@ -309,6 +336,18 @@
         "url": "https://www.appliancesonline.com.au/article/trading-terms/",
         "kind": "Retailer published trading terms",
         "revision": "Current clause 3.1 prices include GST; clause 6 installation separately agreed"
+      },
+      {
+        "title": "Econova current RVW and RVW-2.0E owner manual",
+        "url": "https://econova.com.au/assets/manuals/ECON-RVW-series-Owners-Manual.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "Current maker-linked 26-page owner manual, checked 12 October 2026"
+      },
+      {
+        "title": "Econova current exact RVW model specifications",
+        "url": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf",
+        "kind": "manufacturer_datasheet",
+        "revision": "Current maker-linked model table and footnote 8, checked 12 October 2026"
       }
     ],
     "brand": "Econova",
@@ -401,13 +440,13 @@
       },
       {
         "label": "Tank material",
-        "value": "The checked exact-model primary sources do not specify the cylinder material.",
-        "sourceUrl": "https://ecogenica.com.au/hot-water-system"
+        "value": "Enamel water tank with a corrosion-protection rod, identified in the exact-model exploded view on owner-manual page 22. Underlying tank metal is not named.",
+        "sourceUrl": "https://econova.com.au/assets/manuals/ECON-RVW-series-Owners-Manual.pdf"
       },
       {
         "label": "Noise and heating test",
-        "value": "No single comparable noise figure published in the checked exact-model maker sources. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://ecogenica.com.au/images/14.05.25-Brochure-ECON-RVW2.0E-2.pdf"
+        "value": "The current exact-model maker manual and datasheet give no measured dB noise figure. Typical heating-water production is 50 to 60 litres/hour, depending on model and weather; water and air test temperatures are not specified for the rate range.",
+        "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf"
       }
     ],
     "pros": [
@@ -421,7 +460,13 @@
     ],
     "hotWaterPerformance": {
       "noise": null,
-      "recovery": null
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHourMinimum": 50,
+        "litresPerHourMaximum": 60,
+        "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf",
+        "basis": "Maker datasheet footnote 8 gives typical production of 50 to 60 litres/hour depending on the model and weather conditions. Water start/end temperatures and an air test temperature are not specified for this range. Electric-boost performance is not separately quantified."
+      }
     }
   },
   {
@@ -446,12 +491,6 @@
         "url": "https://evoheat.com.au/introducing-the-new-evo270-e-efficient-eco-friendly-and-eligible-for-rebates/",
         "kind": "Manufacturer AU information",
         "revision": "3 October 2024"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/evoheat-evo270-e",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "EvoHeat",
@@ -579,7 +618,7 @@
     "id": "rheem-ambipower-280e-wifi",
     "name": "Rheem AmbiPower Wi-Fi 551E280NT",
     "brand": "Rheem",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Current Wi-Fi product",
@@ -604,6 +643,12 @@
         "url": "https://www.rheem.com.au/rheem/products/Residential/Heat-Pumps/AmbiPower/Rheem-AmbiPower-280e-WiFi-Heat-Pump-/p/551E280R5NT",
         "kind": "Manufacturer AU product",
         "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+      },
+      {
+        "title": "Rheem AmbiPower 280e current range dimensions",
+        "url": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3",
+        "kind": "manufacturer_datasheet",
+        "revision": "RHE672-AUG2026-BELONG, August 2026"
       }
     ],
     "image": {
@@ -684,14 +729,9 @@
         "sourceUrl": "https://assets.ctfassets.net/phagqs82lusw/5UoYF3N9Kh8xRfCz8AsXp1/3ec32d73bd518b04de3c989b4d0547c2/install_instruct_-_Rheem_heat_pump_551E280_WiFi_-_122339_Rev-02_-_2026_May.pdf"
       },
       {
-        "label": "Equipment cost evidence",
-        "value": "No GST-inclusive equipment-only price was verified for this exact current Wi-Fi model.",
-        "sourceUrl": "https://solar.rheem.com.au/news/ambipower-280e-wi%2Bfi-heat-pump"
-      },
-      {
         "label": "Physical installation",
-        "value": "Current exact-model dimension drawing and clearance requirements are in the linked owner manual; cartoned weight 132 kg.",
-        "sourceUrl": "https://assets.ctfassets.net/phagqs82lusw/5UoYF3N9Kh8xRfCz8AsXp1/3ec32d73bd518b04de3c989b4d0547c2/install_instruct_-_Rheem_heat_pump_551E280_WiFi_-_122339_Rev-02_-_2026_May.pdf"
+        "value": "1832 mm high x 696 mm wide x 725 mm deep; cartoned weight 135 kg. Allow model-specific airflow and service clearances.",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3"
       },
       {
         "label": "Noise and heating test",
@@ -729,7 +769,7 @@
     "id": "hydrotherm-fusion-x8-320",
     "name": "Hydrotherm Fusion X8 320 L",
     "brand": "Hydrotherm",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Hydrotherm Fusion X8 manufacturer-authored specification",
@@ -841,18 +881,13 @@
         "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
       },
       {
-        "label": "Equipment cost evidence",
-        "value": "No GST-inclusive equipment-only price was verified; installation and rebate examples cannot establish unit cost.",
-        "sourceUrl": "https://powrhouse.au/aquatech-fusion-x8-review/"
-      },
-      {
         "label": "Layout / tank material",
-        "value": "Tank and heating unit together; The checked exact-model primary sources do not specify the cylinder material.",
+        "value": "Tank and heating unit together; enamel-coated carbon-steel tank.",
         "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 48 dB(A), sound pressure, test distance not stated; Manufacturer published sound pressure; distance and operating mode not stated Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 48 dB(A), sound pressure, test distance not stated; operating mode not stated. Tank recovery: five hours ten minutes for 320 litres, 40 C water rise, air 15 C wet-bulb, AS/NZS 5125.1:2014. Source table also gives 2.9 kW thermal output at that air condition; no dry-bulb temperature is stated.",
         "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
       }
     ],
@@ -870,7 +905,14 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "minutes": 310,
+        "heatedLitres": 320,
+        "airTemperatureC": 15,
+        "waterTemperatureRiseC": 40,
+        "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf",
+        "basis": "Maker datasheet tank recovery is five hours ten minutes for the 320 litre tank, with a 40 C water temperature rise and air 15 C wet-bulb, AS/NZS 5125.1:2014. The source does not give start/end water temperatures or dry-bulb air temperature. This uses the actual published recovery test, not electrical input."
+      }
     }
   },
   {
@@ -907,12 +949,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       },
       {
         "title": "Retailer GST and separate installation terms",
@@ -1013,11 +1049,6 @@
         "label": "Noise and heating test",
         "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "EHPA300VMH, 300 L hard-water complete unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/"
       }
     ],
     "pros": [
@@ -1072,12 +1103,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       },
       {
         "title": "Retailer GST and separate installation terms",
@@ -1235,12 +1260,6 @@
         "revision": "Current Australian document checked 10 October 2026"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
-      },
-      {
         "title": "Retailer GST and separate installation terms",
         "url": "https://www.appliancesonline.com.au/article/trading-terms/",
         "kind": "Retailer published trading terms",
@@ -1339,11 +1358,6 @@
         "label": "Noise and heating test",
         "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "EHPA300VMH, 300 L hard-water complete unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/"
       }
     ],
     "pros": [
@@ -1398,12 +1412,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       },
       {
         "title": "Retailer GST and separate installation terms",
@@ -1504,11 +1512,6 @@
         "label": "Noise and heating test",
         "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "EHPA300VMH, 300 L hard-water complete unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://www.appliancesonline.com.au/product/rinnai-enviroflo-300ltr-heat-pump-hot-water-system-ar-hard-water-series-ehpa300vmh/"
       }
     ],
     "pros": [
@@ -1570,12 +1573,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Rinnai",
@@ -1665,11 +1662,6 @@
         "label": "Noise and heating test",
         "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "EHPG280VM, 280 L, 15 A plug. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump"
       }
     ],
     "pros": [
@@ -1730,12 +1722,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Rinnai",
@@ -1825,11 +1811,6 @@
         "label": "Noise and heating test",
         "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "EHPG280VM, 280 L, 15 A plug. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump"
       }
     ],
     "pros": [
@@ -1890,12 +1871,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Rinnai",
@@ -1985,11 +1960,6 @@
         "label": "Noise and heating test",
         "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "EHPG280VM, 280 L, 15 A plug. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump"
       }
     ],
     "pros": [
@@ -2050,12 +2020,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-280l-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Rinnai",
@@ -2205,12 +2169,6 @@
         "url": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rinnai-enviroflo-gr-series-300l-10a-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Rinnai",
@@ -2323,7 +2281,7 @@
   {
     "id": "rinnai-enviroflo-split",
     "name": "Rinnai Enviroflo S5 250L",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo Split product",
@@ -2348,6 +2306,12 @@
         "url": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
+      },
+      {
+        "title": "Rinnai Enviroflo S5 exact-system operation and installation manual",
+        "url": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "Current maker-linked manual checked 12 October 2026"
       }
     ],
     "brand": "Rinnai",
@@ -2445,13 +2409,8 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Maker sound range 45-48 dB(A); method, distance and matching operating mode unstated. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
+        "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       }
     ],
     "pros": [
@@ -2464,14 +2423,20 @@
       "Smaller main parts have one year of standard cover."
     ],
     "hotWaterPerformance": {
-      "noise": null,
+      "noise": {
+        "value": 48,
+        "metric": "not-stated",
+        "distanceMetres": null,
+        "mode": "Standard heating mode",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
       "recovery": null
     }
   },
   {
     "id": "rinnai-kshp250m24r50h",
     "name": "Rinnai Enviroflo S5 250L hard-water",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo Split product",
@@ -2496,6 +2461,12 @@
         "url": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
+      },
+      {
+        "title": "Rinnai Enviroflo S5 exact-system operation and installation manual",
+        "url": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "Current maker-linked manual checked 12 October 2026"
       }
     ],
     "brand": "Rinnai",
@@ -2593,13 +2564,8 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Maker sound range 45-48 dB(A); method, distance and matching operating mode unstated. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
+        "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       }
     ],
     "pros": [
@@ -2612,14 +2578,20 @@
       "Smaller main parts have one year of standard cover."
     ],
     "hotWaterPerformance": {
-      "noise": null,
+      "noise": {
+        "value": 48,
+        "metric": "not-stated",
+        "distanceMetres": null,
+        "mode": "Standard heating mode",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
       "recovery": null
     }
   },
   {
     "id": "rinnai-kshp315m24r50",
     "name": "Rinnai Enviroflo S5 315L",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo Split product",
@@ -2644,6 +2616,12 @@
         "url": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
+      },
+      {
+        "title": "Rinnai Enviroflo S5 exact-system operation and installation manual",
+        "url": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "Current maker-linked manual checked 12 October 2026"
       }
     ],
     "brand": "Rinnai",
@@ -2741,13 +2719,8 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Maker sound range 45-48 dB(A); method, distance and matching operating mode unstated. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
+        "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       }
     ],
     "pros": [
@@ -2760,14 +2733,20 @@
       "Smaller main parts have one year of standard cover."
     ],
     "hotWaterPerformance": {
-      "noise": null,
+      "noise": {
+        "value": 48,
+        "metric": "not-stated",
+        "distanceMetres": null,
+        "mode": "Standard heating mode",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
       "recovery": null
     }
   },
   {
     "id": "rinnai-kshp315m24r50h",
     "name": "Rinnai Enviroflo S5 315L hard-water",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo Split product",
@@ -2792,6 +2771,12 @@
         "url": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian document checked 10 October 2026"
+      },
+      {
+        "title": "Rinnai Enviroflo S5 exact-system operation and installation manual",
+        "url": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "Current maker-linked manual checked 12 October 2026"
       }
     ],
     "brand": "Rinnai",
@@ -2889,13 +2874,8 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Maker sound range 45-48 dB(A); method, distance and matching operating mode unstated. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "The checked complete-system price does not identify which standard or hard-water tank is included.",
-        "sourceUrl": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s5-250-split-heat-pump"
+        "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       }
     ],
     "pros": [
@@ -2908,7 +2888,13 @@
       "Smaller main parts have one year of standard cover."
     ],
     "hotWaterPerformance": {
-      "noise": null,
+      "noise": {
+        "value": 48,
+        "metric": "not-stated",
+        "distanceMetres": null,
+        "mode": "Standard heating mode",
+        "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
       "recovery": null
     }
   },
@@ -3043,11 +3029,6 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
@@ -3209,11 +3190,6 @@
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
     "pros": [
@@ -3374,11 +3350,6 @@
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
     "pros": [
@@ -3537,11 +3508,6 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
@@ -3703,11 +3669,6 @@
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
     "pros": [
@@ -3856,11 +3817,6 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4007,11 +3963,6 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
@@ -4160,11 +4111,6 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4311,11 +4257,6 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
@@ -4464,11 +4405,6 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4616,11 +4552,6 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4758,11 +4689,6 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 54 dB(A), sound pressure, test distance not stated; Outdoor sound pressure; test distance and operating mode not stated Heating-only output 2.8 kW; air 19 C, water 9 to 60 C.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       },
       {
@@ -4909,11 +4835,6 @@
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       },
       {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      },
-      {
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
@@ -5054,11 +4975,6 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 54 dB(A), sound pressure, test distance not stated; Outdoor sound pressure; test distance and operating mode not stated Heating-only output 2.8 kW; air 19 C, water 9 to 60 C.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       },
       {
@@ -5205,11 +5121,6 @@
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       },
       {
-        "label": "Equipment cost evidence",
-        "value": "Checked supply-only listings do not clearly establish both this exact model and GST treatment.",
-        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
-      },
-      {
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
@@ -5243,13 +5154,13 @@
     "id": "stiebel-shp-o-200-plus",
     "name": "Stiebel Eltron SHP-O 200 Plus",
     "brand": "Stiebel Eltron",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Stiebel current SHP-O Plus and Premium Australian datasheet",
         "url": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
         "kind": "manufacturer_specification",
-        "revision": "Issue 02_26, February 2026; exact 204473 model"
+        "revision": "Issue 02_26, February 2026; shared Plus and Premium model table, exact article 204472"
       },
       {
         "title": "Stiebel SHP-O Plus Australian operation manual and warranty",
@@ -5264,16 +5175,10 @@
         "revision": "Published 25 September 2025; introduces SHP-O range"
       },
       {
-        "title": "Hot Water Professionals exact SHP-O 300 Plus supply price",
-        "url": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-300-plus-heat-pump",
-        "kind": "australian_retailer_price",
-        "revision": "Checked 10 October 2026; published equipment price including GST, equipment only"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-200-plus-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "title": "Stiebel Eltron SHP-O Plus and Premium current AU combined manual",
+        "url": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au",
+        "kind": "manufacturer_manual",
+        "revision": "June 2026, document 365774-47984-0067"
       }
     ],
     "image": {
@@ -5362,13 +5267,13 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 47 dB(A), sound pressure, at 2 m; Average sound pressure at 2 m in free field, EN12102; operating mode not stated Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "value": "Noise 53 dB(A), sound pressure, at 1 m in a free field; operating mode not stated. Sound power is separately 58.2 dB(A), EN 12102. The February AU sheet gives 47 dB(A) at 2 m, a different distance. The current AU manual does not publish a complete recovery time or heat-output test.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       {
         "label": "Tank material",
-        "value": "The checked exact-model primary sources do not specify the cylinder material.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "value": "Enamel-coated cylinder with a protective anode. Underlying cylinder metal is not named in this manual.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       }
     ],
     "freshness": {
@@ -5379,11 +5284,11 @@
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 47,
+        "value": 53,
         "metric": "sound-pressure",
-        "distanceMetres": 2,
+        "distanceMetres": 1,
         "mode": "Operating mode not specified",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       "recovery": null
     }
@@ -5392,13 +5297,13 @@
     "id": "stiebel-shp-o-300-plus",
     "name": "Stiebel Eltron SHP-O 300 Plus",
     "brand": "Stiebel Eltron",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Stiebel current SHP-O Plus and Premium Australian datasheet",
         "url": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
         "kind": "manufacturer_specification",
-        "revision": "Issue 02_26, February 2026; exact 204473 model"
+        "revision": "Issue 02_26, February 2026; shared Plus and Premium model table, exact article 204473"
       },
       {
         "title": "Stiebel SHP-O Plus Australian operation manual and warranty",
@@ -5413,10 +5318,10 @@
         "revision": "Published 25 September 2025; introduces SHP-O range"
       },
       {
-        "title": "Hot Water Professionals exact SHP-O 300 Plus supply price",
-        "url": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-300-plus-heat-pump",
-        "kind": "australian_retailer_price",
-        "revision": "Checked 10 October 2026; published equipment price including GST, equipment only"
+        "title": "Stiebel Eltron SHP-O Plus and Premium current AU combined manual",
+        "url": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au",
+        "kind": "manufacturer_manual",
+        "revision": "June 2026, document 365774-47984-0067"
       }
     ],
     "image": {
@@ -5505,13 +5410,13 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 47 dB(A), sound pressure, at 2 m; Average sound pressure at 2 m in free field, EN12102; operating mode not stated Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "value": "Noise 53 dB(A), sound pressure, at 1 m in a free field; operating mode not stated. Sound power is separately 58.2 dB(A), EN 12102. The February AU sheet gives 47 dB(A) at 2 m, a different distance. The current AU manual does not publish a complete recovery time or heat-output test.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       {
         "label": "Tank material",
-        "value": "The checked exact-model primary sources do not specify the cylinder material.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "value": "Enamel-coated cylinder with a protective anode. Underlying cylinder metal is not named in this manual.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       }
     ],
     "freshness": {
@@ -5522,11 +5427,11 @@
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 47,
+        "value": 53,
         "metric": "sound-pressure",
-        "distanceMetres": 2,
+        "distanceMetres": 1,
         "mode": "Operating mode not specified",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       "recovery": null
     }
@@ -5535,13 +5440,13 @@
     "id": "stiebel-shp-o-201-premium",
     "name": "Stiebel Eltron SHP-O 201 Premium",
     "brand": "Stiebel Eltron",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Stiebel current SHP-O Plus and Premium Australian datasheet",
         "url": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
         "kind": "manufacturer_specification",
-        "revision": "Issue 02_26, February 2026; exact 204473 model"
+        "revision": "Issue 02_26, February 2026; shared Plus and Premium model table, exact article 207264"
       },
       {
         "title": "Stiebel SHP-O Plus Australian operation manual and warranty",
@@ -5556,10 +5461,10 @@
         "revision": "Published 25 September 2025; introduces SHP-O range"
       },
       {
-        "title": "Hot Water Professionals exact SHP-O 300 Plus supply price",
-        "url": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-300-plus-heat-pump",
-        "kind": "australian_retailer_price",
-        "revision": "Checked 10 October 2026; published equipment price including GST, equipment only"
+        "title": "Stiebel Eltron SHP-O Plus and Premium current AU combined manual",
+        "url": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au",
+        "kind": "manufacturer_manual",
+        "revision": "June 2026, document 365774-47984-0067"
       }
     ],
     "image": {
@@ -5647,33 +5552,28 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 47 dB(A), sound pressure, at 2 m; Average sound pressure at 2 m in free field, EN12102; operating mode not stated Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "The checked current Premium listings have no usable Australian equipment-only price.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/news/new-innovations-2025-stiebel-eltron"
+        "value": "Noise 53 dB(A), sound pressure, at 1 m in a free field; operating mode not stated. Sound power is separately 58.2 dB(A), EN 12102. The February AU sheet gives 47 dB(A) at 2 m, a different distance. The current AU manual does not publish a complete recovery time or heat-output test.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       {
         "label": "Tank material",
-        "value": "The checked exact-model primary sources do not specify the cylinder material.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "value": "Enamel-coated cylinder with a protective anode. Underlying cylinder metal is not named in this manual.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       }
     ],
     "freshness": {
-      "generation": "SHP-O Plus R290 and built-in Wi-Fi range",
+      "generation": "SHP-O Premium R290 and built-in Wi-Fi range",
       "released": null,
       "sourceUrl": "https://www.stiebel-eltron.com.au/news/new-innovations-2025-stiebel-eltron",
       "note": "Manufacturer introduces SHP-O in its dated Australian new-products announcement of September 2025. Exact first-sale day is not stated; the matched datasheet is February 2026."
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 47,
+        "value": 53,
         "metric": "sound-pressure",
-        "distanceMetres": 2,
+        "distanceMetres": 1,
         "mode": "Operating mode not specified",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       "recovery": null
     }
@@ -5682,13 +5582,13 @@
     "id": "stiebel-shp-o-301-premium",
     "name": "Stiebel Eltron SHP-O 301 Premium",
     "brand": "Stiebel Eltron",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Stiebel current SHP-O Plus and Premium Australian datasheet",
         "url": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au",
         "kind": "manufacturer_specification",
-        "revision": "Issue 02_26, February 2026; exact 204473 model"
+        "revision": "Issue 02_26, February 2026; shared Plus and Premium model table, exact article 207265"
       },
       {
         "title": "Stiebel SHP-O Plus Australian operation manual and warranty",
@@ -5703,10 +5603,10 @@
         "revision": "Published 25 September 2025; introduces SHP-O range"
       },
       {
-        "title": "Hot Water Professionals exact SHP-O 300 Plus supply price",
-        "url": "https://hotwaterprofessionals.com.au/products/stiebel-eltron-shp-o-300-plus-heat-pump",
-        "kind": "australian_retailer_price",
-        "revision": "Checked 10 October 2026; published equipment price including GST, equipment only"
+        "title": "Stiebel Eltron SHP-O Plus and Premium current AU combined manual",
+        "url": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au",
+        "kind": "manufacturer_manual",
+        "revision": "June 2026, document 365774-47984-0067"
       }
     ],
     "image": {
@@ -5794,33 +5694,28 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 47 dB(A), sound pressure, at 2 m; Average sound pressure at 2 m in free field, EN12102; operating mode not stated Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "The checked current Premium listings have no usable Australian equipment-only price.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/news/new-innovations-2025-stiebel-eltron"
+        "value": "Noise 53 dB(A), sound pressure, at 1 m in a free field; operating mode not stated. Sound power is separately 58.2 dB(A), EN 12102. The February AU sheet gives 47 dB(A) at 2 m, a different distance. The current AU manual does not publish a complete recovery time or heat-output test.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       {
         "label": "Tank material",
-        "value": "The checked exact-model primary sources do not specify the cylinder material.",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "value": "Enamel-coated cylinder with a protective anode. Underlying cylinder metal is not named in this manual.",
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       }
     ],
     "freshness": {
-      "generation": "SHP-O Plus R290 and built-in Wi-Fi range",
+      "generation": "SHP-O Premium R290 and built-in Wi-Fi range",
       "released": null,
       "sourceUrl": "https://www.stiebel-eltron.com.au/news/new-innovations-2025-stiebel-eltron",
       "note": "Manufacturer introduces SHP-O in its dated Australian new-products announcement of September 2025. Exact first-sale day is not stated; the matched datasheet is February 2026."
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 47,
+        "value": 53,
         "metric": "sound-pressure",
-        "distanceMetres": 2,
+        "distanceMetres": 1,
         "mode": "Operating mode not specified",
-        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/download/Datasheet%20SHP-O%20Plus%20%26%20Premium%20February%202026.pdf?hsLang=en-au"
+        "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
       "recovery": null
     }
@@ -5859,12 +5754,6 @@
         "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/9st8kvwpfccjr7tf3wmcs5k/HaierHome-SpecificationGuide-en-HP200M1U1P-HP250M1U1P-HP330M1U1-Monoblock-0-90003428E-AU-NZ.pdf",
         "kind": "Manufacturer AU datasheet",
         "revision": "90003428E, May 2026; page five electrical ratings"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Haier",
@@ -5956,11 +5845,6 @@
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
       },
       {
-        "label": "Range cost reference",
-        "value": "HP330M1U1, 330 L complete unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump"
-      },
-      {
         "label": "Noise and heating test",
         "value": "Noise 43 dB(A), sound pressure, at 1 m; GB/T23137 noise test in hemi-anechoic chamber; operating mode not stated Heating-only output 2 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
@@ -6026,12 +5910,6 @@
         "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/9st8kvwpfccjr7tf3wmcs5k/HaierHome-SpecificationGuide-en-HP200M1U1P-HP250M1U1P-HP330M1U1-Monoblock-0-90003428E-AU-NZ.pdf",
         "kind": "Manufacturer AU datasheet",
         "revision": "90003428E, May 2026; page five electrical ratings"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Haier",
@@ -6123,11 +6001,6 @@
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
       },
       {
-        "label": "Range cost reference",
-        "value": "HP330M1U1, 330 L complete unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump"
-      },
-      {
         "label": "Noise and heating test",
         "value": "Noise 43 dB(A), sound pressure, at 1 m; GB/T23137 noise test in hemi-anechoic chamber; operating mode not stated Heating-only output 2 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
@@ -6193,12 +6066,6 @@
         "url": "https://dam.fisherpaykel.com/KZ3PKN00/at/9st8kvwpfccjr7tf3wmcs5k/HaierHome-SpecificationGuide-en-HP200M1U1P-HP250M1U1P-HP330M1U1-Monoblock-0-90003428E-AU-NZ.pdf",
         "kind": "Manufacturer AU datasheet",
         "revision": "90003428E, May 2026; page five electrical ratings"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/haier-hp330m1u1-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "brand": "Haier",
@@ -6324,7 +6191,7 @@
   {
     "id": "dux-ecosmart-pro-series",
     "name": "Dux Pro 270L plug-in",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Ecosmart Pro Series product",
@@ -6345,10 +6212,10 @@
         "revision": "Public model rows checked 10 October 2026; eligibility date is not launch date"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/dux-ecosmart-pro-series-270l-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "title": "Dux Ecosmart Pro-Series exact-model owner and installation manual",
+        "url": "https://www.dux.com.au/wp-content/uploads/2024/09/H4950-B-Ecosmart-Pro-Series-270L-manual-2.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "H4950 Rev. C; current maker-linked manual checked 12 October 2026"
       }
     ],
     "brand": "Dux",
@@ -6440,11 +6307,6 @@
         "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
       },
       {
-        "label": "Range cost reference",
-        "value": "270DHB36 hardwired, 270 L complete unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://hotwaterprofessionals.com.au/products/dux-ecosmart-pro-series-270l-heat-pump"
-      },
-      {
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
         "sourceUrl": "https://www.dux.com.au/products/ecosmart-pro-series-270l"
@@ -6453,6 +6315,11 @@
         "label": "Noise and heating test",
         "value": "No single comparable noise figure published in the checked exact-model maker sources. Heating-only rate 77 L/hour; air 20 C, water 20 to 60 C.",
         "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
+      },
+      {
+        "label": "Published heating test",
+        "value": "Heat-pump-only thermal output 3.6 kW at air 20 C dry-bulb / 15 C wet-bulb, water 15 to 55 C, owner-manual page 5. Separate maker recovery-rate test is 77 litres/hour at air 20 C and water 20 to 60 C.",
+        "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/H4950-B-Ecosmart-Pro-Series-270L-manual-2.pdf"
       }
     ],
     "pros": [
@@ -6478,7 +6345,7 @@
   {
     "id": "dux-270dhb36",
     "name": "Dux Pro 270L hardwired",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Ecosmart Pro Series product",
@@ -6499,10 +6366,10 @@
         "revision": "Public model rows checked 10 October 2026; eligibility date is not launch date"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/dux-ecosmart-pro-series-270l-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "title": "Dux Ecosmart Pro-Series exact-model owner and installation manual",
+        "url": "https://www.dux.com.au/wp-content/uploads/2024/09/H4950-B-Ecosmart-Pro-Series-270L-manual-2.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "H4950 Rev. C; current maker-linked manual checked 12 October 2026"
       }
     ],
     "brand": "Dux",
@@ -6602,6 +6469,11 @@
         "label": "Noise and heating test",
         "value": "No single comparable noise figure published in the checked exact-model maker sources. Heating-only rate 77 L/hour; air 20 C, water 20 to 60 C.",
         "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
+      },
+      {
+        "label": "Published heating test",
+        "value": "Heat-pump-only thermal output 3.6 kW at air 20 C dry-bulb / 15 C wet-bulb, water 15 to 55 C, owner-manual page 5. Separate maker recovery-rate test is 77 litres/hour at air 20 C and water 20 to 60 C.",
+        "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/H4950-B-Ecosmart-Pro-Series-270L-manual-2.pdf"
       }
     ],
     "pros": [
@@ -6741,11 +6613,6 @@
         "label": "Noise and heating test",
         "value": "Noise 53 dB(A), pressure/power method not stated, test distance not stated; Manufacturer noise at rated condition; distance and pressure/power metric not established Heating-only rate 70 L/hour; air 19 C, water 15 to 60 C.",
         "sourceUrl": "https://neopower.com.au/split-heat-pump-stainless-steel-tank/"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "No GST-inclusive equipment-only price was verified; installation and rebate examples cannot establish unit cost.",
-        "sourceUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters#air-source-heat-pump-models"
       }
     ],
     "pros": [
@@ -6891,11 +6758,6 @@
         "label": "Noise and heating test",
         "value": "Noise 53 dB(A), pressure/power method not stated, test distance not stated; Manufacturer noise at rated condition; distance and pressure/power metric not established Heating-only rate 70 L/hour; air 19 C, water 15 to 60 C.",
         "sourceUrl": "https://neopower.com.au/split-heat-pump-stainless-steel-tank/"
-      },
-      {
-        "label": "Equipment cost evidence",
-        "value": "No GST-inclusive equipment-only price was verified; installation and rebate examples cannot establish unit cost.",
-        "sourceUrl": "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters#air-source-heat-pump-models"
       }
     ],
     "pros": [
@@ -6928,7 +6790,7 @@
     "id": "istore-r290-180",
     "name": "iStore R290 180L",
     "brand": "iStore",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "iStore R290 Australian specification",
@@ -6943,16 +6805,16 @@
         "revision": "Current Australian document checked 10 October 2026"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://ausetech.com.au/products/istore-hot-water-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
-      },
-      {
         "title": "Supporting exact-model specification or terms",
         "url": "https://heatpumps.istore.net.au/wp-content/uploads/2026/06/iStore-product-brochure-retail-R290-nov25.pdf",
         "kind": "Verified published product source",
         "revision": "Exact relevant model/specification/term evidence checked 10 October 2026"
+      },
+      {
+        "title": "iStore 180L current model specifications and questions",
+        "url": "https://heatpumps.istore.net.au/istore-180l-heatpump/",
+        "kind": "manufacturer_product",
+        "revision": "Current exact-model maker page checked 12 October 2026"
       }
     ],
     "image": {
@@ -7025,8 +6887,8 @@
       },
       {
         "label": "Controls",
-        "value": "Built-in touch screen and heating timers; phone control in current range brochure",
-        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/06/iStore-product-brochure-retail-R290-nov25.pdf"
+        "value": "Tank screen and heating timers. The exact 180L maker page says the Wi-Fi model is coming soon; included phone access is not established for this model.",
+        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/"
       },
       {
         "label": "Main parts and labour",
@@ -7039,14 +6901,9 @@
         "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
       {
-        "label": "Range cost reference",
-        "value": "H-PASHW015-270LD-R290, 270 L complete R290 unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://ausetech.com.au/products/istore-hot-water-heat-pump"
-      },
-      {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), pressure/power method not stated, at 1 m; Noise test in anechoic chamber; maker does not name pressure or power Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
+        "value": "Maker page upper limit: 46.6 dB, pressure/power method not stated, at 1 m; anechoic-chamber test. The page does not identify frequency weighting or operating mode. February manual rounds the figure to 46 dB(A). Reheating uses the separate published maker estimate; its full test temperatures are not stated.",
+        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/"
       }
     ],
     "freshness": {
@@ -7057,20 +6914,27 @@
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 46,
+        "value": 46.6,
         "metric": "not-stated",
         "distanceMetres": 1,
-        "mode": "Operating mode not specified",
-        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
+        "mode": "Maker upper-limit figure",
+        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/"
       },
-      "recovery": null
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "minutesMinimum": 240,
+        "minutesMaximum": 300,
+        "heatedLitres": 180,
+        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/",
+        "basis": "Maker FAQ estimates four to five hours to fully heat the 180 litre tank, depending on ambient temperature and usage. Water start/end temperatures and air test temperature are not specified; this is a maker estimate, not a controlled recovery test."
+      }
     }
   },
   {
     "id": "istore-r290-270",
     "name": "iStore R290 270L",
     "brand": "iStore",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "iStore R290 Australian specification",
@@ -7085,16 +6949,22 @@
         "revision": "Current Australian document checked 10 October 2026"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://ausetech.com.au/products/istore-hot-water-heat-pump",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
-      },
-      {
         "title": "Supporting exact-model specification or terms",
         "url": "https://heatpumps.istore.net.au/wp-content/uploads/2026/06/iStore-product-brochure-retail-R290-nov25.pdf",
         "kind": "Verified published product source",
         "revision": "Exact relevant model/specification/term evidence checked 10 October 2026"
+      },
+      {
+        "title": "iStore 270L current model specifications and questions",
+        "url": "https://heatpumps.istore.net.au/istore-270l-heatpump/",
+        "kind": "manufacturer_product",
+        "revision": "Current exact-model maker page checked 12 October 2026"
+      },
+      {
+        "title": "iStore 270L current recovery and control specifications",
+        "url": "https://heatpumps.istore.net.au/270l-istore-heat-pump/",
+        "kind": "manufacturer_product",
+        "revision": "Current exact-model maker page checked 12 October 2026"
       }
     ],
     "image": {
@@ -7167,8 +7037,8 @@
       },
       {
         "label": "Controls",
-        "value": "Built-in touch screen and heating timers; phone control in current range brochure",
-        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/06/iStore-product-brochure-retail-R290-nov25.pdf"
+        "value": "Tank screen and heating timers. Phone access depends on the installed model and serial number and requires compatible 2.4 GHz Wi-Fi.",
+        "sourceUrl": "https://heatpumps.istore.net.au/270l-istore-heat-pump/"
       },
       {
         "label": "Main parts and labour",
@@ -7181,14 +7051,9 @@
         "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
       {
-        "label": "Range cost reference",
-        "value": "H-PASHW015-270LD-R290, 270 L complete R290 unit. A priced reference in the same current product platform; other sizes and options can cost differently.",
-        "sourceUrl": "https://ausetech.com.au/products/istore-hot-water-heat-pump"
-      },
-      {
         "label": "Noise and heating test",
-        "value": "Noise 47 dB(A), pressure/power method not stated, at 1 m; Noise test in anechoic chamber; maker does not name pressure or power Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
+        "value": "Maker page upper limit: 46.6 dB, pressure/power method not stated, at 1 m; anechoic-chamber test. The page does not identify frequency weighting or operating mode. February manual rounds the figure to 47 dB(A). Reheating uses the separate published maker estimate; its full test temperatures are not stated.",
+        "sourceUrl": "https://heatpumps.istore.net.au/istore-270l-heatpump/"
       }
     ],
     "freshness": {
@@ -7199,13 +7064,18 @@
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 47,
+        "value": 46.6,
         "metric": "not-stated",
         "distanceMetres": 1,
-        "mode": "Operating mode not specified",
-        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
+        "mode": "Maker upper-limit figure",
+        "sourceUrl": "https://heatpumps.istore.net.au/istore-270l-heatpump/"
       },
-      "recovery": null
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHour": 130,
+        "sourceUrl": "https://heatpumps.istore.net.au/270l-istore-heat-pump/",
+        "basis": "Maker FAQ says approximately 130 litres per hour under favourable operating conditions. Exact air and water test temperatures are not given for this rate; recovery varies with inlet temperature, target temperature and operating mode. This is a favourable-condition maker estimate."
+      }
     }
   },
   {
@@ -7219,12 +7089,6 @@
         "url": "https://evoheat.com.au/wp-content/uploads/2026/08/BROCHURE-Evoheat-150-1.pdf",
         "kind": "manufacturer_specification",
         "revision": "Current Australian brochure links 2026 STCs; first generation release date is not established"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/evoheat-evo150-1",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       },
       {
         "title": "Supporting exact-model specification or terms",
@@ -7370,12 +7234,6 @@
         "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-565E315-VE-122941-Rev-02-2025-December.pdf?context=bWFzdGVyfHBkZnN8MjU3ODY5MHxhcHBsaWNhdGlvbi9wZGZ8YUdWa0wyZ3pOaTg1TXpNd01EWTFNVFExT0RnMkwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UWTFSVE14TlNCV1JTQXRJREV5TWprME1TQlNaWFl0TURJZ0xTQXlNREkxSUVSbFkyVnRZbVZ5TG5Ca1pnfDYyNDlhMTFhYjY3NjI2NmJhNGFkOTQwMGRkZDJiODQyZmRhOTI2NTM2MGE2NGVjOWNjMjBjZjU3YmZhNTg2MWQ&attachment=true",
         "kind": "Manufacturer AU manual",
         "revision": "Rev 02, December 2025; exact system, physical storage, warranty and full heating test conditions"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rheem-325l-ambipower-5kw-split-heat-pump-system-ve",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "image": {
@@ -7532,12 +7390,6 @@
         "url": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-565E32A-SS-AQ0901164-Rev-02-2025-Dec.pdf?context=bWFzdGVyfHBkZnN8MjQ1NTgxN3xhcHBsaWNhdGlvbi9wZGZ8YUdZekwyZ3haQzg1TXpNd01EWTBOemcxTkRNNEwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UWTFSVE15UVNCVFV5QXRJRUZSTURrd01URTJOQ0JTWlhZdE1ESWdMU0F5TURJMUlFUmxZeTV3WkdZfDlmOTQwOGU2ZjY5NzM2N2JkN2Y5ZjhmMzQwYzU5Mzk0NDQxOGU2ZWQxYTE3MzE3MTljZWQ4NTRlOTMzNzkzZTk&attachment=true",
         "kind": "Manufacturer AU manual",
         "revision": "Rev 02, December 2025; exact system, physical storage, warranty and full heating test conditions"
-      },
-      {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/rheem-325-ambipower-5kw-split-heat-pump-system-stainless-steel",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
       }
     ],
     "image": {
@@ -7663,7 +7515,7 @@
   {
     "id": "econova-300rvw",
     "name": "Econova RVW 290L without electric boost",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Current Ecogenica systems",
@@ -7700,6 +7552,18 @@
         "url": "https://www.appliancesonline.com.au/article/trading-terms/",
         "kind": "Retailer published trading terms",
         "revision": "Current clause 3.1 prices include GST; clause 6 installation separately agreed"
+      },
+      {
+        "title": "Econova current RVW and RVW-2.0E owner manual",
+        "url": "https://econova.com.au/assets/manuals/ECON-RVW-series-Owners-Manual.pdf",
+        "kind": "manufacturer_manual",
+        "revision": "Current maker-linked 26-page owner manual, checked 12 October 2026"
+      },
+      {
+        "title": "Econova current exact RVW model specifications",
+        "url": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf",
+        "kind": "manufacturer_datasheet",
+        "revision": "Current maker-linked model table and footnote 8, checked 12 October 2026"
       }
     ],
     "brand": "Econova",
@@ -7787,13 +7651,13 @@
       },
       {
         "label": "Tank material",
-        "value": "The checked exact-model primary sources do not specify the cylinder material.",
-        "sourceUrl": "https://ecogenica.com.au/hot-water-system"
+        "value": "Enamel water tank with a corrosion-protection rod, identified in the exact-model exploded view on owner-manual page 22. Underlying tank metal is not named.",
+        "sourceUrl": "https://econova.com.au/assets/manuals/ECON-RVW-series-Owners-Manual.pdf"
       },
       {
         "label": "Noise and heating test",
-        "value": "No single comparable noise figure published in the checked exact-model maker sources. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://ecogenica.com.au/images/14.05.25-Brochure-ECON-RVW2.0E-2.pdf"
+        "value": "The current exact-model maker manual and datasheet give no measured dB noise figure. Typical heating-water production is 50 to 60 litres/hour, depending on model and weather; water and air test temperatures are not specified for the rate range.",
+        "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf"
       }
     ],
     "pros": [
@@ -7805,13 +7669,19 @@
     ],
     "hotWaterPerformance": {
       "noise": null,
-      "recovery": null
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHourMinimum": 50,
+        "litresPerHourMaximum": 60,
+        "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf",
+        "basis": "Maker datasheet footnote 8 gives typical production of 50 to 60 litres/hour depending on the model and weather conditions. Water start/end temperatures and an air test temperature are not specified for this range. Electric-boost performance is not separately quantified."
+      }
     }
   },
   {
     "id": "reclaim-eco-200",
     "name": "Reclaim ECO 200REC25P",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Reclaim ECO product",
@@ -7838,10 +7708,10 @@
         "revision": "Public model rows checked 10 October 2026; eligibility date is not launch date"
       },
       {
-        "title": "Australian equipment cost evidence",
-        "url": "https://hotwaterprofessionals.com.au/products/reclaim-eco-r290-heat-pump-200l",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "title": "Reclaim ECO R290 exact-model specifications",
+        "url": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf",
+        "kind": "manufacturer_datasheet",
+        "revision": "Issue 03, July 2026"
       }
     ],
     "brand": "Reclaim Energy",
@@ -7934,8 +7804,13 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "No single comparable noise figure published in the checked exact-model maker sources. Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
-        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/H4148-E-Reclaim-Heat-Pump-Manual.pdf"
+        "value": "The current maker manual and July 2026 sheet give no measured dB noise figure. Heating-water production rate: 53 litres per hour at 20 C air; the rate row does not state water temperatures. The separately specified COP uses water 20 to 60 C. The visible reheating speed is a maker-rate estimate.",
+        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Designed and manufactured in Australia, according to the current exact-range maker brochure.",
+        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf"
       }
     ],
     "pros": [
@@ -7947,7 +7822,1623 @@
     ],
     "hotWaterPerformance": {
       "noise": null,
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHour": 53,
+        "sourceUrl": "https://reclaimenergy.com.au/wp-content/uploads/2026/07/Reclaim-Eco290-Issue2-July2026-8pages-web.pdf",
+        "basis": "Maker production-rate estimate: 53 litres per hour at 20 C air. Start/end water temperatures are not stated for the production-rate row; the separate COP row tests water 20 to 60 C and is not assumed to apply to this rate."
+      }
+    }
+  },
+  {
+    "id": "rinnai-kshp250m24l70",
+    "name": "Rinnai Enviroflo S7 250L",
+    "checkedAt": "2026-10-12",
+    "brand": "Rinnai",
+    "sources": [
+      {
+        "title": "Exact S7 Australian installation and operating manual",
+        "url": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Issue1May2025; specification p12 visually checked12October2026"
+      },
+      {
+        "title": "Exact S7 Australian ordering and specification brochure",
+        "url": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "RA58.06.25, June2025, exact system ordering guide p5"
+      },
+      {
+        "title": "Exact S7 Australian warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current maker-linked SHPL70/HPTB policy; exact six system IDs listed; checked12October2026"
+      },
+      {
+        "title": "Current S7 Australian product range",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s7-250l-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current product and genuine S7 image checked12October2026; no launch date inferred from upload"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-s7-range.webp",
+      "alt": "Representative current Rinnai Enviroflo S7 tank and heating unit; selected 250L standard tank height may differ.",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/68f211c6d6/hw-electric-hp-enviroflo-s7-ima.png"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 250,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "KSHP250M24L70",
+        "basis": "Actual storage capacity for this exact complete system in the S7 order table.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "KSHP250M24L70",
+        "basis": "Minimum standard domestic main-system parts fault-cover: tank10years, refrigeration5years and other integral components1year. Longer scheme-specific whole-product coverage is conditional, not the standard bar. Separate installation accessories excluded.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "KSHP250M24L70, S7 SHPL70 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "note": "The June2025 brochure identifies this current Australian system, not a verified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "KSHP250M24L70: SHPL70 heating unit + HPTB250VM24 tank",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "250 litres",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Tank material",
+        "value": "Protective anode fitted; cylinder metal and lining are not named in this exact-model manual.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R290,510 g",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "Included Smart Life phone access and built-in heating schedule; internet/app requirements apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "Standard domestic: tank10 years parts/5 labour; refrigeration5 years parts/labour; other main components1 year parts/labour. Eligible Solar Victoria or VEU installations have5-year whole-product cover under the stated scheme conditions.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1477 mm high, 605 mm diameter, 674 mm total width; 66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "1047mm long x375mm deep x690mm high;66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Tank designed, engineered and built in Australia according to the exact S7 brochure.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Power connection",
+        "value": "Dedicated15 A supply; maximum11.5 A current; factory-wired2.4 kW extra electric heater.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "45 to52 dB(A) sound pressure at 1.5 m; operating mode not specified. The52 dB upper figure is used for the bar. Published7.0 kW heat output uses32.6 C air and21.1 C cold inlet, with no final water temperature or recovery flow stated.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Reheating evidence",
+        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Water and servicing",
+        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      }
+    ],
+    "pros": [
+      "Stores 250 litres in an Australian-made tank.",
+      "The separate heating unit gives you more choice over where its fan sits.",
+      "Includes phone scheduling and a built-in heating timer."
+    ],
+    "cons": [
+      "Standard sensors and other main components have one-year parts cover, shorter than its tank cover.",
+      "Needs separate space for its tank and heating unit."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 52,
+        "metric": "sound-pressure",
+        "distanceMetres": 1.5,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
       "recovery": null
+    }
+  },
+  {
+    "id": "rinnai-kshp250m24l70h",
+    "name": "Rinnai Enviroflo S7 250L hard-water",
+    "checkedAt": "2026-10-12",
+    "brand": "Rinnai",
+    "sources": [
+      {
+        "title": "Exact S7 Australian installation and operating manual",
+        "url": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Issue1May2025; specification p12 visually checked12October2026"
+      },
+      {
+        "title": "Exact S7 Australian ordering and specification brochure",
+        "url": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "RA58.06.25, June2025, exact system ordering guide p5"
+      },
+      {
+        "title": "Exact S7 Australian warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current maker-linked SHPL70/HPTB policy; exact six system IDs listed; checked12October2026"
+      },
+      {
+        "title": "Current S7 Australian product range",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s7-250l-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current product and genuine S7 image checked12October2026; no launch date inferred from upload"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-s7-range.webp",
+      "alt": "Representative current Rinnai Enviroflo S7 tank and heating unit; selected 250L hard-water tank height may differ.",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/68f211c6d6/hw-electric-hp-enviroflo-s7-ima.png"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 250,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "KSHP250M24L70H",
+        "basis": "Actual storage capacity for this exact complete system in the S7 order table.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "KSHP250M24L70H",
+        "basis": "Minimum standard domestic main-system parts fault-cover: tank10years, refrigeration5years and other integral components1year. Longer scheme-specific whole-product coverage is conditional, not the standard bar. Separate installation accessories excluded.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "KSHP250M24L70H, S7 SHPL70 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "note": "The June2025 brochure identifies this current Australian system, not a verified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "KSHP250M24L70H: SHPL70 heating unit + HPTB250VM24H tank",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "250 litres",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Tank material",
+        "value": "Protective anode fitted; cylinder metal and lining are not named in this exact-model manual.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R290,510 g",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "Included Smart Life phone access and built-in heating schedule; internet/app requirements apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "Standard domestic: tank10 years parts/5 labour; refrigeration5 years parts/labour; other main components1 year parts/labour. Eligible Solar Victoria or VEU installations have5-year whole-product cover under the stated scheme conditions.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1477 mm high, 605 mm diameter, 674 mm total width; 66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "1047mm long x375mm deep x690mm high;66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Tank designed, engineered and built in Australia according to the exact S7 brochure.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Power connection",
+        "value": "Dedicated15 A supply; maximum11.5 A current; factory-wired2.4 kW extra electric heater.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "45 to52 dB(A) sound pressure at 1.5 m; operating mode not specified. The52 dB upper figure is used for the bar. Published7.0 kW heat output uses32.6 C air and21.1 C cold inlet, with no final water temperature or recovery flow stated.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Reheating evidence",
+        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Water and servicing",
+        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      }
+    ],
+    "pros": [
+      "Stores 250 litres in an Australian-made tank.",
+      "The separate heating unit gives you more choice over where its fan sits.",
+      "Its hard-water tank includes a different protective rod for mineral-rich water."
+    ],
+    "cons": [
+      "Standard sensors and other main components have one-year parts cover, shorter than its tank cover.",
+      "Needs separate space for its tank and heating unit."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 52,
+        "metric": "sound-pressure",
+        "distanceMetres": 1.5,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      "recovery": null
+    }
+  },
+  {
+    "id": "rinnai-kshp315m24l70",
+    "name": "Rinnai Enviroflo S7 315L",
+    "checkedAt": "2026-10-12",
+    "brand": "Rinnai",
+    "sources": [
+      {
+        "title": "Exact S7 Australian installation and operating manual",
+        "url": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Issue1May2025; specification p12 visually checked12October2026"
+      },
+      {
+        "title": "Exact S7 Australian ordering and specification brochure",
+        "url": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "RA58.06.25, June2025, exact system ordering guide p5"
+      },
+      {
+        "title": "Exact S7 Australian warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current maker-linked SHPL70/HPTB policy; exact six system IDs listed; checked12October2026"
+      },
+      {
+        "title": "Current S7 Australian product range",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s7-250l-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current product and genuine S7 image checked12October2026; no launch date inferred from upload"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-s7-range.webp",
+      "alt": "Representative current Rinnai Enviroflo S7 tank and heating unit; selected 315L standard tank height may differ.",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/68f211c6d6/hw-electric-hp-enviroflo-s7-ima.png"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 315,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "KSHP315M24L70",
+        "basis": "Actual storage capacity for this exact complete system in the S7 order table.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "KSHP315M24L70",
+        "basis": "Minimum standard domestic main-system parts fault-cover: tank10years, refrigeration5years and other integral components1year. Longer scheme-specific whole-product coverage is conditional, not the standard bar. Separate installation accessories excluded.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "KSHP315M24L70, S7 SHPL70 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "note": "The June2025 brochure identifies this current Australian system, not a verified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "KSHP315M24L70: SHPL70 heating unit + HPTB315VM24 tank",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "315 litres",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Tank material",
+        "value": "Protective anode fitted; cylinder metal and lining are not named in this exact-model manual.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R290,510 g",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "Included Smart Life phone access and built-in heating schedule; internet/app requirements apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "Standard domestic: tank10 years parts/5 labour; refrigeration5 years parts/labour; other main components1 year parts/labour. Eligible Solar Victoria or VEU installations have5-year whole-product cover under the stated scheme conditions.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1770 mm high, 605 mm diameter, 674 mm total width; 77 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "1047mm long x375mm deep x690mm high;66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Tank designed, engineered and built in Australia according to the exact S7 brochure.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Power connection",
+        "value": "Dedicated15 A supply; maximum11.5 A current; factory-wired2.4 kW extra electric heater.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "45 to52 dB(A) sound pressure at 1.5 m; operating mode not specified. The52 dB upper figure is used for the bar. Published7.0 kW heat output uses32.6 C air and21.1 C cold inlet, with no final water temperature or recovery flow stated.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Reheating evidence",
+        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Water and servicing",
+        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      }
+    ],
+    "pros": [
+      "Stores 315 litres in an Australian-made tank.",
+      "The separate heating unit gives you more choice over where its fan sits.",
+      "Includes phone scheduling and a built-in heating timer."
+    ],
+    "cons": [
+      "Standard sensors and other main components have one-year parts cover, shorter than its tank cover.",
+      "Needs separate space for its tank and heating unit."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 52,
+        "metric": "sound-pressure",
+        "distanceMetres": 1.5,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      "recovery": null
+    }
+  },
+  {
+    "id": "rinnai-kshp315m24l70h",
+    "name": "Rinnai Enviroflo S7 315L hard-water",
+    "checkedAt": "2026-10-12",
+    "brand": "Rinnai",
+    "sources": [
+      {
+        "title": "Exact S7 Australian installation and operating manual",
+        "url": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Issue1May2025; specification p12 visually checked12October2026"
+      },
+      {
+        "title": "Exact S7 Australian ordering and specification brochure",
+        "url": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "RA58.06.25, June2025, exact system ordering guide p5"
+      },
+      {
+        "title": "Exact S7 Australian warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current maker-linked SHPL70/HPTB policy; exact six system IDs listed; checked12October2026"
+      },
+      {
+        "title": "Current S7 Australian product range",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s7-250l-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current product and genuine S7 image checked12October2026; no launch date inferred from upload"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-s7-range.webp",
+      "alt": "Representative current Rinnai Enviroflo S7 tank and heating unit; selected 315L hard-water tank height may differ.",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/68f211c6d6/hw-electric-hp-enviroflo-s7-ima.png"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 315,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "KSHP315M24L70H",
+        "basis": "Actual storage capacity for this exact complete system in the S7 order table.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "KSHP315M24L70H",
+        "basis": "Minimum standard domestic main-system parts fault-cover: tank10years, refrigeration5years and other integral components1year. Longer scheme-specific whole-product coverage is conditional, not the standard bar. Separate installation accessories excluded.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "KSHP315M24L70H, S7 SHPL70 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "note": "The June2025 brochure identifies this current Australian system, not a verified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "KSHP315M24L70H: SHPL70 heating unit + HPTB315VM24H tank",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "315 litres",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Tank material",
+        "value": "Protective anode fitted; cylinder metal and lining are not named in this exact-model manual.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R290,510 g",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "Included Smart Life phone access and built-in heating schedule; internet/app requirements apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "Standard domestic: tank10 years parts/5 labour; refrigeration5 years parts/labour; other main components1 year parts/labour. Eligible Solar Victoria or VEU installations have5-year whole-product cover under the stated scheme conditions.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1770 mm high, 605 mm diameter, 674 mm total width; 77 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "1047mm long x375mm deep x690mm high;66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Tank designed, engineered and built in Australia according to the exact S7 brochure.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Power connection",
+        "value": "Dedicated15 A supply; maximum11.5 A current; factory-wired2.4 kW extra electric heater.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "45 to52 dB(A) sound pressure at 1.5 m; operating mode not specified. The52 dB upper figure is used for the bar. Published7.0 kW heat output uses32.6 C air and21.1 C cold inlet, with no final water temperature or recovery flow stated.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Reheating evidence",
+        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Water and servicing",
+        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      }
+    ],
+    "pros": [
+      "Stores 315 litres in an Australian-made tank.",
+      "The separate heating unit gives you more choice over where its fan sits.",
+      "Its hard-water tank includes a different protective rod for mineral-rich water."
+    ],
+    "cons": [
+      "Standard sensors and other main components have one-year parts cover, shorter than its tank cover.",
+      "Needs separate space for its tank and heating unit."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 52,
+        "metric": "sound-pressure",
+        "distanceMetres": 1.5,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      "recovery": null
+    }
+  },
+  {
+    "id": "rinnai-kshp400m24l70",
+    "name": "Rinnai Enviroflo S7 400L",
+    "checkedAt": "2026-10-12",
+    "brand": "Rinnai",
+    "sources": [
+      {
+        "title": "Exact S7 Australian installation and operating manual",
+        "url": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Issue1May2025; specification p12 visually checked12October2026"
+      },
+      {
+        "title": "Exact S7 Australian ordering and specification brochure",
+        "url": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "RA58.06.25, June2025, exact system ordering guide p5"
+      },
+      {
+        "title": "Exact S7 Australian warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current maker-linked SHPL70/HPTB policy; exact six system IDs listed; checked12October2026"
+      },
+      {
+        "title": "Current S7 Australian product range",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s7-250l-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current product and genuine S7 image checked12October2026; no launch date inferred from upload"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-s7-range.webp",
+      "alt": "Representative current Rinnai Enviroflo S7 tank and heating unit; selected 400L standard tank height may differ.",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/68f211c6d6/hw-electric-hp-enviroflo-s7-ima.png"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 400,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "KSHP400M24L70",
+        "basis": "Actual storage capacity for this exact complete system in the S7 order table.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "KSHP400M24L70",
+        "basis": "Minimum standard domestic main-system parts fault-cover: tank10years, refrigeration5years and other integral components1year. Longer scheme-specific whole-product coverage is conditional, not the standard bar. Separate installation accessories excluded.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "KSHP400M24L70, S7 SHPL70 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "note": "The June2025 brochure identifies this current Australian system, not a verified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "KSHP400M24L70: SHPL70 heating unit + HPTB400VM24 tank",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "400 litres",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Tank material",
+        "value": "Protective anode fitted; cylinder metal and lining are not named in this exact-model manual.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R290,510 g",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "Included Smart Life phone access and built-in heating schedule; internet/app requirements apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "Standard domestic: tank10 years parts/5 labour; refrigeration5 years parts/labour; other main components1 year parts/labour. Eligible Solar Victoria or VEU installations have5-year whole-product cover under the stated scheme conditions.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1840 mm high, 675 mm diameter, 744 mm total width; 90 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "1047mm long x375mm deep x690mm high;66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Tank designed, engineered and built in Australia according to the exact S7 brochure.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Power connection",
+        "value": "Dedicated15 A supply; maximum11.5 A current; factory-wired2.4 kW extra electric heater.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "45 to52 dB(A) sound pressure at 1.5 m; operating mode not specified. The52 dB upper figure is used for the bar. Published7.0 kW heat output uses32.6 C air and21.1 C cold inlet, with no final water temperature or recovery flow stated.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Reheating evidence",
+        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Water and servicing",
+        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      }
+    ],
+    "pros": [
+      "Stores 400 litres in an Australian-made tank.",
+      "The separate heating unit gives you more choice over where its fan sits.",
+      "Includes phone scheduling and a built-in heating timer."
+    ],
+    "cons": [
+      "Standard sensors and other main components have one-year parts cover, shorter than its tank cover.",
+      "Needs separate space for its tank and heating unit."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 52,
+        "metric": "sound-pressure",
+        "distanceMetres": 1.5,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      "recovery": null
+    }
+  },
+  {
+    "id": "rinnai-kshp400m24l70h",
+    "name": "Rinnai Enviroflo S7 400L hard-water",
+    "checkedAt": "2026-10-12",
+    "brand": "Rinnai",
+    "sources": [
+      {
+        "title": "Exact S7 Australian installation and operating manual",
+        "url": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "kind": "Manufacturer AU manual",
+        "revision": "Issue1May2025; specification p12 visually checked12October2026"
+      },
+      {
+        "title": "Exact S7 Australian ordering and specification brochure",
+        "url": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "kind": "Manufacturer AU datasheet",
+        "revision": "RA58.06.25, June2025, exact system ordering guide p5"
+      },
+      {
+        "title": "Exact S7 Australian warranty booklet",
+        "url": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current maker-linked SHPL70/HPTB policy; exact six system IDs listed; checked12October2026"
+      },
+      {
+        "title": "Current S7 Australian product range",
+        "url": "https://www.rinnai.com.au/home/catalogue/products/enviroflo-electric-split/enviroflo-s7-250l-split-heat-pump",
+        "kind": "Manufacturer AU product",
+        "revision": "Current product and genuine S7 image checked12October2026; no launch date inferred from upload"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/rinnai-enviroflo-s7-range.webp",
+      "alt": "Representative current Rinnai Enviroflo S7 tank and heating unit; selected 400L hard-water tank height may differ.",
+      "sourceUrl": "https://a.storyblok.com/f/293064688899482/1000x920/68f211c6d6/hw-electric-hp-enviroflo-s7-ima.png"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 400,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "KSHP400M24L70H",
+        "basis": "Actual storage capacity for this exact complete system in the S7 order table.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 1,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "KSHP400M24L70H",
+        "basis": "Minimum standard domestic main-system parts fault-cover: tank10years, refrigeration5years and other integral components1year. Longer scheme-specific whole-product coverage is conditional, not the standard bar. Separate installation accessories excluded.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "KSHP400M24L70H, S7 SHPL70 current Australian system",
+      "released": null,
+      "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "note": "The June2025 brochure identifies this current Australian system, not a verified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "KSHP400M24L70H: SHPL70 heating unit + HPTB400VM24H tank",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "400 litres",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Tank material",
+        "value": "Protective anode fitted; cylinder metal and lining are not named in this exact-model manual.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R290,510 g",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Controls",
+        "value": "Included Smart Life phone access and built-in heating schedule; internet/app requirements apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "Standard domestic: tank10 years parts/5 labour; refrigeration5 years parts/labour; other main components1 year parts/labour. Eligible Solar Victoria or VEU installations have5-year whole-product cover under the stated scheme conditions.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/a00853088d/hw-electric-hp-enviroflo-s7-war.pdf"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1840 mm high, 675 mm diameter, 744 mm total width; 90 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "1047mm long x375mm deep x690mm high;66 kg empty",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Tank designed, engineered and built in Australia according to the exact S7 brochure.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf"
+      },
+      {
+        "label": "Power connection",
+        "value": "Dedicated15 A supply; maximum11.5 A current; factory-wired2.4 kW extra electric heater.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "45 to52 dB(A) sound pressure at 1.5 m; operating mode not specified. The52 dB upper figure is used for the bar. Published7.0 kW heat output uses32.6 C air and21.1 C cold inlet, with no final water temperature or recovery flow stated.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Reheating evidence",
+        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      {
+        "label": "Water and servicing",
+        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      }
+    ],
+    "pros": [
+      "Stores 400 litres in an Australian-made tank.",
+      "The separate heating unit gives you more choice over where its fan sits.",
+      "Its hard-water tank includes a different protective rod for mineral-rich water."
+    ],
+    "cons": [
+      "Standard sensors and other main components have one-year parts cover, shorter than its tank cover.",
+      "Needs separate space for its tank and heating unit."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 52,
+        "metric": "sound-pressure",
+        "distanceMetres": 1.5,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
+      },
+      "recovery": null
+    }
+  },
+  {
+    "id": "sanden-eco-plus-160-fqtd",
+    "name": "Sanden Eco Plus 160L FQTD",
+    "checkedAt": "2026-10-12",
+    "brand": "Sanden",
+    "sources": [
+      {
+        "title": "Current Australian exact heating-unit and tank specifications",
+        "url": "https://www.sanden-hot-water.com.au/specifications/",
+        "kind": "Manufacturer AU specification",
+        "revision": "Current table explicitly GAU-A45HPD and SAN-160/250/300/315SAQD; checked12October2026"
+      },
+      {
+        "title": "Exact D-system Australian warranty terms",
+        "url": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current Table2 explicitly GAUS-160/250/300/315FQTD; checked12October2026"
+      },
+      {
+        "title": "Current complete D-system identities",
+        "url": "https://www.sanden-hot-water.com.au/faqs/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current maker FAQ lists all four exact FQTD systems and confirms shared heating unit; checked12October2026"
+      },
+      {
+        "title": "Manufacturer published 315-litre recovery example",
+        "url": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "kind": "Manufacturer AU performance",
+        "revision": "Current maker example states4hours,315L,water17 to63C,20C air; checked12October2026"
+      },
+      {
+        "title": "Included D-system Wi-Fi controller",
+        "url": "https://www.sanden-hot-water.com.au/wifi-controller/",
+        "kind": "Manufacturer AU controls",
+        "revision": "Current controller information checked12October2026"
+      },
+      {
+        "title": "Exact GAU-A45HPD genuine product photograph",
+        "url": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd",
+        "kind": "Australian retailer product photograph",
+        "revision": "Genuine current heating-unit-only photograph captured and visually checked12October2026; no tank is shown"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/sanden-gau-a45hpd.webp",
+      "alt": "Sanden GAUS-160FQTD uses this shared GAU-A45HPD heating unit; its 160L tank and Wi-Fi controller are not shown.",
+      "sourceUrl": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 160,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "GAUS-160FQTD",
+        "basis": "Actual storage capacity of the exact SAN-SAQD tank for this current D system.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 10,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GAUS-160FQTD",
+        "basis": "Exact D system: main heating-unit hardware10years when sold with Wifi-HPD, subject to invoice terms/availability; tank100% replacement first10years before prorated years11–15. Separate Wi-Fi/valves are accessories, not the main-product bar.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "GAUS-160FQTD with GAU-A45HPD, SAQD tank and Wifi-HPD",
+      "released": null,
+      "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/",
+      "note": "Current maker exact D-system listing verified; original launch date not published. D suffix is not aliased to older FQTS or SAQA tanks."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "GAUS-160FQTD: GAU-A45HPD heating unit + SAN-160SAQD stainless tank + Wifi-HPD controller",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "160 litres",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit; photograph shows only the shared GAU-A45HPD heating unit.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Tank material",
+        "value": "Stainless steel",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "Carbon dioxide, R744",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Heating unit made in Japan; tank made in Australia.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "D-system heat pump sold with Wifi-HPD: 10 years parts and labour under invoice terms and availability. SAQD tank: first 10 years at 100% replacement, further 5 years prorated. Separate Wi-Fi controller: 5 years parts/1 year labour; valves and connectors: 2 years.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1100 mm high x 580 mm diameter; 29 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "675 mm high x 918 mm wide x 356 mm deep; 48 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Power connection",
+        "value": "240 V, single phase, 15 A circuit. No separate electric booster.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Controls",
+        "value": "D-system includes Wifi-HPD controller for phone access and heating schedules; freeze protection can run independently of the ordinary schedule.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/wifi-controller/"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      },
+      {
+        "label": "Water and installation conditions",
+        "value": "Stainless tank warranty excludes Western Australia and depends on stated water quality. Warranty requires an authorised, trained Sanden dealer installation.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.99 kW thermal output at 32.45 C air and 18.74 C cold inlet. The nominal 63 C setting is not described as that heat-output test endpoint.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      }
+    ],
+    "pros": [
+      "Stores 160 litres in an Australian-made stainless-steel tank.",
+      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
+    ],
+    "cons": [
+      "Freeze protection can run during cold nights, outside ordinary heating schedules.",
+      "Its stainless-tank warranty excludes Western Australia."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 37,
+        "metric": "not-stated",
+        "distanceMetres": 1,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHour": 78.75,
+        "basis": "Estimated from the maker 315-litre reference test: 17 to63 C water at20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      }
+    }
+  },
+  {
+    "id": "sanden-eco-plus-250-fqtd",
+    "name": "Sanden Eco Plus 250L FQTD",
+    "checkedAt": "2026-10-12",
+    "brand": "Sanden",
+    "sources": [
+      {
+        "title": "Current Australian exact heating-unit and tank specifications",
+        "url": "https://www.sanden-hot-water.com.au/specifications/",
+        "kind": "Manufacturer AU specification",
+        "revision": "Current table explicitly GAU-A45HPD and SAN-160/250/300/315SAQD; checked12October2026"
+      },
+      {
+        "title": "Exact D-system Australian warranty terms",
+        "url": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current Table2 explicitly GAUS-160/250/300/315FQTD; checked12October2026"
+      },
+      {
+        "title": "Current complete D-system identities",
+        "url": "https://www.sanden-hot-water.com.au/faqs/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current maker FAQ lists all four exact FQTD systems and confirms shared heating unit; checked12October2026"
+      },
+      {
+        "title": "Manufacturer published 315-litre recovery example",
+        "url": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "kind": "Manufacturer AU performance",
+        "revision": "Current maker example states4hours,315L,water17 to63C,20C air; checked12October2026"
+      },
+      {
+        "title": "Included D-system Wi-Fi controller",
+        "url": "https://www.sanden-hot-water.com.au/wifi-controller/",
+        "kind": "Manufacturer AU controls",
+        "revision": "Current controller information checked12October2026"
+      },
+      {
+        "title": "Exact GAU-A45HPD genuine product photograph",
+        "url": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd",
+        "kind": "Australian retailer product photograph",
+        "revision": "Genuine current heating-unit-only photograph captured and visually checked12October2026; no tank is shown"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/sanden-gau-a45hpd.webp",
+      "alt": "Sanden GAUS-250FQTD uses this shared GAU-A45HPD heating unit; its 250L tank and Wi-Fi controller are not shown.",
+      "sourceUrl": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 250,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "GAUS-250FQTD",
+        "basis": "Actual storage capacity of the exact SAN-SAQD tank for this current D system.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 10,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GAUS-250FQTD",
+        "basis": "Exact D system: main heating-unit hardware10years when sold with Wifi-HPD, subject to invoice terms/availability; tank100% replacement first10years before prorated years11–15. Separate Wi-Fi/valves are accessories, not the main-product bar.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "GAUS-250FQTD with GAU-A45HPD, SAQD tank and Wifi-HPD",
+      "released": null,
+      "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/",
+      "note": "Current maker exact D-system listing verified; original launch date not published. D suffix is not aliased to older FQTS or SAQA tanks."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "GAUS-250FQTD: GAU-A45HPD heating unit + SAN-250SAQD stainless tank + Wifi-HPD controller",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "250 litres",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit; photograph shows only the shared GAU-A45HPD heating unit.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Tank material",
+        "value": "Stainless steel",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "Carbon dioxide, R744",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Heating unit made in Japan; tank made in Australia.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "D-system heat pump sold with Wifi-HPD: 10 years parts and labour under invoice terms and availability. SAQD tank: first 10 years at 100% replacement, further 5 years prorated. Separate Wi-Fi controller: 5 years parts/1 year labour; valves and connectors: 2 years.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1635 mm high x 580 mm diameter; 47 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "675 mm high x 918 mm wide x 356 mm deep; 48 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Power connection",
+        "value": "240 V, single phase, 15 A circuit. No separate electric booster.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Controls",
+        "value": "D-system includes Wifi-HPD controller for phone access and heating schedules; freeze protection can run independently of the ordinary schedule.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/wifi-controller/"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      },
+      {
+        "label": "Water and installation conditions",
+        "value": "Stainless tank warranty excludes Western Australia and depends on stated water quality. Warranty requires an authorised, trained Sanden dealer installation.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.99 kW thermal output at 32.45 C air and 18.74 C cold inlet. The nominal 63 C setting is not described as that heat-output test endpoint.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      }
+    ],
+    "pros": [
+      "Stores 250 litres in an Australian-made stainless-steel tank.",
+      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
+    ],
+    "cons": [
+      "Freeze protection can run during cold nights, outside ordinary heating schedules.",
+      "Its stainless-tank warranty excludes Western Australia."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 37,
+        "metric": "not-stated",
+        "distanceMetres": 1,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHour": 78.75,
+        "basis": "Estimated from the maker 315-litre reference test: 17 to63 C water at20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      }
+    }
+  },
+  {
+    "id": "sanden-eco-plus-300-fqtd",
+    "name": "Sanden Eco Plus 300L FQTD",
+    "checkedAt": "2026-10-12",
+    "brand": "Sanden",
+    "sources": [
+      {
+        "title": "Current Australian exact heating-unit and tank specifications",
+        "url": "https://www.sanden-hot-water.com.au/specifications/",
+        "kind": "Manufacturer AU specification",
+        "revision": "Current table explicitly GAU-A45HPD and SAN-160/250/300/315SAQD; checked12October2026"
+      },
+      {
+        "title": "Exact D-system Australian warranty terms",
+        "url": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current Table2 explicitly GAUS-160/250/300/315FQTD; checked12October2026"
+      },
+      {
+        "title": "Current complete D-system identities",
+        "url": "https://www.sanden-hot-water.com.au/faqs/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current maker FAQ lists all four exact FQTD systems and confirms shared heating unit; checked12October2026"
+      },
+      {
+        "title": "Manufacturer published 315-litre recovery example",
+        "url": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "kind": "Manufacturer AU performance",
+        "revision": "Current maker example states4hours,315L,water17 to63C,20C air; checked12October2026"
+      },
+      {
+        "title": "Included D-system Wi-Fi controller",
+        "url": "https://www.sanden-hot-water.com.au/wifi-controller/",
+        "kind": "Manufacturer AU controls",
+        "revision": "Current controller information checked12October2026"
+      },
+      {
+        "title": "Exact GAU-A45HPD genuine product photograph",
+        "url": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd",
+        "kind": "Australian retailer product photograph",
+        "revision": "Genuine current heating-unit-only photograph captured and visually checked12October2026; no tank is shown"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/sanden-gau-a45hpd.webp",
+      "alt": "Sanden GAUS-300FQTD uses this shared GAU-A45HPD heating unit; its 300L tank and Wi-Fi controller are not shown.",
+      "sourceUrl": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 300,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "GAUS-300FQTD",
+        "basis": "Actual storage capacity of the exact SAN-SAQD tank for this current D system.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 10,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GAUS-300FQTD",
+        "basis": "Exact D system: main heating-unit hardware10years when sold with Wifi-HPD, subject to invoice terms/availability; tank100% replacement first10years before prorated years11–15. Separate Wi-Fi/valves are accessories, not the main-product bar.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "GAUS-300FQTD with GAU-A45HPD, SAQD tank and Wifi-HPD",
+      "released": null,
+      "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/",
+      "note": "Current maker exact D-system listing verified; original launch date not published. D suffix is not aliased to older FQTS or SAQA tanks."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "GAUS-300FQTD: GAU-A45HPD heating unit + SAN-300SAQD stainless tank + Wifi-HPD controller",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "300 litres",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit; photograph shows only the shared GAU-A45HPD heating unit.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Tank material",
+        "value": "Stainless steel",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "Carbon dioxide, R744",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Heating unit made in Japan; tank made in Australia.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "D-system heat pump sold with Wifi-HPD: 10 years parts and labour under invoice terms and availability. SAQD tank: first 10 years at 100% replacement, further 5 years prorated. Separate Wi-Fi controller: 5 years parts/1 year labour; valves and connectors: 2 years.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "1905 mm high x 580 mm diameter; 52 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "675 mm high x 918 mm wide x 356 mm deep; 48 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Power connection",
+        "value": "240 V, single phase, 15 A circuit. No separate electric booster.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Controls",
+        "value": "D-system includes Wifi-HPD controller for phone access and heating schedules; freeze protection can run independently of the ordinary schedule.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/wifi-controller/"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      },
+      {
+        "label": "Water and installation conditions",
+        "value": "Stainless tank warranty excludes Western Australia and depends on stated water quality. Warranty requires an authorised, trained Sanden dealer installation.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.99 kW thermal output at 32.45 C air and 18.74 C cold inlet. The nominal 63 C setting is not described as that heat-output test endpoint.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      }
+    ],
+    "pros": [
+      "Stores 300 litres in an Australian-made stainless-steel tank.",
+      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
+    ],
+    "cons": [
+      "Freeze protection can run during cold nights, outside ordinary heating schedules.",
+      "Its stainless-tank warranty excludes Western Australia."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 37,
+        "metric": "not-stated",
+        "distanceMetres": 1,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      "recovery": null,
+      "recoveryTimeEstimate": {
+        "litresPerHour": 78.75,
+        "basis": "Estimated from the maker 315-litre reference test: 17 to63 C water at20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      }
+    }
+  },
+  {
+    "id": "sanden-eco-plus-315-fqtd",
+    "name": "Sanden Eco Plus 315L FQTD",
+    "checkedAt": "2026-10-12",
+    "brand": "Sanden",
+    "sources": [
+      {
+        "title": "Current Australian exact heating-unit and tank specifications",
+        "url": "https://www.sanden-hot-water.com.au/specifications/",
+        "kind": "Manufacturer AU specification",
+        "revision": "Current table explicitly GAU-A45HPD and SAN-160/250/300/315SAQD; checked12October2026"
+      },
+      {
+        "title": "Exact D-system Australian warranty terms",
+        "url": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "kind": "Manufacturer AU warranty",
+        "revision": "Current Table2 explicitly GAUS-160/250/300/315FQTD; checked12October2026"
+      },
+      {
+        "title": "Current complete D-system identities",
+        "url": "https://www.sanden-hot-water.com.au/faqs/",
+        "kind": "Manufacturer AU product",
+        "revision": "Current maker FAQ lists all four exact FQTD systems and confirms shared heating unit; checked12October2026"
+      },
+      {
+        "title": "Manufacturer published 315-litre recovery example",
+        "url": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "kind": "Manufacturer AU performance",
+        "revision": "Current maker example states4hours,315L,water17 to63C,20C air; checked12October2026"
+      },
+      {
+        "title": "Included D-system Wi-Fi controller",
+        "url": "https://www.sanden-hot-water.com.au/wifi-controller/",
+        "kind": "Manufacturer AU controls",
+        "revision": "Current controller information checked12October2026"
+      },
+      {
+        "title": "Exact GAU-A45HPD genuine product photograph",
+        "url": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd",
+        "kind": "Australian retailer product photograph",
+        "revision": "Genuine current heating-unit-only photograph captured and visually checked12October2026; no tank is shown"
+      }
+    ],
+    "image": {
+      "src": "/products/hot-water/sanden-gau-a45hpd.webp",
+      "alt": "Sanden GAUS-315FQTD uses this shared GAU-A45HPD heating unit; its 315L tank and Wi-Fi controller are not shown.",
+      "sourceUrl": "https://pure-electric.com.au/product/sanden-heat-pump-g5-gau-a45hpd"
+    },
+    "measurements": {
+      "capacity": {
+        "value": 315,
+        "unit": "tank-litres",
+        "basisId": "hot-water-tank-volume",
+        "variant": "GAUS-315FQTD",
+        "basis": "Actual storage capacity of the exact SAN-SAQD tank for this current D system.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 10,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GAUS-315FQTD",
+        "basis": "Exact D system: main heating-unit hardware10years when sold with Wifi-HPD, subject to invoice terms/availability; tank100% replacement first10years before prorated years11–15. Separate Wi-Fi/valves are accessories, not the main-product bar.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "GAUS-315FQTD with GAU-A45HPD, SAQD tank and Wifi-HPD",
+      "released": null,
+      "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/",
+      "note": "Current maker exact D-system listing verified; original launch date not published. D suffix is not aliased to older FQTS or SAQA tanks."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact model or system",
+        "value": "GAUS-315FQTD: GAU-A45HPD heating unit + SAN-315SAQD stainless tank + Wifi-HPD controller",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/faqs/"
+      },
+      {
+        "label": "Actual stored water",
+        "value": "315 litres",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Layout",
+        "value": "Separate storage tank and heating unit; photograph shows only the shared GAU-A45HPD heating unit.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Tank material",
+        "value": "Stainless steel",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "Carbon dioxide, R744",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Manufacturing",
+        "value": "Heating unit made in Japan; tank made in Australia.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Main-system warranty",
+        "value": "D-system heat pump sold with Wifi-HPD: 10 years parts and labour under invoice terms and availability. SAQD tank: first 10 years at 100% replacement, further 5 years prorated. Separate Wi-Fi controller: 5 years parts/1 year labour; valves and connectors: 2 years.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Tank size and empty weight",
+        "value": "2000 mm high x 580 mm diameter; 57 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Heating-unit size and empty weight",
+        "value": "675 mm high x 918 mm wide x 356 mm deep; 48 kg empty",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Power connection",
+        "value": "240 V, single phase, 15 A circuit. No separate electric booster.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      {
+        "label": "Controls",
+        "value": "D-system includes Wifi-HPD controller for phone access and heating schedules; freeze protection can run independently of the ordinary schedule.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/wifi-controller/"
+      },
+      {
+        "label": "Noise and heating test",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. This is the selected tank size.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      },
+      {
+        "label": "Water and installation conditions",
+        "value": "Stainless tank warranty excludes Western Australia and depends on stated water quality. Warranty requires an authorised, trained Sanden dealer installation.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/"
+      },
+      {
+        "label": "Heating output",
+        "value": "4.99 kW thermal output at 32.45 C air and 18.74 C cold inlet. The nominal 63 C setting is not described as that heat-output test endpoint.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      }
+    ],
+    "pros": [
+      "Stores 315 litres in an Australian-made stainless-steel tank.",
+      "Its shared heating unit has a published 37 dB noise figure at one metre.",
+      "Current D systems include phone scheduling and ten-year main heat-pump parts cover."
+    ],
+    "cons": [
+      "Freeze protection can run during cold nights, outside ordinary heating schedules.",
+      "Its stainless-tank warranty excludes Western Australia."
+    ],
+    "hotWaterPerformance": {
+      "noise": {
+        "value": 37,
+        "metric": "not-stated",
+        "distanceMetres": 1,
+        "mode": "Operating mode not specified",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
+      },
+      "recovery": {
+        "minutes": 240,
+        "heatedLitres": 315,
+        "airTemperatureC": 20,
+        "waterStartC": 17,
+        "waterEndC": 63,
+        "basis": "Maker current 315-litre recovery example: 4 hours, water17 to63 C, air20 C; no boost element.",
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      }
     }
   }
 ]

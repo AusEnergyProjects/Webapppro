@@ -1515,6 +1515,326 @@
           "excelRow": 31
         }
       ]
+    },
+    {
+      "id": "rinnai-kshp250m24l70",
+      "name": "Rinnai Enviroflo S7 250L",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP250M24L70"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24L70",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 333
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24L70",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 82
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp250m24l70h",
+      "name": "Rinnai Enviroflo S7 250L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP250M24L70H"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24L70H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 334
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP250M24L70H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 83
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp315m24l70",
+      "name": "Rinnai Enviroflo S7 315L",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP315M24L70"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24L70",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 338
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24L70",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 86
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp315m24l70h",
+      "name": "Rinnai Enviroflo S7 315L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP315M24L70H"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24L70H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 339
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP315M24L70H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 87
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp400m24l70",
+      "name": "Rinnai Enviroflo S7 400L",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP400M24L70"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP400M24L70",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 343
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP400M24L70",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 90
+        }
+      ]
+    },
+    {
+      "id": "rinnai-kshp400m24l70h",
+      "name": "Rinnai Enviroflo S7 400L hard-water",
+      "brand": "Rinnai",
+      "models": [
+        "KSHP400M24L70H"
+      ],
+      "brands": [
+        "Rinnai"
+      ],
+      "modelSourceUrl": "https://www.rinnai.com.au/documents/4e7f1a14eb/hw-electric-hp-enviroflo-s7-bro.pdf",
+      "solarVictoria": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP400M24L70H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 344
+        }
+      ],
+      "solarVictoriaLocal": [
+        {
+          "brand": "Rinnai",
+          "model": "KSHP400M24L70H",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": true,
+          "localContentAdded": "2025-10-31",
+          "localContentRemoved": null,
+          "excelRow": 91
+        }
+      ]
+    },
+    {
+      "id": "sanden-eco-plus-160-fqtd",
+      "name": "Sanden Eco Plus 160L FQTD",
+      "brand": "Sanden",
+      "models": [
+        "GAUS-160FQTD"
+      ],
+      "brands": [
+        "Sanden"
+      ],
+      "modelSourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+      "solarVictoria": [],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "sanden-eco-plus-250-fqtd",
+      "name": "Sanden Eco Plus 250L FQTD",
+      "brand": "Sanden",
+      "models": [
+        "GAUS-250FQTD"
+      ],
+      "brands": [
+        "Sanden"
+      ],
+      "modelSourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+      "solarVictoria": [
+        {
+          "brand": "Sanden",
+          "model": "GAUS-250FQTD",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 359
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "sanden-eco-plus-300-fqtd",
+      "name": "Sanden Eco Plus 300L FQTD",
+      "brand": "Sanden",
+      "models": [
+        "GAUS-300FQTD"
+      ],
+      "brands": [
+        "Sanden"
+      ],
+      "modelSourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+      "solarVictoria": [
+        {
+          "brand": "Sanden",
+          "model": "GAUS-300FQTD",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 361
+        }
+      ],
+      "solarVictoriaLocal": []
+    },
+    {
+      "id": "sanden-eco-plus-315-fqtd",
+      "name": "Sanden Eco Plus 315L FQTD",
+      "brand": "Sanden",
+      "models": [
+        "GAUS-315FQTD"
+      ],
+      "brands": [
+        "Sanden"
+      ],
+      "modelSourceUrl": "https://www.sanden-hot-water.com.au/warranty-information/",
+      "solarVictoria": [
+        {
+          "brand": "Sanden",
+          "model": "GAUS-315FQTD",
+          "approvedFrom": "2023-05-31",
+          "eligibleTo": "2030-12-31",
+          "equipmentCategory": "Water heater - Heat pump",
+          "localContent": false,
+          "localContentAdded": null,
+          "localContentRemoved": null,
+          "excelRow": 363
+        }
+      ],
+      "solarVictoriaLocal": []
     }
   ]
 }

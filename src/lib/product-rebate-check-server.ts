@@ -1,7 +1,8 @@
 import modelEvidence from "../data/product-rebate-models.json";
+import coolingEvidence from "../data/product-rebate-cooling-models.json";
 import { resolveAddressLocalityTuple } from "./address-localities.mjs";
 import {
-  exactRebateIdentity, hotWaterVeuActivity, ProductRebateCheckError, wholeCertificateQuantity,
+  currentRebateSystemOptions, exactRebateIdentity, heatingVeuScenario, hotWaterVeuActivity, ProductRebateCheckError, wholeCertificateQuantity,
   type ProductRebateCheckRequest, type ProductRebateCheckResult, type ProductRebateProgramResult,
 } from "./product-rebate-check.ts";
 import { estimateCreditexSresQuote } from "./creditex-sres-calculator-estimator.ts";
@@ -18,6 +19,9 @@ import {
 } from "./creditex-veu-calculator-estimator.ts";
 import { CreditexVeuPostcodeError, resolveCreditexVeuPostcode } from "./creditex-veu-postcode-resolver.ts";
 import { describeCreditexCalculatorRouteError } from "./creditex-calculator-route-response.ts";
+import { loadCertificatePriceDataset } from "./certificate-prices-server.ts";
+import type { CertificatePriceDataset } from "./certificate-prices.ts";
+import { productCertificateValue } from "./product-rebate-value.ts";
 
 type SolarVictoriaProduct = {
   brand: string; model: string; approvedFrom: string; eligibleTo: string;
@@ -28,6 +32,16 @@ type RebateModel = {
   id: string; name: string; brand: string; models: string[]; brands: string[];
   modelSourceUrl: string; solarVictoria: SolarVictoriaProduct[]; solarVictoriaLocal: SolarVictoriaProduct[];
 };
+type CoolingModel = {
+  id: string; name: string; brand: string; models: string[]; brands: string[];
+  category: "air-conditioning" | "multi-split"; modelSourceUrl: string;
+  combination: string | null;
+  indoorUnits: Array<{ model: string; quantity: string; heatingCapacityKw: string; coolingCapacityKw: string; sourceUrl: string }> | null;
+};
+const coolingModels: readonly CoolingModel[] = coolingEvidence.products.map(model => {
+  if (model.category !== "air-conditioning" && model.category !== "multi-split") throw new Error("Unsupported reviewed rebate product category.");
+  return { ...model, category: model.category };
+});
 const models: readonly RebateModel[] = modelEvidence.products;
 const VEU_PRODUCT_SOURCE = "https://veu.esc.vic.gov.au/vpr/s/productregister";
 const HOUSEHOLD_CONDITION = "This example is for one water heater in a home. Your installer must confirm eligibility.";
@@ -39,11 +53,13 @@ export type ProductRebateDependencies = {
   searchVeu: typeof searchOfficialProducts;
   validateVeu: typeof validateOfficialProductSelections;
   estimateVeu: typeof estimateCreditexVeu;
+  loadPrices: (db: D1Database, options: { now: Date }) => Promise<CertificatePriceDataset | null>;
 };
 const defaultDependencies: ProductRebateDependencies = {
   searchSres: searchCerSresProducts, estimateSres: estimateCreditexSresQuote,
   searchVeu: searchOfficialProducts, validateVeu: validateOfficialProductSelections,
   estimateVeu: estimateCreditexVeu,
+  loadPrices: loadCertificatePriceDataset,
 };
 
 function result(program: ProductRebateProgramResult["program"], summary: string): ProductRebateProgramResult {
@@ -60,13 +76,74 @@ function result(program: ProductRebateProgramResult["program"], summary: string)
     status: "not-confirmed", quantity: null, unit: null, maximumAmountAud: null,
     summary, conditions: [HOUSEHOLD_CONDITION], sources,
     matchedModel: null, sourceCheckedAt: null, receiptHash: null,
-    issueCode: "OFFICIAL_MODEL_NOT_CONFIRMED", retryable: false,
+    issueCode: "OFFICIAL_MODEL_NOT_CONFIRMED", retryable: false, certificateValue: null,
   };
 }
 
-function matchesModel(product: { brand: string; model: string }, model: RebateModel): boolean {
+function matchesModel(product: { brand: string; model: string }, model: Pick<RebateModel, "brands" | "models">): boolean {
   return model.brands.some(brand => exactRebateIdentity(product.brand, brand))
     && model.models.some(name => exactRebateIdentity(product.model, name));
+}
+
+async function coolingResult(db: D1Database, request: ProductRebateCheckRequest, model: CoolingModel, deps: ProductRebateDependencies): Promise<ProductRebateProgramResult> {
+  const base = result("veu", "This exact air-conditioner model and its approved performance values could not be confirmed.");
+  base.conditions = ["This example is for one air-conditioning system at a home. Your installer must confirm eligibility."];
+  base.sources.push({ title: "Selected equipment specification", url: model.modelSourceUrl });
+  if (request.state !== "VIC") return { ...base, status: "not-applicable", issueCode: null, summary: "VEU is a Victorian programme. Your selected suburb is outside Victoria." };
+  const scenario = heatingVeuScenario(request.currentSystem);
+  if (!scenario) return { ...base, issueCode: "EXISTING_HEATING_UNCONFIRMED", summary: "Choose the heating system being replaced. We have not guessed which replacement rules apply." };
+  if (!model.models.length) return { ...base, summary: "The exact registered indoor and outdoor model pair needs confirmation before calculating a rebate." };
+  if (model.category === "multi-split" && !model.indoorUnits?.length) return {
+    ...base, issueCode: "INDOOR_COMBINATION_UNCONFIRMED",
+    summary: model.combination
+      ? "The listed room-unit combination still needs verified heating and cooling capacities before its rebate can be calculated. No capacity has been guessed."
+      : "This outdoor unit supports different room-unit combinations. The selected indoor models and their capacities must be confirmed before calculating its rebate.",
+  };
+  try {
+    const postcode = resolveCreditexVeuPostcode({ postcode: request.postcode, installationDate: request.installationDate });
+    const searches = await Promise.all(model.models.map(modelName => deps.searchVeu(db, {
+      productKind: "veu_air_conditioner", installationDate: request.installationDate,
+      veuActivityCode: "6", query: modelName, limit: 100,
+    }, { allowStaleAcceptedSnapshot: true })));
+    if (searches.some(search => search.products.length >= 100 || search.matchCount > 100)) return {
+      ...base, issueCode: "OFFICIAL_MODEL_MATCH_OVERFLOW", summary: "The official search needs a narrower model identity before its rebate can be calculated.",
+    };
+    const candidates = [...new Map(searches.flatMap(search => search.products).filter(product => matchesModel(product, model)).map(product => [product.id, product])).values()];
+    if (candidates.length !== 1) return {
+      ...base, summary: candidates.length > 1 ? "More than one VEU approval matches this model. Its exact approval must be confirmed." : base.summary,
+    };
+    const validated = await deps.validateVeu(db, {
+      installationDate: request.installationDate, requiredKinds: ["veu_air_conditioner"], selectedProductIds: { veu_air_conditioner: candidates[0].id },
+    }, { allowStaleAcceptedSnapshot: true });
+    const selected = validated.selections[0];
+    if (validated.selections.length !== 1 || selected.id !== candidates[0].id || !matchesModel(selected, model)) throw new CreditexOfficialProductError(
+      "OFFICIAL_PRODUCT_REGISTRY_INTEGRITY_FAILED", 503, "The approved model changed while this check was running. Try the exact model again.");
+    const configuration = selected.attributes.veuProductConfigurationClass;
+    if (configuration !== (model.category === "multi-split" ? "multi" : "single")) return {
+      ...base, issueCode: "OFFICIAL_CONFIGURATION_UNCONFIRMED", summary: "The registered system configuration does not match this catalogue product. Its exact approval needs checking.",
+    };
+    const inputs = deriveCreditexVeuOfficialProductInputs("6", {
+      scenario, premises: "residential", location_class: postcode.locationClass,
+      ...(model.indoorUnits ? { indoor_units: model.indoorUnits.map(unit => ({ model: unit.model, quantity: unit.quantity, heatingCapacityKw: unit.heatingCapacityKw, coolingCapacityKw: unit.coolingCapacityKw })) } : {}),
+    }, validated.selections);
+    const estimate = deps.estimateVeu({ activityCode: "6", installationDate: request.installationDate, estimatePurpose: "quote", inputs, product: veuProductEvidence(selected) });
+    const minimumContribution = estimate.trace.find(entry => entry.key === "minimum_co_payment")?.output.decimal;
+    if (minimumContribution === undefined || !/^\d+(\.\d+)?$/.test(minimumContribution)) throw new Error("The governed calculator did not return its minimum contribution.");
+    const registry = searches.find(search => search.products.some(product => product.id === selected.id))?.registry;
+    return {
+      ...base, status: "calculated", quantity: wholeCertificateQuantity(estimate.output.wholeCertificates), unit: "VEEC", issueCode: null,
+      summary: "Calculated using the exact approved model, your postcode and selected heating replacement. This remains an eligibility example.",
+      matchedModel: `${selected.brand} ${selected.model}`, sourceCheckedAt: registry?.lastCheckedAt || null, receiptHash: estimate.receiptHash,
+      conditions: [...base.conditions,
+        `The customer must contribute at least $${Number(minimumContribution).toLocaleString("en-AU")} including GST per installed system. It cannot be rebated or reimbursed.`,
+        "The installer must confirm the old equipment and rooms match the replacement rules, and arrange lawful removal where required.",
+        "The rebate provider must confirm the home's claim history, sizing advice, consumer information and required warranty.",
+        ...(model.category === "multi-split" ? ["This example uses the listed indoor units, capped by the approved outdoor capacity and applicable residential limits. A different combination may change the result."] : []),
+      ],
+      sources: [...base.sources, { title: estimate.officialSourceTitle, url: estimate.officialSourceUrl, version: estimate.specificationVersion }, { title: postcode.source.title, url: postcode.source.sourceUrl, version: postcode.source.specificationVersion },
+        ...[...new Set(model.indoorUnits?.map(unit => unit.sourceUrl) ?? [])].map(url => ({ title: "Selected indoor-unit capacities", url }))],
+    };
+  } catch (error) { return expectedFailure(base, error); }
 }
 
 function expectedFailure(base: ProductRebateProgramResult, error: unknown): ProductRebateProgramResult {
@@ -247,19 +324,34 @@ function solarVictoriaResult(request: ProductRebateCheckRequest, model: RebateMo
 export async function checkProductRebates(db: D1Database, request: ProductRebateCheckRequest, options: {
   now?: Date; dependencies?: Partial<ProductRebateDependencies>;
 } = {}): Promise<ProductRebateCheckResult> {
-  const model = models.find(product => product.id === request.productId);
-  if (!model) throw new ProductRebateCheckError("Choose a current heat-pump hot-water product from this catalogue.");
+  const hotWater = models.find(product => product.id === request.productId);
+  const cooling = coolingModels.find(product => product.id === request.productId);
+  const model = hotWater || cooling;
+  if (!model) throw new ProductRebateCheckError("Choose a current hot-water or air-conditioning product from this catalogue.");
+  const category = cooling?.category ?? "hot-water";
+  if (!currentRebateSystemOptions(category).some(option => option.value === request.currentSystem)) throw new ProductRebateCheckError("Choose the existing system for this product category.");
   const locality = resolveAddressLocalityTuple(request);
   if (!locality) throw new ProductRebateCheckError("Choose the matching suburb and state for your postcode.");
   const exactRequest = { ...request, ...locality };
   const dependencies = { ...defaultDependencies, ...options.dependencies };
-  const [sres, veu] = await Promise.all([
-    federalResult(db, exactRequest, model, dependencies), victorianResult(db, exactRequest, model, dependencies),
-  ]);
+  const now = options.now || new Date();
+  const results = hotWater ? [
+    ...await Promise.all([federalResult(db, exactRequest, hotWater, dependencies), victorianResult(db, exactRequest, hotWater, dependencies)]),
+    solarVictoriaResult(exactRequest, hotWater),
+  ] : cooling ? [await coolingResult(db, exactRequest, cooling, dependencies)] : [];
+  let prices: CertificatePriceDataset | null = null;
+  if (results.some(program => program.quantity !== null)) {
+    try { prices = await dependencies.loadPrices(db, { now }); }
+    catch (error) {
+      if (!describeCreditexCalculatorRouteError(error) && !(error instanceof Error &&
+        (error.message === "Certificate price history is temporarily unavailable." || /no such table: certificate_price_(sync_runs|history)/.test(error.message)))) throw error;
+    }
+  }
   return {
-    ok: true, productId: model.id, productName: model.name,
-    checkedAt: (options.now || new Date()).toISOString(), location: locality,
+    ok: true, productId: model.id, productName: model.name, category,
+    checkedAt: now.toISOString(), location: locality,
     installationDate: exactRequest.installationDate, currentSystem: exactRequest.currentSystem,
-    results: [sres, veu, solarVictoriaResult(exactRequest, model)],
+    results: results.map(program => ({ ...program, certificateValue: program.quantity !== null && program.unit !== null
+      ? productCertificateValue(prices, program.unit, program.quantity, program.unit === "STC" ? "air_source_heat_pump" : cooling ? "6" : hotWaterVeuActivity(request.currentSystem) || "", now) : null })),
   };
 }

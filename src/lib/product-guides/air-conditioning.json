@@ -259,11 +259,6 @@
         "label": "Indoor size, height x width x depth",
         "value": "299 x 885 x 195 mm",
         "sourceUrl": "https://www.mitsubishielectric.com.au/product/msz-ef-series-wall-mounted-air-conditioner/"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "MSZ-EF35VGKDW / MUZ-EF35VGD complete pair; this selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw"
       }
     ],
     "pros": [
@@ -896,7 +891,7 @@
   {
     "id": "lg-dualcool-ai-standard",
     "name": "LG DUALCOOL AI Standard 3.5 kW",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Manufacturer Australian product information",
@@ -923,10 +918,10 @@
         "revision": "3 November 2025 announcement: available October 2025"
       },
       {
-        "title": "Listed complete equipment-kit price",
-        "url": "https://www.climatehvac.com.au/lg-dualcool-as12s0s-ai-air-standard-3.5kw-wall-spl",
-        "kind": "Australian retailer equipment price",
-        "revision": "Live public equipment price checked 10 October 2026"
+        "title": "Official Australian exact-pair energy-rating record",
+        "url": "https://data.gov.au/data/api/3/action/datastore_search?resource_id=0973a476-eb0c-45e6-9a18-054f74307843&q=AS12S0N&limit=100",
+        "kind": "GEMS official register",
+        "revision": "AAC9291; AS12S0U / AS12S0N, Australia and New Zealand, registration expiry25August2030; checked12October2026"
       }
     ],
     "brand": "LG",
@@ -936,7 +931,15 @@
       "sourceUrl": "https://www.climatehvac.com.au/assets/full/AS09S0S.png?20251112084440"
     },
     "measurements": {
-      "efficiency": null,
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "AS12S0U / AS12S0N",
+        "basis": "Official exact matched outdoor/indoor registration AAC9291, h_star_mixed2.5; legacy Star2010_Heat is a different rating and not used.",
+        "sourceUrl": "https://data.gov.au/data/api/3/action/datastore_search?resource_id=0973a476-eb0c-45e6-9a18-054f74307843&q=AS12S0N&limit=100",
+        "checkedAt": "2026-10-12"
+      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -978,6 +981,11 @@
         "label": "Main equipment fault cover",
         "value": "Five years parts and labour; additional compressor-only parts term is separate.",
         "sourceUrl": "https://www.lg.com/content/dam/channel/wcms/au/pdfs/LG_DualCool_AI_Air_Split_Systems_Brochure_Nov_25.pdf"
+      },
+      {
+        "label": "Mixed-climate heating rating",
+        "value": "2.5 zoned stars for AS12S0U / AS12S0N, official registration AAC9291. Hot-climate3.0, cold-climate2.0.",
+        "sourceUrl": "https://data.gov.au/data/api/3/action/datastore_search?resource_id=0973a476-eb0c-45e6-9a18-054f74307843&q=AS12S0N&limit=100"
       }
     ],
     "pros": [
@@ -987,12 +995,7 @@
     "cons": [
       "Automatic airflow uses the position you enter; it does not follow you around."
     ],
-    "measurementGaps": {
-      "efficiency": {
-        "reason": "Current copies of the exact Australian brochure disagree on this model's mixed-climate heating stars.",
-        "sourceUrl": "https://www.lg.com/content/dam/channel/wcms/au/pdfs/LG_DualCool_AI_Air_Split_Systems_Brochure_Nov_25.pdf"
-      }
-    }
+    "measurementGaps": {}
   },
   {
     "id": "samsung-geo-windfree",
@@ -2349,11 +2352,6 @@
         "label": "Refrigerant",
         "value": "R32",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "MSZ-EF35VGKDW / MUZ-EF35VGD complete pair; this selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw"
       }
     ],
     "pros": [
@@ -2450,11 +2448,6 @@
         "label": "Refrigerant",
         "value": "R32",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "MSZ-EF35VGKDW / MUZ-EF35VGD complete pair; this selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw"
       }
     ],
     "pros": [
@@ -2551,11 +2544,6 @@
         "label": "Refrigerant",
         "value": "R32",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2025/04/Split-System-Brochure-2025-12.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "MSZ-EF35VGKDW / MUZ-EF35VGD complete pair; this selected configuration may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-3-5kw-split-system-air-conditioner-mszef35vgw"
       }
     ],
     "pros": [
@@ -6697,5 +6685,1642 @@
       "sourceUrl": "https://www.panasonic.com/content/dam/panasonic/au/en/pim/dam/CS/CS-Z35/CS-Z35AKRW_CU-Z35AKR-PP/ast-2506169.pdf",
       "note": "Exact AU pair appears in the current manufacturer range and a current Australian supplier listing. Document dates do not prove first launch."
     }
+  },
+  {
+    "id": "gree-pular-07",
+    "name": "Gree Pular 2.25 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH07AGAXB-K6DNA1A/I / GWH07AGAXB-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH07AGAXB-K6DNA1A/I / GWH07AGAXB-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH07AGAXB-K6DNA1A/I / GWH07AGAXB-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "2.25 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "2.7 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "22 to 39 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "260 x 704 x 185 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2 heating stars trail the 3-star smaller units in this range.",
+      "Its quietest setting is 22 dB; another unit in this range reaches 20 dB."
+    ]
+  },
+  {
+    "id": "gree-pular-09",
+    "name": "Gree Pular 2.65 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH09AGCXB-K6DNA1A/I / GWH09AGCXB-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH09AGCXB-K6DNA1A/I / GWH09AGCXB-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH09AGCXB-K6DNA1A/I / GWH09AGCXB-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "2.65 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "3.2 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "20 to 42 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "293 x 825 x 196 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2.65 kW cooling output is below the larger units in this range."
+    ]
+  },
+  {
+    "id": "gree-pular-12",
+    "name": "Gree Pular 3.52 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH12AGCXD-K6DNA1A/I / GWH12AGCXD-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH12AGCXD-K6DNA1A/I / GWH12AGCXD-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH12AGCXD-K6DNA1A/I / GWH12AGCXD-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "3.52 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "4 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "24 to 44 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "293 x 825 x 196 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its quietest setting is 24 dB; another unit in this range reaches 20 dB."
+    ]
+  },
+  {
+    "id": "gree-pular-18",
+    "name": "Gree Pular 5 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH18AGDXE-K6DNA1A/I / GWH18AGDXE-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH18AGDXE-K6DNA1A/I / GWH18AGDXE-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH18AGDXE-K6DNA1A/I / GWH18AGDXE-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "5 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "6 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "27 to 46 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "311 x 982 x 221 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its quietest setting is 27 dB; another unit in this range reaches 20 dB."
+    ]
+  },
+  {
+    "id": "gree-pular-21",
+    "name": "Gree Pular 6.4 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH21AGEXF-K6DNA1A/I / GWH21AGEXF-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH21AGEXF-K6DNA1A/I / GWH21AGEXF-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH21AGEXF-K6DNA1A/I / GWH21AGEXF-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "6.4 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "7.4 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "29 to 49 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "333 x 1075 x 246 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its quietest setting is 29 dB; another unit in this range reaches 20 dB.",
+      "The indoor unit needs 107.5 cm of wall width."
+    ]
+  },
+  {
+    "id": "gree-pular-24",
+    "name": "Gree Pular 7.1 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH24AGEXF-K6DNA1A/I / GWH24AGEXF-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH24AGEXF-K6DNA1A/I / GWH24AGEXF-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH24AGEXF-K6DNA1A/I / GWH24AGEXF-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "7.1 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "8 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "32 to 50 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "333 x 1075 x 246 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2.5 heating stars trail the 3-star smaller units in this range.",
+      "Its quietest setting is 32 dB; another unit in this range reaches 20 dB.",
+      "The indoor unit needs 107.5 cm of wall width."
+    ]
+  },
+  {
+    "id": "gree-pular-28",
+    "name": "Gree Pular 8.5 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Gree",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "GREEPULARHIWALLSPLITS-0625, June 2025; currently linked Australian brochure checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://greeac.com.au/warranty",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current six-year parts and labour warranty checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://greeac.com.au/products/show/gree-pular-hi-wall-inverter-split-system",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/gree-pular.webp",
+      "alt": "Gree Pular manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://greeac.com.au/storage/products/Pular/xPular-product-image-3.jpg.pagespeed.ic.IIyaxpstYY.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "GWH28AGEXH-K6DNA1A/I / GWH28AGEXH-K6DNA1A/O",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 6,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "GWH28AGEXH-K6DNA1A/I / GWH28AGEXH-K6DNA1A/O",
+        "basis": "Included 6-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://greeac.com.au/warranty",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Pular current Australian June 2025 brochure",
+      "released": null,
+      "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "GWH28AGEXH-K6DNA1A/I / GWH28AGEXH-K6DNA1A/O",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "8.5 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "9 kW",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "32 to 49 dB(A) sound pressure, lowest to highest published fan setting",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "333 x 1075 x 246 mm",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://greeac.com.au/storage/Gree-Pular-Brochure-8pp-2025-AU-Print.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "6 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://greeac.com.au/warranty"
+      }
+    ],
+    "pros": [
+      "Built-in phone control avoids buying a separate Wi-Fi adapter.",
+      "6-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2.5 heating stars trail the 3-star smaller units in this range.",
+      "Its quietest setting is 32 dB; another unit in this range reaches 20 dB.",
+      "The indoor unit needs 107.5 cm of wall width."
+    ]
+  },
+  {
+    "id": "midea-xtreme-20",
+    "name": "Midea Xtreme 2 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS20N / MFXS20W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS20N / MFXS20W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS20N / MFXS20W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "2 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "2.25 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "25 to 43 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "291 x 726 x 210 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 3 heating stars trail the 3.5-star smaller units in this range.",
+      "Its quietest setting is 25 dB; another unit in this range reaches 24.5 dB."
+    ]
+  },
+  {
+    "id": "midea-xtreme-26",
+    "name": "Midea Xtreme 2.65 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS26N / MFXS26W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS26N / MFXS26W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS26N / MFXS26W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "2.65 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "2.7 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "24.5 to 46.4 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "295 x 835 x 208 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2.65 kW cooling output is below the larger units in this range."
+    ]
+  },
+  {
+    "id": "midea-xtreme-35",
+    "name": "Midea Xtreme 3.55 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 3,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS35N / MFXS35W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS35N / MFXS35W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS35N / MFXS35W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "3.55 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "4 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "3 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "24.5 to 46.7 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "295 x 835 x 208 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 3 heating stars trail the 3.5-star smaller units in this range."
+    ]
+  },
+  {
+    "id": "midea-xtreme-50",
+    "name": "Midea Xtreme 5 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS50N / MFXS50W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS50N / MFXS50W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS50N / MFXS50W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "5 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "5.2 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "28 to 47.1 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "320 x 969 x 241 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2.5 heating stars trail the 3.5-star smaller units in this range.",
+      "Its quietest setting is 28 dB; another unit in this range reaches 24.5 dB."
+    ]
+  },
+  {
+    "id": "midea-xtreme-60",
+    "name": "Midea Xtreme 6 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS60N / MFXS60W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS60N / MFXS60W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS60N / MFXS60W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "6 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "6.2 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "1.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "28 to 47.1 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "320 x 969 x 241 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2 heating stars trail the 3.5-star smaller units in this range.",
+      "Its quietest setting is 28 dB; another unit in this range reaches 24.5 dB."
+    ]
+  },
+  {
+    "id": "midea-xtreme-70",
+    "name": "Midea Xtreme 7 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS70N / MFXS70W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS70N / MFXS70W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS70N / MFXS70W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "7 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "7.5 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "1.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "29.5 to 57.6 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "336 x 1083 x 244 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2.5 heating stars trail the 3.5-star smaller units in this range.",
+      "Its quietest setting is 29.5 dB; another unit in this range reaches 24.5 dB.",
+      "The indoor unit needs 108.3 cm of wall width."
+    ]
+  },
+  {
+    "id": "midea-xtreme-80",
+    "name": "Midea Xtreme 8 kW",
+    "checkedAt": "2026-10-12",
+    "brand": "Midea",
+    "sources": [
+      {
+        "title": "Australian exact matched-model specifications",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current April 2026 Australian brochure, MFXS matched pairs on page 14; checked 12 October 2026"
+      },
+      {
+        "title": "Current Australian residential warranty",
+        "url": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "kind": "Manufacturer Australian information",
+        "revision": "October 2026 Standard Warranty Periods; residential split systems seven years, commercial two years. Older July 2025 conditions state five years."
+      },
+      {
+        "title": "Current Australian range page",
+        "url": "https://mdhome.com.au/product/xtreme-series/",
+        "kind": "Manufacturer Australian information",
+        "revision": "Current listing checked 12 October 2026; exact model specifications use the linked brochure, not older range codes"
+      }
+    ],
+    "image": {
+      "src": "/products/air-conditioning/midea-xtreme.webp",
+      "alt": "Midea Xtreme manufacturer range photograph; exact unit dimensions vary by capacity",
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2024/06/c7e43a7cdea5bbe.webp"
+    },
+    "measurements": {
+      "efficiency": {
+        "value": 2,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "MFXS80N / MFXS80W",
+        "basis": "Residential Average/Mixed climate heating stars for this exact indoor and outdoor pair.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+        "checkedAt": "2026-10-12"
+      },
+      "warranty": {
+        "value": 7,
+        "unit": "included-product-years",
+        "basisId": "main-product-parts",
+        "variant": "MFXS80N / MFXS80W",
+        "basis": "Included 7-year Australian residential main-product parts and labour cover; correct installation and warranty conditions apply. Commercial and accessory terms differ.",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf",
+        "checkedAt": "2026-10-12"
+      }
+    },
+    "freshness": {
+      "generation": "Xtreme MFXS Australian April 2026 brochure",
+      "released": null,
+      "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf",
+      "note": "This dates the current Australian document and exact listed generation, not an unverified first-sale date."
+    },
+    "technicalSpecs": [
+      {
+        "label": "Exact indoor and outdoor pair",
+        "value": "MFXS80N / MFXS80W",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated cooling output",
+        "value": "8 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Rated heating output",
+        "value": "8.5 kW",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Average/Mixed climate heating rating",
+        "value": "2 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Cold climate heating rating",
+        "value": "1.5 residential stars",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor noise",
+        "value": "29.5 to 57.6 dB(A) sound pressure, silent to turbo setting",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Indoor size, height x width x depth",
+        "value": "336 x 1083 x 244 mm",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Refrigerant",
+        "value": "R32",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Power supply",
+        "value": "220-240 V, single phase, 50 Hz",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/04/xtreme-brochure.pdf"
+      },
+      {
+        "label": "Residential product fault cover",
+        "value": "7 years parts and labour; correct installation, maintenance and warranty terms apply",
+        "sourceUrl": "https://mdhome.com.au/wp-content/uploads/2026/10/Standard-Warranty-Periods.pdf"
+      }
+    ],
+    "pros": [
+      "The remote measures room temperature where you sit.",
+      "7-year residential parts and labour cover is included."
+    ],
+    "cons": [
+      "Its 2 heating stars trail the 3.5-star smaller units in this range.",
+      "Its quietest setting is 29.5 dB; another unit in this range reaches 24.5 dB.",
+      "The indoor unit needs 108.3 cm of wall width."
+    ]
   }
 ]

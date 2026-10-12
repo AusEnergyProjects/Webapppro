@@ -55,11 +55,19 @@ export function PublicSiteSearch() {
       focusedDisclosure?.querySelector<HTMLElement>("summary")?.focus();
     }
 
+    function closeNavigationOnSelection(event: MouseEvent) {
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      const disclosure = link?.closest<HTMLDetailsElement>(OPEN_NAVIGATION_SELECTOR);
+      if (disclosure) disclosure.open = false;
+    }
+
     document.addEventListener("pointerdown", closeWhenOutside);
     document.addEventListener("keydown", closeNavigationOnEscape);
+    document.addEventListener("click", closeNavigationOnSelection);
     return () => {
       document.removeEventListener("pointerdown", closeWhenOutside);
       document.removeEventListener("keydown", closeNavigationOnEscape);
+      document.removeEventListener("click", closeNavigationOnSelection);
     };
   }, []);
 

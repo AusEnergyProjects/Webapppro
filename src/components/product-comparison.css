@@ -18,6 +18,13 @@
 .product-comparison-toolbar-help button:disabled { cursor: wait; opacity: .6; }
 .product-comparison-rating-key { color: #bdd0d5; font-size: .78rem; line-height: 1.5; margin: 0 0 18px; }
 .product-comparison-toolbar :is(input, select):disabled { background: #edf1f1; color: #526567; cursor: wait; }
+.product-comparison-metric-filters { align-items: end; display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)) max-content; margin-bottom: 18px; }
+.product-comparison-metric-filters label { color: #dbe9ed; display: grid; font-size: .78rem; font-weight: 700; gap: 6px; }
+.product-comparison-metric-filters select { background: #fff; border: 1px solid #91b1b5; border-radius: 10px; color: #062f37; font: inherit; font-size: .94rem; min-height: 46px; padding: 10px 12px; width: 100%; }
+.product-comparison-metric-filters button { background: transparent; border: 1px solid #57777b; border-radius: 9px; color: #d1eee5; cursor: pointer; font: inherit; font-size: .8rem; min-height: 46px; padding: 10px 16px; }
+.product-comparison-metric-filters-multiple button { grid-column: 3; grid-row: 1 / span 2; }
+.product-comparison-metric-filters :disabled { cursor: default; opacity: .6; }
+.product-comparison-filter-note { color: #bdd0d5; font-size: .8rem; margin: 0 0 12px; }
 .product-comparison-grid { display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .product-comparison-card { background: #fff; border: 2px solid transparent; border-radius: 20px; color: #083037; display: flex; flex-direction: column; overflow: hidden; scroll-margin-top: 20px; }
 .product-comparison-selected { border-color: #61ecc0; box-shadow: 0 0 0 3px #61ecc026; }
@@ -66,16 +73,11 @@
 .product-comparison-dialog-header h2 { font-size: 1.15rem; margin: 0; overflow-wrap: anywhere; }
 .product-comparison-dialog-header button { background: #eef6f4; border: 1px solid #b9d2ca; border-radius: 9px; color: #173f39; cursor: pointer; flex-shrink: 0; font: inherit; font-size: .8rem; font-weight: 750; min-height: 44px; padding: 10px 14px; }
 .product-comparison-comparison-scroll { overflow-x: auto; }
-.product-comparison-comparison-grid { display: grid; column-gap: 16px; grid-template-rows: 180px auto repeat(2, auto) repeat(4, auto) auto; padding: 20px; }
-.product-comparison-comparison-grid article { background: #fff; border: 1px solid #dbe5e5; border-radius: 14px; display: grid; grid-row: span 9; grid-template-rows: subgrid; overflow: hidden; }
+.product-comparison-comparison-grid { display: grid; column-gap: 16px; padding: 20px; }
+.product-comparison-comparison-grid article { background: #fff; border: 1px solid #dbe5e5; border-radius: 14px; display: grid; grid-template-rows: subgrid; overflow: hidden; }
 .product-comparison-hot-water { border-top: 1px solid #dce7e7; margin: 14px 0; padding-top: 12px; }
-.product-comparison-hot-water dl { display: grid; gap: 12px; margin: 0; }
-.product-comparison-hot-water dt { color: #043648; font-weight: 700; }
-.product-comparison-hot-water dd { color: #395766; margin: 4px 0 0; }
 .product-comparison-hot-water p { color: #58707b; font-size: .78rem; line-height: 1.5; margin: 12px 0 0; }
 .product-comparison-hot-water a { color: #006d59; }
-.product-comparison-comparison-grid-hot-water { grid-template-rows: 180px auto repeat(2, auto) repeat(2, auto) repeat(4, auto) auto; }
-.product-comparison-comparison-grid-hot-water article { grid-row: span 11; }
 .product-comparison-comparison-grid .product-comparison-hot-water { margin: 0 18px 14px; }
 .product-comparison-comparison-grid .product-rebate-result { margin: 0 18px 14px; }
 .product-comparison-comparison-grid .product-comparison-photo { height: 180px; }
@@ -137,7 +139,7 @@
 .product-rebate-programs [data-rebate-status="not-confirmed"] strong { color: #845d26; }
 .product-rebate-programs [data-rebate-status="not-applicable"] { background: #f3f5f6; border-color: #d6e0e3; }
 .product-rebate-programs [data-rebate-status="not-applicable"] strong { color: #52666e; }
-@media (max-width: 600px) { .product-rebate-home { border-radius: 14px; padding: 18px; } .product-rebate-home h2 { font-size: 1.3rem; } .product-rebate-inputs { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) { .product-rebate-home { border-radius: 14px; padding: 18px; } .product-rebate-home h2 { font-size: 1.3rem; } .product-rebate-inputs, .product-comparison-metric-filters { grid-template-columns: minmax(0, 1fr); } .product-comparison-metric-filters-multiple button { grid-column: auto; grid-row: auto; } }
 .product-comparison-page :is(a, button, input, select):focus-visible, .product-comparison-dialog :is(a, button):focus-visible, .product-comparison-comparison-scroll:focus-visible { outline: 3px solid #b97818; outline-offset: 3px; }
 @media (max-width: 1000px) { .product-comparison-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .product-comparison-toolbar { grid-template-columns: minmax(0, 1fr) minmax(130px, .6fr); } .product-comparison-toolbar-help { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; grid-column: 1 / -1; justify-content: space-between; text-align: left; } .product-comparison-toolbar p { margin: 0; text-align: left; } }
 @media (max-width: 600px) { .product-comparison-hero { margin: 20px 0 14px; } .product-comparison-hero a { font-size: .78rem; } .product-comparison-categories { gap: 6px; margin-bottom: 16px; } .product-comparison-categories a { font-size: .8rem; padding: 11px 13px; } .product-comparison-toolbar { gap: 10px; } .product-comparison-toolbar input, .product-comparison-toolbar select { font-size: .85rem; } .product-comparison-grid { gap: 14px; grid-template-columns: minmax(0, 1fr); } .product-comparison-photo { height: 180px; } .product-comparison-card-body { padding: 18px; } .product-comparison-tray { bottom: 8px; flex-direction: column; gap: 10px; padding: 10px; width: calc(100% - 16px); } .product-comparison-picks { width: 100%; } .product-comparison-picks button { font-size: .65rem; gap: 4px; padding: 4px; } .product-comparison-picks img { height: 28px; width: 28px; } .product-comparison-tray-actions { justify-content: flex-end; width: 100%; } .product-comparison-dialog-header { padding: 14px; } .product-comparison-comparison-grid { gap: 10px; padding: 12px; } }

@@ -57,7 +57,7 @@ test("equipment categories use consistent measures and reject unknown category m
   for (const category of ["solar", "inverters", "batteries", "hot-water", "air-conditioning", "multi-split"]) {
     const methods = productRatingMethods(category);
     const capacityCategories = ["batteries", "hot-water", "multi-split"];
-    assert.deepEqual(methods.map(method => method.id), [capacityCategories.includes(category) ? "capacity" : "efficiency", "warranty"]);
+    assert.deepEqual(methods.map(method => method.id), [capacityCategories.includes(category) ? "capacity" : "efficiency", "warranty", ...(category === "hot-water" ? ["noise", "recovery"] : [])]);
     assert.equal(methods[1].label, "Parts warranty");
     assert.ok(methods.every(method => method.maximum > 0));
     const warranty = methods[1];
@@ -88,10 +88,11 @@ test("capacity bars use actual published storage, tank volume or simultaneous ou
 test("all catalogue methods and rating payloads omit cost and its obsolete public projection", () => {
   for (const slug of ["solar", "inverters", "batteries", "hot-water", "air-conditioning", "multi-split", "ev-chargers"]) {
     const methods = productRatingMethods(slug);
-    assert.equal(methods.length, 2);
+    assert.equal(methods.length, slug === "hot-water" ? 4 : 2);
     assert.ok(methods.every(method => method.id !== "cost"));
     for (const method of methods) {
-      const known = calculateProductRating(method, measurement(method, method.maximum / 2));
+      const midpoint = method.direction === "lower" ? ((method.minimum ?? 0) + method.maximum) / 2 : method.maximum / 2;
+      const known = calculateProductRating(method, measurement(method, midpoint));
       assert.equal(known.score, 2.5);
       assert.equal(Object.hasOwn(known, "costEvidence"), false);
       assert.equal(Object.hasOwn(calculateProductRating(method, null), "costEvidence"), false);
@@ -99,6 +100,27 @@ test("all catalogue methods and rating payloads omit cost and its obsolete publi
     }
   }
   assert.equal(Object.hasOwn(ratingExports, "publicProductRating"), false);
+});
+
+test("noise bars favour quieter readings and never turn a missing reading into a quiet score", () => {
+  const method = productRatingMethods("hot-water").find(method => method.id === "noise");
+  assert.equal(method.unit, "published-noise-db");
+  assert.equal(method.direction, "lower");
+  assert.deepEqual([25, 35, 45, 50, 55, 65, 75].map(value => calculateProductRating(method, measurement(method, value)).score), [5, 5, 3.3, 2.5, 1.7, 0, 0]);
+  assert.equal(calculateProductRating(method, null).score, null);
+  assert.match(method.explanation, /More bars means quieter/);
+});
+
+test("reheating bars use litres per hour and the slower end of a source range", () => {
+  const method = productRatingMethods("hot-water").find(method => method.id === "recovery");
+  assert.equal(method.unit, "recovery-litres-per-hour");
+  assert.equal(calculateProductRating(method, measurement(method, 50, { valueMaximum: 60 })).score, 1.7);
+  assert.equal(calculateProductRating(method, measurement(method, 150)).score, 5);
+  assert.equal(calculateProductRating(method, null).score, null);
+  assert.equal(calculateProductRating(method, measurement(method, 75, { unit: "minutes-per-100-litres" })).score, null);
+  for (const valueMaximum of [49, NaN, Infinity]) {
+    assert.throws(() => calculateProductRating(method, measurement(method, 50, { valueMaximum })), /Invalid recovery/);
+  }
 });
 
 test("EV charger bars compare rated AC power rather than inventing an efficiency figure", () => {

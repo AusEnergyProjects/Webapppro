@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import * as jsxRuntime from "react/jsx-runtime";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
@@ -58,6 +60,47 @@ const robots = read("../src/app/robots.ts");
 const sitemap = read("../src/app/sitemap.ts");
 const manifest = read("../src/app/manifest.ts");
 const socialAsset = path.resolve(directory, "../public/aea-home-energy-plan-og-v2.png");
+
+test("navigation selection closes its native disclosure for pointer and keyboard activation and cleans up", () => {
+  const listeners = new Map();
+  const effects = [];
+  const previousElement = Object.getOwnPropertyDescriptor(globalThis, "Element");
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  class TargetElement {
+    constructor(ancestors = {}) { this.ancestors = ancestors; }
+    closest(selector) { return this.ancestors[selector] ?? null; }
+  }
+  Object.defineProperty(globalThis, "Element", { configurable: true, value: TargetElement });
+  Object.defineProperty(globalThis, "document", { configurable: true, value: {
+    addEventListener: (name, handler) => listeners.set(name, handler),
+    removeEventListener: (name, handler) => { assert.equal(listeners.get(name), handler); listeners.delete(name); },
+  } });
+  try {
+    const dependencies = {
+      react: { useEffect: callback => effects.push(callback), useId: () => "search", useMemo: callback => callback(), useRef: () => ({ current: null }), useState: value => [value, () => {}] },
+      "react/jsx-runtime": jsxRuntime, "next/navigation": { useRouter: () => ({}) }, "./PublicSiteSearch.module.css": { default: {} },
+    };
+    const source = ts.transpileModule(publicSiteSearch, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+    const exports = {};
+    Function("require", "exports", source)(name => { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; }, exports);
+    exports.PublicSiteSearch();
+    const cleanups = effects.map(effect => effect()).filter(cleanup => typeof cleanup === "function");
+    assert.deepEqual([...listeners.keys()].sort(), ["click", "keydown", "pointerdown"]);
+    const disclosure = { open: true };
+    const link = new TargetElement({ ".site-nav-shell details[open]": disclosure });
+    const child = new TargetElement({ "a[href]": link });
+    for (const detail of [1, 0]) { disclosure.open = true; listeners.get("click")({ target: child, detail }); assert.equal(disclosure.open, false); }
+    disclosure.open = true;
+    listeners.get("click")({ target: new TargetElement({ "a[href]": new TargetElement() }) });
+    listeners.get("click")({ target: {} });
+    assert.equal(disclosure.open, true, "links outside navigation and non-elements do not close an unrelated disclosure");
+    cleanups.forEach(cleanup => cleanup());
+    assert.equal(listeners.size, 0);
+  } finally {
+    if (previousElement) Object.defineProperty(globalThis, "Element", previousElement); else delete globalThis.Element;
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument); else delete globalThis.document;
+  }
+});
 const surgeHomeAsset = path.resolve(directory, "../public/aea-home-architecture.webp");
 const rootIcon = fs.readFileSync(path.resolve(directory, "../src/app/icon.png"));
 const rootAppleIcon = fs.readFileSync(path.resolve(directory, "../src/app/apple-icon.png"));
@@ -105,7 +148,9 @@ test("shared navigation groups public pages into clear consumer journeys", () =>
   assert.match(chrome, /<SurgeHeaderButton active=\{active === "surge"\} \/>/);
   assert.match(chrome, /<ResponsiveSiteNav active=\{active\} \/>/);
   assert.match(responsiveNav, /href="\/"[\s\S]*?>[\s\S]*?Home/);
-  assert.match(responsiveNav, /className="site-nav-quick-links"[\s\S]*?href="\/guides\/products"[\s\S]*?>Compare products<\/Link>/);
+  assert.match(responsiveNav, /className="site-nav-quick-links"[\s\S]*?site-nav-products[\s\S]*?<span>Compare products<\/span>/);
+  for (const slug of ["solar", "inverters", "batteries", "hot-water", "air-conditioning", "multi-split", "ev-chargers"]) assert.ok(responsiveNav.includes(`"/guides/products/${slug}"`));
+  assert.match(responsiveNav, /\["\/guides\/products", "All products"\]/);
   assert.match(responsiveNav, /label: "Assessments"/);
   assert.match(responsiveNav, /label: "Plan & upgrades"/);
   assert.match(responsiveNav, /label: "Bills & rebates"/);
@@ -241,7 +286,7 @@ test("desktop categories and the mobile page browser use lightweight native disc
   assert.match(responsiveNav, /<details className=\{`site-nav-category/);
   assert.match(responsiveNav, /name="site-navigation-categories"/);
   assert.match(responsiveNav, /<summary[\s\S]*?className="site-nav-category-trigger"/);
-  assert.match(responsiveNav, /<details className="site-nav-mobile-disclosure">[\s\S]*?<summary className="site-nav-mobile-trigger">[\s\S]*?Browse pages/);
+  assert.match(responsiveNav, /<details className="site-nav-mobile-disclosure" name="site-navigation-categories">[\s\S]*?<summary className="site-nav-mobile-trigger">[\s\S]*?Browse pages/);
   assert.match(responsiveNav, /className="site-nav-mobile-groups"/);
   assert.match(responsiveNav, /aria-current=\{isActive \? "true" : undefined\}/);
   assert.doesNotMatch(responsiveNav, /role="menu|role="menuitem|site-nav-scroll-cue|Swipe/);

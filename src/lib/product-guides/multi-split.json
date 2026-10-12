@@ -472,11 +472,6 @@
         "label": "Separate Wi-Fi cover",
         "value": "Wi-Fi devices have a one-year term; confirm built-in module scope.",
         "sourceUrl": "https://a.storyblok.com/f/293064688899482/e2c0c3efaa/ac-all-models-2512-war.pdf"
-      },
-      {
-        "label": "Equipment price scope",
-        "value": "Outdoor unit plus all three exact room units and standard controllers; installation and piping excluded.",
-        "sourceUrl": "https://gphvac.com.au/product/rin-mon3h07b1la/"
       }
     ],
     "pros": [
@@ -610,11 +605,6 @@
         "label": "Manufacturer kit code",
         "value": "MXZFAPVGKDKIT52A",
         "sourceUrl": "https://www.mitsubishielectric.com.au/wp-content/uploads/2022/03/Flyer_MXZ-F-VGKD-Multi-Split-Kits-2025-04.pdf"
-      },
-      {
-        "label": "Range cost reference",
-        "value": "1 x MXZ-2F52VF-A1 + 2 x MSZ-AP25VGKD2-A2; the selected outdoor variant may cost differently.",
-        "sourceUrl": "https://www.ozaironline.com.au/products/mitsubishi-electric-5-2kw-multi-head-outdoor-unit-only-mxz-2f52vf-a1"
       }
     ],
     "freshness": {
@@ -1871,567 +1861,552 @@
   },
   {
     "id": "panasonic-multi-cu-2z52vbr-2-mrz",
-    "name": "Panasonic MRZ 2-room 5.2 kW combination",
+    "name": "Panasonic CU-2Z52VBR 5.2 kW",
     "brand": "Panasonic",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
-        "title": "Exact Australian model and supported combinations",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "title": "Current Australian outdoor lineup and specifications",
+        "url": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
         "kind": "Manufacturer Australian information",
-        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+        "revision": "Current AU VBR lineup, capacity and maximum room counts checked 12 October 2026"
       },
       {
-        "title": "Included residential product warranty",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "title": "Australian air-conditioner warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
         "kind": "Manufacturer Australian information",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CU-2Z52VBR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-5-2kw-multi-head-outdoor-unit-only-cu-2z52vbr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CS-MRZ25WKR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Retailer GST and delivery terms",
-        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
-        "kind": "Australian public retailer price terms",
-        "revision": "Current Australian information checked 10 October 2026"
+        "revision": "Issue 5, five-year parts and labour warranty; checked 12 October 2026"
       }
     ],
     "image": {
-      "src": "/products/multi-split/panasonic-mrz-25-20261010.webp",
-      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
-      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
+      "src": "/products/multi-split/panasonic-cu-2z52vbr.webp",
+      "alt": "Panasonic CU-2Z52VBR outdoor unit; indoor room units are selected separately",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-2kw-multi-head-outdoor-unit-only-cu-2z52vbr"
     },
     "measurements": {
       "capacity": {
         "value": 5.2,
         "unit": "cooling-kw",
         "basisId": "multi-split-rated-cooling",
-        "variant": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
-        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-2Z52VBR",
+        "basis": "Manufacturer rated cooling for this outdoor unit. Actual combined room output is limited by the selected indoor units; no preselected room-unit package is claimed.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+        "checkedAt": "2026-10-12"
       },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
         "basisId": "main-product-parts",
-        "variant": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
-        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-2Z52VBR",
+        "basis": "Included five-year Australian manufacturing-defect parts and labour cover; correct installation and warranty conditions apply.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
+        "checkedAt": "2026-10-12"
       }
     },
     "technicalSpecs": [
       {
-        "label": "Exact equipment combination",
-        "value": "1 x CU-2Z52VBR + 2 x CS-MRZ25WKR",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Outdoor model",
+        "value": "CU-2Z52VBR",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Selected room units",
-        "value": "2 high-wall room units, with handheld controls",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Maximum room units",
+        "value": "2 compatible indoor units, selected separately",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Rated system cooling output",
-        "value": "5.2 kW; shared outdoor output, not the sum of room labels",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor cooling output",
+        "value": "5.2 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Phone and room controls",
-        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor heating output",
+        "value": "6.1 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Maximum connected room-unit capacity",
+        "value": "7.7 kW; this is not simultaneous outdoor output",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Room-unit choices",
+        "value": "Wall-mounted, slim ducted, mini cassette and floor console options; exact model compatibility must match the manufacturer combination tables",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Phone control",
+        "value": "Z-series room units include Wi-Fi; RZ, ducted, cassette and floor-console options need the supported network adapter",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Outdoor temperature range",
+        "value": "Cooling up to 46 C; heating down to -15 C",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Refrigerant",
         "value": "R32",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Residential product fault cover",
-        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
-      },
-      {
-        "label": "Household power supply",
-        "value": "Single-phase household supply",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "value": "Five years parts and labour under the Australian warranty conditions",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf"
       }
     ],
     "pros": [
-      "2 rooms share one outdoor box.",
-      "Set each room temperature and timer separately."
+      "Up to 2 rooms can share one outdoor box.",
+      "Choose wall, floor, cassette or concealed room units."
     ],
     "cons": [
-      "Phone control requires a separate adapter for each room unit."
+      "Cannot serve 3 room units from this outdoor box."
     ],
     "freshness": {
-      "generation": "CU-2Z52VBR with selected current AU room units",
+      "generation": "CU-2Z52VBR current Australian VBR outdoor unit",
       "released": null,
-      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+      "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "note": "Currently listed by Panasonic Australia. Room units are selected separately; an unverified kit or first-sale date is not claimed."
     }
   },
   {
     "id": "panasonic-multi-cu-3z54vbr-3-mrz",
-    "name": "Panasonic MRZ 3-room 5.4 kW combination",
+    "name": "Panasonic CU-3Z54VBR 5.4 kW",
     "brand": "Panasonic",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
-        "title": "Exact Australian model and supported combinations",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "title": "Current Australian outdoor lineup and specifications",
+        "url": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
         "kind": "Manufacturer Australian information",
-        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+        "revision": "Current AU VBR lineup, capacity and maximum room counts checked 12 October 2026"
       },
       {
-        "title": "Included residential product warranty",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "title": "Australian air-conditioner warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
         "kind": "Manufacturer Australian information",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CU-3Z54VBR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-5-4kw-multi-head-outdoor-unit-only-cu-3z54vbr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CS-MRZ20WKR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Retailer GST and delivery terms",
-        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
-        "kind": "Australian public retailer price terms",
-        "revision": "Current Australian information checked 10 October 2026"
+        "revision": "Issue 5, five-year parts and labour warranty; checked 12 October 2026"
       }
     ],
     "image": {
-      "src": "/products/multi-split/panasonic-mrz-20-20261010.webp",
-      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
-      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr"
+      "src": "/products/multi-split/panasonic-cu-3z54vbr.webp",
+      "alt": "Panasonic CU-3Z54VBR outdoor unit; indoor room units are selected separately",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-5-4kw-multi-head-outdoor-unit-only-cu-3z54vbr"
     },
     "measurements": {
       "capacity": {
         "value": 5.4,
         "unit": "cooling-kw",
         "basisId": "multi-split-rated-cooling",
-        "variant": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
-        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-3Z54VBR",
+        "basis": "Manufacturer rated cooling for this outdoor unit. Actual combined room output is limited by the selected indoor units; no preselected room-unit package is claimed.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+        "checkedAt": "2026-10-12"
       },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
         "basisId": "main-product-parts",
-        "variant": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
-        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-3Z54VBR",
+        "basis": "Included five-year Australian manufacturing-defect parts and labour cover; correct installation and warranty conditions apply.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
+        "checkedAt": "2026-10-12"
       }
     },
     "technicalSpecs": [
       {
-        "label": "Exact equipment combination",
-        "value": "1 x CU-3Z54VBR + 3 x CS-MRZ20WKR",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Outdoor model",
+        "value": "CU-3Z54VBR",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Selected room units",
-        "value": "3 high-wall room units, with handheld controls",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Maximum room units",
+        "value": "3 compatible indoor units, selected separately",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Rated system cooling output",
-        "value": "5.4 kW; shared outdoor output, not the sum of room labels",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor cooling output",
+        "value": "5.4 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Phone and room controls",
-        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor heating output",
+        "value": "7 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Maximum connected room-unit capacity",
+        "value": "9.5 kW; this is not simultaneous outdoor output",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Room-unit choices",
+        "value": "Wall-mounted, slim ducted, mini cassette and floor console options; exact model compatibility must match the manufacturer combination tables",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Phone control",
+        "value": "Z-series room units include Wi-Fi; RZ, ducted, cassette and floor-console options need the supported network adapter",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Outdoor temperature range",
+        "value": "Cooling up to 46 C; heating down to -15 C",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Refrigerant",
         "value": "R32",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Residential product fault cover",
-        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
-      },
-      {
-        "label": "Household power supply",
-        "value": "Single-phase household supply",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "value": "Five years parts and labour under the Australian warranty conditions",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf"
       }
     ],
     "pros": [
-      "3 rooms share one outdoor box.",
-      "Set each room temperature and timer separately."
+      "Up to 3 rooms can share one outdoor box.",
+      "Choose wall, floor, cassette or concealed room units."
     ],
     "cons": [
-      "Phone control requires a separate adapter for each room unit."
+      "Cannot serve 4 room units from this outdoor box."
     ],
     "freshness": {
-      "generation": "CU-3Z54VBR with selected current AU room units",
+      "generation": "CU-3Z54VBR current Australian VBR outdoor unit",
       "released": null,
-      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+      "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "note": "Currently listed by Panasonic Australia. Room units are selected separately; an unverified kit or first-sale date is not claimed."
     }
   },
   {
     "id": "panasonic-multi-cu-4z71vbr-4-mrz",
-    "name": "Panasonic MRZ 4-room 7.1 kW combination",
+    "name": "Panasonic CU-4Z71VBR 7.1 kW",
     "brand": "Panasonic",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
-        "title": "Exact Australian model and supported combinations",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "title": "Current Australian outdoor lineup and specifications",
+        "url": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
         "kind": "Manufacturer Australian information",
-        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+        "revision": "Current AU VBR lineup, capacity and maximum room counts checked 12 October 2026"
       },
       {
-        "title": "Included residential product warranty",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "title": "Australian air-conditioner warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
         "kind": "Manufacturer Australian information",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CU-4Z71VBR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-7-1kw-multi-head-outdoor-unit-only-cu-4z71vbr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CS-MRZ25WKR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Retailer GST and delivery terms",
-        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
-        "kind": "Australian public retailer price terms",
-        "revision": "Current Australian information checked 10 October 2026"
+        "revision": "Issue 5, five-year parts and labour warranty; checked 12 October 2026"
       }
     ],
     "image": {
-      "src": "/products/multi-split/panasonic-mrz-25-20261010.webp",
-      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
-      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
+      "src": "/products/multi-split/panasonic-cu-4z71vbr.webp",
+      "alt": "Panasonic CU-4Z71VBR outdoor unit; indoor room units are selected separately",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-7-1kw-multi-head-outdoor-unit-only-cu-4z71vbr"
     },
     "measurements": {
       "capacity": {
         "value": 7.1,
         "unit": "cooling-kw",
         "basisId": "multi-split-rated-cooling",
-        "variant": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
-        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-4Z71VBR",
+        "basis": "Manufacturer rated cooling for this outdoor unit. Actual combined room output is limited by the selected indoor units; no preselected room-unit package is claimed.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+        "checkedAt": "2026-10-12"
       },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
         "basisId": "main-product-parts",
-        "variant": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
-        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-4Z71VBR",
+        "basis": "Included five-year Australian manufacturing-defect parts and labour cover; correct installation and warranty conditions apply.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
+        "checkedAt": "2026-10-12"
       }
     },
     "technicalSpecs": [
       {
-        "label": "Exact equipment combination",
-        "value": "1 x CU-4Z71VBR + 4 x CS-MRZ25WKR",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Outdoor model",
+        "value": "CU-4Z71VBR",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Selected room units",
-        "value": "4 high-wall room units, with handheld controls",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Maximum room units",
+        "value": "4 compatible indoor units, selected separately",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Rated system cooling output",
-        "value": "7.1 kW; shared outdoor output, not the sum of room labels",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor cooling output",
+        "value": "7.1 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Phone and room controls",
-        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor heating output",
+        "value": "8.5 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Maximum connected room-unit capacity",
+        "value": "11.5 kW; this is not simultaneous outdoor output",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Room-unit choices",
+        "value": "Wall-mounted, slim ducted, mini cassette and floor console options; exact model compatibility must match the manufacturer combination tables",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Phone control",
+        "value": "Z-series room units include Wi-Fi; RZ, ducted, cassette and floor-console options need the supported network adapter",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Outdoor temperature range",
+        "value": "Cooling up to 46 C; heating down to -15 C",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Refrigerant",
         "value": "R32",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Residential product fault cover",
-        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
-      },
-      {
-        "label": "Household power supply",
-        "value": "Single-phase household supply",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "value": "Five years parts and labour under the Australian warranty conditions",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf"
       }
     ],
     "pros": [
-      "4 rooms share one outdoor box.",
-      "Set each room temperature and timer separately."
+      "Up to 4 rooms can share one outdoor box.",
+      "Choose wall, floor, cassette or concealed room units."
     ],
     "cons": [
-      "Phone control requires a separate adapter for each room unit."
+      "Cannot serve 5 room units from this outdoor box."
     ],
     "freshness": {
-      "generation": "CU-4Z71VBR with selected current AU room units",
+      "generation": "CU-4Z71VBR current Australian VBR outdoor unit",
       "released": null,
-      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+      "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "note": "Currently listed by Panasonic Australia. Room units are selected separately; an unverified kit or first-sale date is not claimed."
     }
   },
   {
     "id": "panasonic-multi-cu-4z80vbr-4-mrz",
-    "name": "Panasonic MRZ 4-room 8 kW combination",
+    "name": "Panasonic CU-4Z80VBR 8 kW",
     "brand": "Panasonic",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
-        "title": "Exact Australian model and supported combinations",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "title": "Current Australian outdoor lineup and specifications",
+        "url": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
         "kind": "Manufacturer Australian information",
-        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+        "revision": "Current AU VBR lineup, capacity and maximum room counts checked 12 October 2026"
       },
       {
-        "title": "Included residential product warranty",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "title": "Australian air-conditioner warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
         "kind": "Manufacturer Australian information",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CU-4Z80VBR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-8kw-multi-head-outdoor-unit-only-cu-4z80vbr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CS-MRZ25WKR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Retailer GST and delivery terms",
-        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
-        "kind": "Australian public retailer price terms",
-        "revision": "Current Australian information checked 10 October 2026"
+        "revision": "Issue 5, five-year parts and labour warranty; checked 12 October 2026"
       }
     ],
     "image": {
-      "src": "/products/multi-split/panasonic-mrz-25-20261010.webp",
-      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
-      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2-5kw-multi-head-indoor-unit-only-cs-mrz25wkr"
+      "src": "/products/multi-split/panasonic-cu-4z80vbr.webp",
+      "alt": "Panasonic CU-4Z80VBR outdoor unit; indoor room units are selected separately",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-8kw-multi-head-outdoor-unit-only-cu-4z80vbr"
     },
     "measurements": {
       "capacity": {
         "value": 8,
         "unit": "cooling-kw",
         "basisId": "multi-split-rated-cooling",
-        "variant": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
-        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-4Z80VBR",
+        "basis": "Manufacturer rated cooling for this outdoor unit. Actual combined room output is limited by the selected indoor units; no preselected room-unit package is claimed.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+        "checkedAt": "2026-10-12"
       },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
         "basisId": "main-product-parts",
-        "variant": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
-        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-4Z80VBR",
+        "basis": "Included five-year Australian manufacturing-defect parts and labour cover; correct installation and warranty conditions apply.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
+        "checkedAt": "2026-10-12"
       }
     },
     "technicalSpecs": [
       {
-        "label": "Exact equipment combination",
-        "value": "1 x CU-4Z80VBR + 4 x CS-MRZ25WKR",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Outdoor model",
+        "value": "CU-4Z80VBR",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Selected room units",
-        "value": "4 high-wall room units, with handheld controls",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Maximum room units",
+        "value": "4 compatible indoor units, selected separately",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Rated system cooling output",
-        "value": "8 kW; shared outdoor output, not the sum of room labels",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor cooling output",
+        "value": "8 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Phone and room controls",
-        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor heating output",
+        "value": "9.4 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Maximum connected room-unit capacity",
+        "value": "14.7 kW; this is not simultaneous outdoor output",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Room-unit choices",
+        "value": "Wall-mounted, slim ducted, mini cassette and floor console options; exact model compatibility must match the manufacturer combination tables",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Phone control",
+        "value": "Z-series room units include Wi-Fi; RZ, ducted, cassette and floor-console options need the supported network adapter",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Outdoor temperature range",
+        "value": "Cooling up to 46 C; heating down to -15 C",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Refrigerant",
         "value": "R32",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Residential product fault cover",
-        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
-      },
-      {
-        "label": "Household power supply",
-        "value": "Single-phase household supply",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "value": "Five years parts and labour under the Australian warranty conditions",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf"
       }
     ],
     "pros": [
-      "4 rooms share one outdoor box.",
-      "Set each room temperature and timer separately."
+      "Up to 4 rooms can share one outdoor box.",
+      "Choose wall, floor, cassette or concealed room units."
     ],
     "cons": [
-      "Phone control requires a separate adapter for each room unit."
+      "Cannot serve 5 room units from this outdoor box."
     ],
     "freshness": {
-      "generation": "CU-4Z80VBR with selected current AU room units",
+      "generation": "CU-4Z80VBR current Australian VBR outdoor unit",
       "released": null,
-      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+      "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "note": "Currently listed by Panasonic Australia. Room units are selected separately; an unverified kit or first-sale date is not claimed."
     }
   },
   {
     "id": "panasonic-multi-cu-5z100vbr-5-mrz",
-    "name": "Panasonic MRZ 5-room 10 kW combination",
+    "name": "Panasonic CU-5Z100VBR 10 kW",
     "brand": "Panasonic",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
-        "title": "Exact Australian model and supported combinations",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
+        "title": "Current Australian outdoor lineup and specifications",
+        "url": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
         "kind": "Manufacturer Australian information",
-        "revision": "2020MSAC1101 approved Australian wall-mounted capacity tables; current AU supplier stock"
+        "revision": "Current AU VBR lineup, capacity and maximum room counts checked 12 October 2026"
       },
       {
-        "title": "Included residential product warranty",
-        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
+        "title": "Australian air-conditioner warranty",
+        "url": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
         "kind": "Manufacturer Australian information",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CU-5Z100VBR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-10kw-multi-head-outdoor-unit-only-cu-5z100vbr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CS-MRZ20WKR",
-        "url": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Retailer GST and delivery terms",
-        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
-        "kind": "Australian public retailer price terms",
-        "revision": "Current Australian information checked 10 October 2026"
+        "revision": "Issue 5, five-year parts and labour warranty; checked 12 October 2026"
       }
     ],
     "image": {
-      "src": "/products/multi-split/panasonic-mrz-20-20261010.webp",
-      "alt": "Panasonic MRZ wall-mounted room unit; same-range photograph, outdoor unit and other selected heads not pictured",
-      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-2kw-multi-head-indoor-unit-only-cs-mrz20wkr"
+      "src": "/products/multi-split/panasonic-cu-5z100vbr.webp",
+      "alt": "Panasonic CU-5Z100VBR outdoor unit; indoor room units are selected separately",
+      "sourceUrl": "https://www.ozaironline.com.au/products/panasonic-10kw-multi-head-outdoor-unit-only-cu-5z100vbr"
     },
     "measurements": {
       "capacity": {
         "value": 10,
         "unit": "cooling-kw",
         "basisId": "multi-split-rated-cooling",
-        "variant": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
-        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-5Z100VBR",
+        "basis": "Manufacturer rated cooling for this outdoor unit. Actual combined room output is limited by the selected indoor units; no preselected room-unit package is claimed.",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+        "checkedAt": "2026-10-12"
       },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
         "basisId": "main-product-parts",
-        "variant": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
-        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "CU-5Z100VBR",
+        "basis": "Included five-year Australian manufacturing-defect parts and labour cover; correct installation and warranty conditions apply.",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf",
+        "checkedAt": "2026-10-12"
       }
     },
     "technicalSpecs": [
       {
-        "label": "Exact equipment combination",
-        "value": "1 x CU-5Z100VBR + 5 x CS-MRZ20WKR",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Outdoor model",
+        "value": "CU-5Z100VBR",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Selected room units",
-        "value": "5 high-wall room units, with handheld controls",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Maximum room units",
+        "value": "5 compatible indoor units, selected separately",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Rated system cooling output",
-        "value": "10 kW; shared outdoor output, not the sum of room labels",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor cooling output",
+        "value": "10 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
-        "label": "Phone and room controls",
-        "value": "Handheld remote included; optional CZ-TACG1 phone-control adapter per indoor unit",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "label": "Rated outdoor heating output",
+        "value": "12 kW",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Maximum connected room-unit capacity",
+        "value": "18.3 kW; this is not simultaneous outdoor output",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Room-unit choices",
+        "value": "Wall-mounted, slim ducted, mini cassette and floor console options; exact model compatibility must match the manufacturer combination tables",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Phone control",
+        "value": "Z-series room units include Wi-Fi; RZ, ducted, cassette and floor-console options need the supported network adapter",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
+      },
+      {
+        "label": "Outdoor temperature range",
+        "value": "Cooling up to 46 C; heating down to -15 C",
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Refrigerant",
         "value": "R32",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html"
       },
       {
         "label": "Residential product fault cover",
-        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-R32-MULTI-SPLIT-BROCHURE-FLOOR-CONSOLE.pdf"
-      },
-      {
-        "label": "Household power supply",
-        "value": "Single-phase household supply",
-        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf"
+        "value": "Five years parts and labour under the Australian warranty conditions",
+        "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/support/manufacturers_warranty/PRO-031-F14-Warranty-Air-Conditioners_Iss5.pdf"
       }
     ],
     "pros": [
-      "5 rooms share one outdoor box.",
-      "Set each room temperature and timer separately."
+      "Up to 5 rooms can share one outdoor box.",
+      "Choose wall, floor, cassette or concealed room units."
     ],
     "cons": [
-      "Phone control requires a separate adapter for each room unit."
+      "Cannot serve a sixth room unit from this outdoor box."
     ],
     "freshness": {
-      "generation": "CU-5Z100VBR with selected current AU room units",
+      "generation": "CU-5Z100VBR current Australian VBR outdoor unit",
       "released": null,
-      "sourceUrl": "https://www.panasonic.com/content/dam/Panasonic/au/en/hvac/files/PANASONIC-2020-R32-MULTI-SPLIT-CAPACITY-TABLE.pdf",
-      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+      "sourceUrl": "https://www.panasonic.com/au/hvac/product-top/air-conditioner/multi/multi-split-system-z-series-vbr.html",
+      "note": "Currently listed by Panasonic Australia. Room units are selected separately; an unverified kit or first-sale date is not claimed."
     }
   },
   {
