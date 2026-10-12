@@ -78,6 +78,11 @@ if (!serverManifest[productGuideEntryKey] || eagerWorkerEntries.has(productGuide
   throw new Error("Sites server bundle audit failed: the product catalogue must load on demand, outside the eager Worker graph.");
 }
 entryBytes(productGuideEntryKey);
+const productRebateEntryKey = "src/lib/product-rebate-check-server.ts";
+if (!serverManifest[productRebateEntryKey] || eagerWorkerEntries.has(productRebateEntryKey) || !workerDynamicEntries.has(productRebateEntryKey)) {
+  throw new Error("Sites server bundle audit failed: product rebate calculations must load on demand, outside the eager Worker graph.");
+}
+entryBytes(productRebateEntryKey);
 // The deployment must load retained council evidence through emitted modules.
 // Dynamic JSON imports with attributes can survive bundling as missing source paths.
 for (const name of ["council-community-baseline", "council-veu-baseline"]) {

@@ -1,7 +1,6 @@
 import { getD1 } from "../../../../db";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { parseProductRebateCheckRequest, ProductRebateCheckError } from "@/lib/product-rebate-check";
-import { checkProductRebates } from "@/lib/product-rebate-check-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -22,6 +21,7 @@ export async function POST(request: Request) {
   }
   try {
     const input = parseProductRebateCheckRequest(await readBoundedJsonRequest(request, 2048));
+    const { checkProductRebates } = await import("@/lib/product-rebate-check-server");
     const result = await checkProductRebates(getD1(), input);
     return json(result);
   } catch (error) {

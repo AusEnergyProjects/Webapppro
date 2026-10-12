@@ -336,23 +336,31 @@ test("server response decoder rejects untyped quantities, inconsistent zero stat
   assert.throws(() => contract.readProductRebateCheckResult(unsafe), /invalid response/);
 });
 
-test("the anonymous route rejects unsupported input and cross-origin requests before touching data", async () => {
+test("the anonymous route defers calculators and rejects invalid requests before loading them or touching data", async () => {
   let calls = 0;
+  let calculatorLoads = 0;
   const route = compile("../src/app/api/product-rebates/route.ts", {
     "../../../../db": { getD1() { calls++; return {}; } },
     "@/lib/bounded-json-request": await import("../src/lib/bounded-json-request.ts"),
     "@/lib/product-rebate-check": contract,
-    "@/lib/product-rebate-check-server": { checkProductRebates: async () => { calls++; return { ok: true }; } },
+    get "@/lib/product-rebate-check-server"() {
+      calculatorLoads++;
+      return { checkProductRebates: async () => { calls++; return { ok: true }; } };
+    },
   });
   const input = (body, origin = "https://example.com") => new Request("https://example.com/api/product-rebates", {
     method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify(body),
   });
+  assert.equal(calculatorLoads, 0, "Worker startup must not load product calculations");
   assert.equal((await route.POST(input(request(), "https://other.example"))).status, 403);
   assert.equal((await route.POST(input({ ...request(), customerId: "private" }))).status, 400);
   assert.equal(calls, 0);
+  assert.equal(calculatorLoads, 0, "Rejected public requests must not load product calculations");
   const response = await route.POST(input(request()));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("Cache-Control"), /no-store/);
+  assert.equal(calculatorLoads, 1);
+  assert.equal(calls, 2);
 });
 
 function coolingSelection(model, configuration = "single", overrides = {}) {
