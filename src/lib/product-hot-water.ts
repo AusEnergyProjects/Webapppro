@@ -1,5 +1,7 @@
 import type { HotWaterNoise, HotWaterPerformance, HotWaterRecovery, ProductHotWaterFacts, ProductMeasurement } from "./product-guides";
 
+export const HOT_WATER_COMPARISON_TEMPERATURE_RISE_C = 45;
+
 function publishedWaterTemperatureRise(recovery: HotWaterRecovery): number {
   if (recovery.waterTemperatureRiseC !== undefined) {
     if (recovery.waterStartC !== undefined || recovery.waterEndC !== undefined || !Number.isFinite(recovery.waterTemperatureRiseC) || recovery.waterTemperatureRiseC <= 0) throw new Error("Invalid published heat-pump recovery conditions");
@@ -9,7 +11,8 @@ function publishedWaterTemperatureRise(recovery: HotWaterRecovery): number {
   return recovery.waterEndC - recovery.waterStartC;
 }
 
-// Water heat capacity 4.186 kJ/(kg °C), expressed as litres per hour.
+// Water heat capacity 4.186 kJ/(kg °C). Use the same water-temperature rise
+// for every comparison, retaining each maker's original air/test conditions.
 export function heatPumpRecoveryLitresPerHour(recovery: HotWaterRecovery): number {
   if ([recovery.thermalOutputKw, recovery.litresPerHour, recovery.minutes].filter(value => value !== undefined).length !== 1 || (recovery.minutes === undefined && recovery.heatedLitres !== undefined)) throw new Error("Invalid mixed heat-pump recovery measurements");
   const temperatureRise = publishedWaterTemperatureRise(recovery);
@@ -17,13 +20,13 @@ export function heatPumpRecoveryLitresPerHour(recovery: HotWaterRecovery): numbe
   let litresPerHour: number;
   if (recovery.thermalOutputKw !== undefined) {
     if (!Number.isFinite(recovery.thermalOutputKw) || recovery.thermalOutputKw <= 0) throw new Error("Invalid heat-pump thermal output");
-    litresPerHour = 3600 * recovery.thermalOutputKw / (4.186 * temperatureRise);
+    litresPerHour = 3600 * recovery.thermalOutputKw / (4.186 * HOT_WATER_COMPARISON_TEMPERATURE_RISE_C);
   } else if (recovery.litresPerHour !== undefined) {
     if (!Number.isFinite(recovery.litresPerHour) || recovery.litresPerHour <= 0) throw new Error("Invalid measured hot-water recovery rate");
-    litresPerHour = recovery.litresPerHour;
+    litresPerHour = recovery.litresPerHour * temperatureRise / HOT_WATER_COMPARISON_TEMPERATURE_RISE_C;
   } else {
     if (!Number.isFinite(recovery.minutes) || recovery.minutes <= 0 || !Number.isFinite(recovery.heatedLitres) || recovery.heatedLitres <= 0) throw new Error("Invalid measured hot-water recovery time");
-    litresPerHour = recovery.heatedLitres * 60 / recovery.minutes;
+    litresPerHour = recovery.heatedLitres * 60 / recovery.minutes * temperatureRise / HOT_WATER_COMPARISON_TEMPERATURE_RISE_C;
   }
   return roundedRecoveryRate(litresPerHour);
 }
@@ -66,7 +69,7 @@ function recoveryRates(performance: HotWaterPerformance): RecoveryRates | null {
   const kind = recovery.thermalOutputKw !== undefined ? "Calculated from published heating output" : "Published recovery test converted to litres per hour";
   const waterConditions = recovery.waterTemperatureRiseC !== undefined ? `Water warmed by ${recovery.waterTemperatureRiseC}°C` : `Water ${recovery.waterStartC} to ${recovery.waterEndC}°C`;
   const rate = heatPumpRecoveryLitresPerHour(recovery);
-  return { minimum: rate, maximum: rate, conditions: `${kind}. ${waterConditions}; ${recovery.airTemperatureC === null ? "air temperature not specified" : `air ${recovery.airTemperatureC}°C`}. Different test conditions and colder weather affect recovery.`, sourceUrl: recovery.sourceUrl };
+  return { minimum: rate, maximum: rate, conditions: `Calculated for the same ${HOT_WATER_COMPARISON_TEMPERATURE_RISE_C}°C rise in water temperature. Colder air can slow reheating. ${kind}. ${waterConditions}; ${recovery.airTemperatureC === null ? "maker air temperature not specified" : `maker air ${recovery.airTemperatureC}°C`}. ${recovery.basis}`, sourceUrl: recovery.sourceUrl };
 }
 
 export function hotWaterComparisonFacts(performance: HotWaterPerformance): ProductHotWaterFacts {
@@ -76,7 +79,7 @@ export function hotWaterComparisonFacts(performance: HotWaterPerformance): Produ
     noise: noise ? `${noise.value} dB` : "Not published for this model",
     recoveryLabel: "Reheating speed",
     recovery: rates ? `About ${rates.minimum === rates.maximum ? rates.minimum : `${rates.minimum} to ${rates.maximum}`} litres per hour` : "Not published with usable test conditions",
-    conditions: rates?.conditions ?? "No heating rate inferred from tank size alone.",
+    conditions: performance.recovery ? `Calculated for the same ${HOT_WATER_COMPARISON_TEMPERATURE_RISE_C}°C rise in water temperature. Colder air can slow reheating.` : rates ? "Maker estimate. Original measurement conditions are in Specs." : "No heating rate inferred from tank size alone.",
     recoverySourceUrl: rates?.sourceUrl ?? null,
   };
 }
@@ -89,6 +92,6 @@ export function hotWaterComparisonMeasurements(performance: HotWaterPerformance,
     noise: noise ? { value: noise.value, unit: "published-noise-db", basisId: "published-hot-water-noise", variant, checkedAt,
       basis: `Published ${noise.metric} figure; ${noise.mode}. Original test details remain in the product documents.`, sourceUrl: noise.sourceUrl } : null,
     recovery: rates ? { value: rates.minimum, ...(rates.maximum > rates.minimum ? { valueMaximum: rates.maximum } : {}), unit: "recovery-litres-per-hour", basisId: "hot-water-recovery-rate", variant, checkedAt,
-      basis: `${rates.maximum > rates.minimum ? "The slower end of the published range is used for the bar and filter. " : ""}${rates.conditions}`, sourceUrl: rates.sourceUrl } : null,
+      basis: `${rates.maximum > rates.minimum ? "The slower end of the published range is used for the bar and sorting. " : ""}${rates.conditions}`, sourceUrl: rates.sourceUrl } : null,
   };
 }

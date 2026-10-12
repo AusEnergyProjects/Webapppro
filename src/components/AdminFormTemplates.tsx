@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ENERGY_SERVICE_LABELS, ENERGY_SERVICE_OPTIONS } from "@/lib/energy-service-catalogue.mjs";
+import { FormComplianceEditor } from './FormCompliancePanel';
 
 type Role = "owner" | "admin" | "reviewer" | "support";
 type Field = { key: string; label: string; type: string; required: boolean; maxLength?: number; options?: string[] };
@@ -19,11 +20,22 @@ const normaliseEditableCategories = (categories: string[]) => [...new Set(catego
 )))];
 const empty = { templateKey: "", version: 1, name: "", jurisdiction: "AU", categories: [] as string[], description: "", guidance: "", sourceNotes: "", fields: [{ key: "work_date", label: "Work date", type: "date", required: true }] as Field[] };
 
-export function AdminFormTemplates({ api, role }: { api: Api; role: Role }) {
+export function AdminFormTemplates({ api, role, onDirtyChange }: { api: Api; role: Role; onDirtyChange?: (dirty: boolean) => void }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [draft, setDraft] = useState(empty);
   const [status, setStatus] = useState(""); const [busy, setBusy] = useState(false);
+  const [complianceKey, setComplianceKey] = useState('');
+  const complianceDirty = useRef(false);
+  const reportComplianceDirty = useCallback((dirty: boolean) => { complianceDirty.current = dirty; onDirtyChange?.(dirty); }, [onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const canManage = role === "owner" || role === "admin";
+  const latestTemplates = templates.filter(template => !templates.some(other => other.templateKey === template.templateKey && other.version > template.version));
+  const authorableKeys = new Set(latestTemplates.filter(template => ['published', 'draft'].includes(template.status)).map(template => template.templateKey));
+  function selectCompliance(key: string) {
+    if (key === complianceKey) return;
+    if (complianceDirty.current && !window.confirm('Discard unsaved compliance questionnaire changes?')) return;
+    reportComplianceDirty(false); setComplianceKey(key);
+  }
   const load = useCallback(async () => {
     const result = await api("/api/admin/form-templates");
     setTemplates((result.templates || []) as Template[]);
@@ -84,7 +96,8 @@ export function AdminFormTemplates({ api, role }: { api: Api; role: Role }) {
       <footer><button className="primary" disabled={busy}>Save and make available</button></footer>
     </form>}
     <section className="admin-card admin-template-register"><header><div><span>Version register</span><h2>Published, draft and withdrawn forms</h2></div><strong>{templates.length} governed version{templates.length === 1 ? "" : "s"}</strong></header>
-      {templates.length ? templates.map((template) => <article key={template.id}><div><span>{template.jurisdiction} | Version {template.version}</span><h3>{template.name}</h3><p>{template.description}</p><small>{template.categories.map((category) => categoryLabels[category] || category).join(", ")} | {template.fields.length} fields</small></div><div><b className={`admin-status status-${template.status}`}>{template.status}</b>{canManage && <button type="button" onClick={() => clone(template)}>Clone next version</button>}{canManage && template.status === "draft" && <button type="button" disabled={busy || template.categories.includes("insulation-draughts")} title={template.categories.includes("insulation-draughts") ? "Clone this version to split the legacy category before publishing." : undefined} onClick={() => void action(template, "publish")}>Publish</button>}{canManage && template.status === "published" && <button type="button" disabled={busy} onClick={() => void action(template, "withdraw")}>Withdraw</button>}</div></article>) : <div className="admin-empty"><strong>No governed forms yet</strong><p>The built-in national forms remain available. Create a governed version when operations needs a reviewed update or jurisdiction-specific workflow.</p></div>}
+      {templates.length ? templates.map((template) => <article key={template.id}><div><span>{template.jurisdiction} | Version {template.version}</span><h3>{template.name}</h3><p>{template.description}</p><small>{template.categories.map((category) => categoryLabels[category] || category).join(", ")} | {template.fields.length} fields</small></div><div><b className={`admin-status status-${template.status}`}>{template.status}</b>{canManage && authorableKeys.has(template.templateKey) && <button type="button" onClick={() => selectCompliance(template.templateKey)}>Compliance checks</button>}{canManage && <button type="button" onClick={() => clone(template)}>Clone next version</button>}{canManage && template.status === "draft" && <button type="button" disabled={busy || template.categories.includes("insulation-draughts")} title={template.categories.includes("insulation-draughts") ? "Clone this version to split the legacy category before publishing." : undefined} onClick={() => void action(template, "publish")}>Publish</button>}{canManage && template.status === "published" && <button type="button" disabled={busy} onClick={() => void action(template, "withdraw")}>Withdraw</button>}</div></article>) : <div className="admin-empty"><strong>No governed forms yet</strong><p>The built-in national forms remain available. Create a governed version when operations needs a reviewed update or jurisdiction-specific workflow.</p></div>}
     </section>
+    {complianceKey && <section className="admin-card" aria-label="Supporting form compliance"><button type="button" onClick={() => selectCompliance('')}>Close compliance checks</button><FormComplianceEditor key={complianceKey} api={api} scope="creditex" actorMode="admin" formKey={`creditex-job-form:${complianceKey}`} onDirtyChange={reportComplianceDirty} /></section>}
   </>;
 }

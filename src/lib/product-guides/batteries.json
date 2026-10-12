@@ -5105,7 +5105,7 @@
   {
     "id": "saj-hs3-au",
     "name": "SAJ HS3 6 kW + 10 kWh",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "SAJ HS3 Australian single-phase datasheet",
@@ -5153,7 +5153,15 @@
     "measurements": {
       "efficiency": null,
       "warranty": null,
-      "capacity": null
+      "capacity": {
+        "value": 10,
+        "unit": "usable-kwh",
+        "basisId": "battery-usable-storage",
+        "variant": "HS3-6K-S2-W-PX-AU with two BU3-5.0-TV1/2-PRO-AU modules",
+        "basis": "The exact AU datasheet separately lists rated and usable energy. Two battery modules provide 10.0 kWh usable DC energy; delivered AC energy also depends on inverter losses.",
+        "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Datasheet/AU%20HS3/HS3-%285-6K%29-S2-W-PX-AU-%28210x285%29mm_datasheet_en_AU.pdf",
+        "checkedAt": "2026-10-12"
+      }
     },
     "technicalSpecs": [
       {
@@ -5163,7 +5171,7 @@
       },
       {
         "label": "Battery size",
-        "value": "10 kWh named battery capacity total; usable capacity not separately confirmed",
+        "value": "10.0 kWh rated and 10.0 kWh usable DC storage from two 5.0 kWh modules, separately stated in the exact AU datasheet.",
         "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Datasheet/AU%20HS3/HS3-%285-6K%29-S2-W-PX-AU-%28210x285%29mm_datasheet_en_AU.pdf"
       },
       {
@@ -5195,11 +5203,6 @@
         "label": "Warranty evidence limit",
         "value": "The current Australian battery warranty lists HS2 and other models, but does not identify HS3 or BU3 fault cover.",
         "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Warranty/SAJ%20limited%20warranty%20for%20batteries%20-AU%20V4.0-2-1.pdf"
-      },
-      {
-        "label": "Capacity evidence limit",
-        "value": "The exact AU datasheet names 10 kWh total battery capacity but does not separately publish usable storage.",
-        "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Datasheet/AU%20HS3/HS3-%285-6K%29-S2-W-PX-AU-%28210x285%29mm_datasheet_en_AU.pdf"
       }
     ],
     "pros": [
@@ -5207,16 +5210,12 @@
       "The Australian sheet supports expansion to ten battery blocks."
     ],
     "cons": [
-      "The quoted 10 kWh is total capacity; the usable amount is not separately confirmed."
+      "The selected system supplies up to 6 kW continuously; several large appliances running together may exceed that limit."
     ],
     "measurementGaps": {
       "warranty": {
         "reason": "The current Australian battery warranty lists HS2 and other models, but does not identify HS3 or BU3 fault cover.",
         "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Warranty/SAJ%20limited%20warranty%20for%20batteries%20-AU%20V4.0-2-1.pdf"
-      },
-      "capacity": {
-        "reason": "The exact AU datasheet names 10 kWh total battery capacity but does not separately publish usable storage.",
-        "sourceUrl": "https://au.saj-electric.com/hubfs/Australia/AU%20Service%20and%20Support/AU%20Download%20Center/AU%20Datasheet/AU%20HS3/HS3-%285-6K%29-S2-W-PX-AU-%28210x285%29mm_datasheet_en_AU.pdf"
       }
     }
   },

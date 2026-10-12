@@ -269,6 +269,11 @@
         "label": "Size and weight",
         "value": "1832 mm high x 696 mm wide x 725 mm deep; 135 kg cartoned, 402 kg full.",
         "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 56.0 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published average heat-pump-only recovery for 551E280G5/G5B: 56 litres/hour, 45 C water rise, air 19 C and 66 percent relative humidity. The separate electric-element table is excluded. Source does not specify start/end water temperatures. Original maker air temperature: 19°C.",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/RHE672-Rheem-AmbiPower-280e-WiFi-Datasheet-Aug-2026.pdf?attachment=true&context=bWFzdGVyfHBkZnN8MTIyNTEzOXxhcHBsaWNhdGlvbi9wZGZ8YUROaEwyaG1OUzg1TXprNU5qZ3dOell4T0RnMkwxSklSVFkzTWlCU2FHVmxiU0JCYldKcFVHOTNaWElnTWpnd1pTQlhhVVpwSUVSaGRHRnphR1ZsZENCQmRXY2dNakF5Tmk1d1pHWXw5MjQ3M2U4MmE2YjVlNDI1NTNkYTNkYjYzODNiYjZlOTRlNTc2MzA2ODE5Njc4N2Q1OWIyY2JhNGVkZGVkMGE3"
       }
     ],
     "pros": [
@@ -326,10 +331,10 @@
         "revision": "Current Australian document checked 10 October 2026"
       },
       {
-        "title": "Australian equipment cost evidence",
+        "title": "Appliances Online exact-model seller noise specification",
         "url": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw-20e/",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "kind": "Australian retailer published specifications",
+        "revision": "Exact 290L RVW variant listing checked 12 October 2026; seller-published noise, measurement method and distance unspecified"
       },
       {
         "title": "Retailer GST and separate installation terms",
@@ -445,7 +450,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "The current exact-model maker manual and datasheet give no measured dB noise figure. Typical heating-water production is 50 to 60 litres/hour, depending on model and weather; water and air test temperatures are not specified for the rate range.",
+        "value": "51 dB, seller-published by Appliances Online for this exact model. Original test distance not stated; pressure/power method not stated. The listing describes outside operating noise, while its generic table labels the same figure Indoor Sound Level. This is not a maker-verified noise measurement. Heating output and the shared 45°C reheating calculation are recorded separately.",
+        "sourceUrl": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw-20e/"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 50.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Exact RVW and RVW-2.0E datasheet publishes 2650 W heating capacity. Comparison assumes a 45°C water rise and constant stated thermal output. Air test temperature is not specified. Extra electric booster excluded. Original maker air temperature: not specified.",
         "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf"
       }
     ],
@@ -459,13 +469,19 @@
       "The maker specifies a 20 A electrical circuit for this version."
     ],
     "hotWaterPerformance": {
-      "noise": null,
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "litresPerHourMinimum": 50,
-        "litresPerHourMaximum": 60,
+      "noise": {
+        "value": 51,
+        "metric": "not-stated",
+        "distanceMetres": null,
+        "mode": "Seller-published operating noise. Appliances Online describes an outside noise rating; its generic table labels the same figure Indoor Sound Level. Test distance, pressure/power method and operating mode are not stated.",
+        "sourceUrl": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw-20e/"
+      },
+      "recovery": {
+        "thermalOutputKw": 2.65,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
         "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf",
-        "basis": "Maker datasheet footnote 8 gives typical production of 50 to 60 litres/hour depending on the model and weather conditions. Water start/end temperatures and an air test temperature are not specified for this range. Electric-boost performance is not separately quantified."
+        "basis": "Exact RVW and RVW-2.0E datasheet publishes 2650 W heating capacity. Comparison assumes a 45°C water rise and constant stated thermal output. Air test temperature is not specified. Extra electric booster excluded."
       }
     }
   },
@@ -583,7 +599,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), pressure/power method not stated, test distance not stated; Published noise rating; sound-pressure/power method, distance and operating mode not stated. Heating-only output 4 kW; air 20 C, water 15 to 55 C.",
+        "value": "Noise 46 dB(A); pressure/power method not stated; test distance not stated. Published compressor heating capacity 4 kW. The shared reheating calculation assumes a 45°C water rise; original heating-capacity air and water test conditions are not specified.",
+        "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 76.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published compressor heating capacity. Comparison assumes a 45°C rise in water temperature and constant stated thermal output. The manual labels its separate COP at 20°C air but does not give air/start-water/end-water test conditions for the heating-capacity row. Extra electric heating excluded.",
         "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf"
       }
     ],
@@ -605,12 +626,11 @@
         "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf"
       },
       "recovery": {
-        "airTemperatureC": 20,
-        "waterStartC": 15,
-        "waterEndC": 55,
+        "airTemperatureC": null,
         "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-EVO270-E.pdf",
-        "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
-        "thermalOutputKw": 4
+        "basis": "Published compressor heating capacity. Comparison assumes a 45°C rise in water temperature and constant stated thermal output. The manual labels its separate COP at 20°C air but does not give air/start-water/end-water test conditions for the heating-capacity row. Extra electric heating excluded.",
+        "thermalOutputKw": 4,
+        "waterTemperatureRiseC": 45
       }
     }
   },
@@ -736,6 +756,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 48 dB(A), sound pressure, at 1 m; LA90 noise figure; maker test at 1 m, operating mode not stated; installed reflections can increase noise. Heating-only output 2.9 kW; air 19 C, water 10 to 60 C.",
+        "sourceUrl": "https://assets.ctfassets.net/phagqs82lusw/5UoYF3N9Kh8xRfCz8AsXp1/3ec32d73bd518b04de3c989b4d0547c2/install_instruct_-_Rheem_heat_pump_551E280_WiFi_-_122339_Rev-02_-_2026_May.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 55.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Average heating-only thermal output at air 19 C dry/15 C wet, water 10 to 60 C, AS/NZS 5125.1:2014; boost excluded. Original maker air temperature: 19°C.",
         "sourceUrl": "https://assets.ctfassets.net/phagqs82lusw/5UoYF3N9Kh8xRfCz8AsXp1/3ec32d73bd518b04de3c989b4d0547c2/install_instruct_-_Rheem_heat_pump_551E280_WiFi_-_122339_Rev-02_-_2026_May.pdf"
       }
     ],
@@ -889,6 +914,11 @@
         "label": "Noise and heating test",
         "value": "Noise 48 dB(A), sound pressure, test distance not stated; operating mode not stated. Tank recovery: five hours ten minutes for 320 litres, 40 C water rise, air 15 C wet-bulb, AS/NZS 5125.1:2014. Source table also gives 2.9 kW thermal output at that air condition; no dry-bulb temperature is stated.",
         "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 55.1 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Maker datasheet tank recovery is five hours ten minutes for the 320 litre tank, with a 40 C water temperature rise and air 15 C wet-bulb, AS/NZS 5125.1:2014. The source does not give start/end water temperatures or dry-bulb air temperature. This uses the actual published recovery test, not electrical input. Original maker air temperature: 15°C.",
+        "sourceUrl": "https://www.samedayhotwaterservice.com.au/wp-content/uploads/2025/08/FUSION_X8_LOW_RES-1.pdf"
       }
     ],
     "freshness": {
@@ -918,7 +948,7 @@
   {
     "id": "rinnai-enviroflo-ar",
     "name": "Rinnai Enviroflo AR 300L",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo AR product",
@@ -1047,7 +1077,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 84.1 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1066,13 +1101,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4.4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpa300vmh",
     "name": "Rinnai Enviroflo AR 300L hard-water",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo AR product",
@@ -1201,7 +1242,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 84.1 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1221,13 +1267,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4.4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpa340vm",
     "name": "Rinnai Enviroflo AR 340L",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo AR product",
@@ -1356,7 +1408,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 84.1 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1375,13 +1432,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4.4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpa340vmh",
     "name": "Rinnai Enviroflo AR 340L hard-water",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo AR product",
@@ -1510,7 +1573,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 45 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 84.1 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1530,13 +1598,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4.4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4.4 kW heat output for EHPA300VM/H and EHPA340VM/H. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-enviroflo-gr",
     "name": "Rinnai Enviroflo GR 180L 10 A",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo GR product",
@@ -1660,7 +1734,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 72.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 3.8 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1679,13 +1758,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 3.8,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 3.8 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpg215vm",
     "name": "Rinnai Enviroflo GR 215L 15 A",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo GR product",
@@ -1809,7 +1894,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 72.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 3.8 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1828,13 +1918,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 3.8,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 3.8 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpg265vm10",
     "name": "Rinnai Enviroflo GR 265L 10 A",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo GR product",
@@ -1958,7 +2054,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 76.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -1977,13 +2078,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpg280vm",
     "name": "Rinnai Enviroflo GR 280L 15 A",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo GR product",
@@ -2107,7 +2214,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 76.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -2126,13 +2238,19 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
     "id": "rinnai-ehpg300vm10",
     "name": "Rinnai Enviroflo GR 300L 10 A",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Enviroflo GR product",
@@ -2256,7 +2374,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise Reheat per 100 L is unverified: complete thermal-output/recovery test conditions were not published in the checked source.",
+        "value": "Noise 46 dB(A), sound pressure, at 1.5 m; Sound pressure laboratory test at 1.5 m; reflections can increase installed noise The reheating calculation below uses the stated compressor heat output, with a common 45°C water rise.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 76.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 4 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       }
     ],
@@ -2275,7 +2398,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/f4c6211040/hw-electric-hp-enviroflo-ar-gr-series-bro.pdf",
+        "basis": "Published 4 kW heat output for this exact GR model. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element excluded."
+      }
     }
   },
   {
@@ -2411,6 +2540,11 @@
         "label": "Noise and heating test",
         "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 95.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded. Original maker air temperature: not specified.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
       }
     ],
     "pros": [
@@ -2430,7 +2564,13 @@
         "mode": "Standard heating mode",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 5,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+        "basis": "Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded."
+      }
     }
   },
   {
@@ -2566,6 +2706,11 @@
         "label": "Noise and heating test",
         "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 95.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded. Original maker air temperature: not specified.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
       }
     ],
     "pros": [
@@ -2585,7 +2730,13 @@
         "mode": "Standard heating mode",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 5,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+        "basis": "Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded."
+      }
     }
   },
   {
@@ -2721,6 +2872,11 @@
         "label": "Noise and heating test",
         "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 95.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded. Original maker air temperature: not specified.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
       }
     ],
     "pros": [
@@ -2740,7 +2896,13 @@
         "mode": "Standard heating mode",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 5,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+        "basis": "Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded."
+      }
     }
   },
   {
@@ -2876,6 +3038,11 @@
         "label": "Noise and heating test",
         "value": "Noise 48 dB(A) standard operation; quiet operation 45 dB(A); pressure/power method not stated; test distance not stated. Thermal output 5.0 kW at air 32 C and cold inlet water 18 C; the heat-output row does not give an outlet test temperature.",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 95.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded. Original maker air temperature: not specified.",
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf"
       }
     ],
     "pros": [
@@ -2895,7 +3062,13 @@
         "mode": "Standard heating mode",
         "sourceUrl": "https://www.rinnai.com.au/documents/9cdbb44aa2/hw-electric-hp-enviroflo-s5-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 5,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
+        "sourceUrl": "https://www.rinnai.com.au/documents/3424106e32/hw-electric-hp-enviroflo-s5-bro.pdf",
+        "basis": "Published 5.0 kW SHPR50 compressor heating capacity. Comparison assumes a 45°C water rise; the maker does not specify the air or water test temperatures for this capacity row. Extra electric element excluded."
+      }
     }
   },
   {
@@ -3029,6 +3202,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
@@ -3190,6 +3368,11 @@
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
     "pros": [
@@ -3350,6 +3533,11 @@
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
     "pros": [
@@ -3508,6 +3696,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
@@ -3669,6 +3862,11 @@
         "label": "Noise and heating test",
         "value": "Noise 50 dB(A), sound pressure, at 1 m; Standard heating-only mode; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/09/Emerald-Hot-Water-Heat-Pump-All-In-One-Select-data-sheet.pdf"
       }
     ],
     "pros": [
@@ -3817,6 +4015,11 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -3963,6 +4166,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
@@ -4111,6 +4319,11 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4257,6 +4470,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
@@ -4405,6 +4623,11 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4552,6 +4775,11 @@
         "label": "Noise and heating test",
         "value": "Noise 49 dB(A), sound pressure, at 1 m; Standard heating-only mode; Silent mode 45 dB(A) at 1 m; hemi-anechoic chamber Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/07/Emerald-Hot-Water-Heat-Pump-All-In-One-Pro-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4694,6 +4922,11 @@
       {
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 19°C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       }
     ],
@@ -4838,6 +5071,11 @@
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 19°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -4980,6 +5218,11 @@
       {
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 19°C.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       }
     ],
@@ -5124,6 +5367,11 @@
         "label": "Tank material",
         "value": "The checked exact-model primary sources do not specify the cylinder material.",
         "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 19°C.",
+        "sourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/09/Emerald-Heat-Pump-Split-System-data-sheet.pdf"
       }
     ],
     "freshness": {
@@ -5179,6 +5427,12 @@
         "url": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au",
         "kind": "manufacturer_manual",
         "revision": "June 2026, document 365774-47984-0067"
+      },
+      {
+        "title": "Exact-model heating-output source",
+        "url": "https://www.stiebel-eltron.com/static/ste/docportal/manual/DM0000119390-fts.pdf",
+        "kind": "manufacturer",
+        "revision": "Current official source checked 12 October 2026; 45°C water rise is the comparison assumption"
       }
     ],
     "image": {
@@ -5274,6 +5528,11 @@
         "label": "Tank material",
         "value": "Enamel-coated cylinder with a protective anode. Underlying cylinder metal is not named in this manual.",
         "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 35.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Current global manual section 17.3 lists 1.85 kW rated heating output at EN 16147 A20 for the same article number used in Australia. Comparison assumes a 45°C water rise. Source test uses nominal 53°C water; AU default settings differ. Extra 1.5 kW electric heater excluded. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.stiebel-eltron.com/static/ste/docportal/manual/DM0000119390-fts.pdf"
       }
     ],
     "freshness": {
@@ -5290,7 +5549,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 1.85,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 20,
+        "sourceUrl": "https://www.stiebel-eltron.com/static/ste/docportal/manual/DM0000119390-fts.pdf",
+        "basis": "Current global manual section 17.3 lists 1.85 kW rated heating output at EN 16147 A20 for the same article number used in Australia. Comparison assumes a 45°C water rise. Source test uses nominal 53°C water; AU default settings differ. Extra 1.5 kW electric heater excluded."
+      }
     }
   },
   {
@@ -5322,6 +5587,12 @@
         "url": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au",
         "kind": "manufacturer_manual",
         "revision": "June 2026, document 365774-47984-0067"
+      },
+      {
+        "title": "Exact-model heating-output source",
+        "url": "https://www.stiebel-eltron.com/static/ste/docportal/manual/DM0000119390-fts.pdf",
+        "kind": "manufacturer",
+        "revision": "Current official source checked 12 October 2026; 45°C water rise is the comparison assumption"
       }
     ],
     "image": {
@@ -5417,6 +5688,11 @@
         "label": "Tank material",
         "value": "Enamel-coated cylinder with a protective anode. Underlying cylinder metal is not named in this manual.",
         "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 33.1 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Current global manual section 17.3 lists 1.73 kW rated heating output at EN 16147 A20 for the same article number used in Australia. Comparison assumes a 45°C water rise. Source test uses nominal 53°C water; AU default settings differ. Extra 1.5 kW electric heater excluded. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.stiebel-eltron.com/static/ste/docportal/manual/DM0000119390-fts.pdf"
       }
     ],
     "freshness": {
@@ -5433,7 +5709,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.stiebel-eltron.com.au/hubfs/2026_SHP-O%20200-300%20Plus_SHP-O%20201-301%20Premium%20en.pdf?hsLang=en-au"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 1.73,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 20,
+        "sourceUrl": "https://www.stiebel-eltron.com/static/ste/docportal/manual/DM0000119390-fts.pdf",
+        "basis": "Current global manual section 17.3 lists 1.73 kW rated heating output at EN 16147 A20 for the same article number used in Australia. Comparison assumes a 45°C water rise. Source test uses nominal 53°C water; AU default settings differ. Extra 1.5 kW electric heater excluded."
+      }
     }
   },
   {
@@ -5848,6 +6130,11 @@
         "label": "Noise and heating test",
         "value": "Noise 43 dB(A), sound pressure, at 1 m; GB/T23137 noise test in hemi-anechoic chamber; operating mode not stated Heating-only output 2 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 38.2 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
       }
     ],
     "pros": [
@@ -6004,6 +6291,11 @@
         "label": "Noise and heating test",
         "value": "Noise 43 dB(A), sound pressure, at 1 m; GB/T23137 noise test in hemi-anechoic chamber; operating mode not stated Heating-only output 2 kW; air 20 C, water 15 to 55 C.",
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 38.2 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
       }
     ],
     "pros": [
@@ -6159,6 +6451,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 47 dB(A), sound pressure, at 1 m; GB/T23137 noise test in hemi-anechoic chamber; operating mode not stated Heating-only output 2.8 kW; air 20 C, water 15 to 55 C.",
+        "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 53.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
         "sourceUrl": "https://dam.fisherpaykel.com/KZ3PKN00/at/kgnvxv78vhjrsxbhvjqmj43/Haier-UserInstall-en-MONOBLOCK-HeatPumpWaterHeater-HHB-V1125-NZ-AU.pdf"
       }
     ],
@@ -6317,9 +6614,9 @@
         "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
       },
       {
-        "label": "Published heating test",
-        "value": "Heat-pump-only thermal output 3.6 kW at air 20 C dry-bulb / 15 C wet-bulb, water 15 to 55 C, owner-manual page 5. Separate maker recovery-rate test is 77 litres/hour at air 20 C and water 20 to 60 C.",
-        "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/H4950-B-Ecosmart-Pro-Series-270L-manual-2.pdf"
+        "label": "Reheating calculation",
+        "value": "About 68.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
       }
     ],
     "pros": [
@@ -6471,9 +6768,9 @@
         "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
       },
       {
-        "label": "Published heating test",
-        "value": "Heat-pump-only thermal output 3.6 kW at air 20 C dry-bulb / 15 C wet-bulb, water 15 to 55 C, owner-manual page 5. Separate maker recovery-rate test is 77 litres/hour at air 20 C and water 20 to 60 C.",
-        "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/H4950-B-Ecosmart-Pro-Series-270L-manual-2.pdf"
+        "label": "Reheating calculation",
+        "value": "About 68.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 20°C.",
+        "sourceUrl": "https://www.dux.com.au/wp-content/uploads/2024/09/Ecosmart-ProSeries-HP-Spec-Sheet_2026.pdf"
       }
     ],
     "pros": [
@@ -6612,6 +6909,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 53 dB(A), pressure/power method not stated, test distance not stated; Manufacturer noise at rated condition; distance and pressure/power metric not established Heating-only rate 70 L/hour; air 19 C, water 15 to 60 C.",
+        "sourceUrl": "https://neopower.com.au/split-heat-pump-stainless-steel-tank/"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 70.0 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 19°C.",
         "sourceUrl": "https://neopower.com.au/split-heat-pump-stainless-steel-tank/"
       }
     ],
@@ -6758,6 +7060,11 @@
         "label": "Noise and heating test",
         "value": "Noise 53 dB(A), pressure/power method not stated, test distance not stated; Manufacturer noise at rated condition; distance and pressure/power metric not established Heating-only rate 70 L/hour; air 19 C, water 15 to 60 C.",
         "sourceUrl": "https://neopower.com.au/split-heat-pump-stainless-steel-tank/"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 70.0 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating. Original maker air temperature: 19°C.",
+        "sourceUrl": "https://neopower.com.au/split-heat-pump-stainless-steel-tank/"
       }
     ],
     "pros": [
@@ -6877,7 +7184,7 @@
       },
       {
         "label": "Extra electric heater",
-        "value": "1.0 kW",
+        "value": "1.0 kW electric booster, separate from compressor heating.",
         "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
       {
@@ -6897,13 +7204,18 @@
       },
       {
         "label": "Published thermal output",
-        "value": "2.5 kW; full ambient/start-water/end-water test conditions not published in this table",
+        "value": "2.5 kW compressor heating capacity from the February 2026 R290 installation manual. Air test temperature is not stated.",
         "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
       {
         "label": "Noise and heating test",
-        "value": "Maker page upper limit: 46.6 dB, pressure/power method not stated, at 1 m; anechoic-chamber test. The page does not identify frequency weighting or operating mode. February manual rounds the figure to 46 dB(A). Reheating uses the separate published maker estimate; its full test temperatures are not stated.",
-        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/"
+        "value": "Noise 46 dB(A), at 1 m, anechoic chamber; pressure/power method not stated. Published 2.5 kW compressor heating capacity; the manual does not specify its air test temperature. Comparison uses the same 45°C water rise. Extra 1.0 kW electric booster is excluded.",
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 47.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. February 2026 R290 manual section 2.3 publishes 2.5 kW compressor heating capacity for this exact model. Comparison assumes a 45°C water rise and constant stated thermal output; air test temperature is not specified. Extra 1.0 kW electric booster excluded. Supersedes incompatible FAQ heating-time claims. Original maker air temperature: not specified.",
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       }
     ],
     "freshness": {
@@ -6914,19 +7226,18 @@
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 46.6,
+        "value": 46,
         "metric": "not-stated",
         "distanceMetres": 1,
-        "mode": "Maker upper-limit figure",
-        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/"
+        "mode": "Anechoic chamber, operating mode not specified",
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "minutesMinimum": 240,
-        "minutesMaximum": 300,
-        "heatedLitres": 180,
-        "sourceUrl": "https://heatpumps.istore.net.au/istore-180l-heatpump/",
-        "basis": "Maker FAQ estimates four to five hours to fully heat the 180 litre tank, depending on ambient temperature and usage. Water start/end temperatures and air test temperature are not specified; this is a maker estimate, not a controlled recovery test."
+      "recovery": {
+        "thermalOutputKw": 2.5,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf",
+        "basis": "February 2026 R290 manual section 2.3 publishes 2.5 kW compressor heating capacity for this exact model. Comparison assumes a 45°C water rise and constant stated thermal output; air test temperature is not specified. Extra 1.0 kW electric booster excluded. Supersedes incompatible FAQ heating-time claims."
       }
     }
   },
@@ -7027,7 +7338,7 @@
       },
       {
         "label": "Extra electric heater",
-        "value": "1.0 kW",
+        "value": "1.0 kW electric booster, separate from compressor heating.",
         "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
       {
@@ -7047,13 +7358,18 @@
       },
       {
         "label": "Published thermal output",
-        "value": "4.0 kW; full ambient/start-water/end-water test conditions not published in this table",
+        "value": "4 kW compressor heating capacity from the February 2026 R290 installation manual. Air test temperature is not stated.",
         "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
       {
         "label": "Noise and heating test",
-        "value": "Maker page upper limit: 46.6 dB, pressure/power method not stated, at 1 m; anechoic-chamber test. The page does not identify frequency weighting or operating mode. February manual rounds the figure to 47 dB(A). Reheating uses the separate published maker estimate; its full test temperatures are not stated.",
-        "sourceUrl": "https://heatpumps.istore.net.au/istore-270l-heatpump/"
+        "value": "Noise 47 dB(A), at 1 m, anechoic chamber; pressure/power method not stated. Published 4 kW compressor heating capacity; the manual does not specify its air test temperature. Comparison uses the same 45°C water rise. Extra 1.0 kW electric booster is excluded.",
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 76.4 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. February 2026 R290 manual section 2.3 publishes 4 kW compressor heating capacity for this exact model. Comparison assumes a 45°C water rise and constant stated thermal output; air test temperature is not specified. Extra 1.0 kW electric booster excluded. Supersedes incompatible FAQ heating-time claims. Original maker air temperature: not specified.",
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       }
     ],
     "freshness": {
@@ -7064,17 +7380,18 @@
     },
     "hotWaterPerformance": {
       "noise": {
-        "value": 46.6,
+        "value": 47,
         "metric": "not-stated",
         "distanceMetres": 1,
-        "mode": "Maker upper-limit figure",
-        "sourceUrl": "https://heatpumps.istore.net.au/istore-270l-heatpump/"
+        "mode": "Anechoic chamber, operating mode not specified",
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf"
       },
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "litresPerHour": 130,
-        "sourceUrl": "https://heatpumps.istore.net.au/270l-istore-heat-pump/",
-        "basis": "Maker FAQ says approximately 130 litres per hour under favourable operating conditions. Exact air and water test temperatures are not given for this rate; recovery varies with inlet temperature, target temperature and operating mode. This is a favourable-condition maker estimate."
+      "recovery": {
+        "thermalOutputKw": 4,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
+        "sourceUrl": "https://heatpumps.istore.net.au/wp-content/uploads/2026/02/istore-install-manual-270L-180L-R290-v1.5.Feb2026.pdf",
+        "basis": "February 2026 R290 manual section 2.3 publishes 4 kW compressor heating capacity for this exact model. Comparison assumes a 45°C water rise and constant stated thermal output; air test temperature is not specified. Extra 1.0 kW electric booster excluded. Supersedes incompatible FAQ heating-time claims."
       }
     }
   },
@@ -7177,7 +7494,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "Noise 45 dB(A), pressure/power method not stated, test distance not stated; Noise Rating; maker does not name pressure/power or distance Heating-only output 1.7 kW; air 20 C, water 15 to 55 C.",
+        "value": "Noise 45 dB(A); pressure/power method not stated; test distance not stated. Published compressor heating capacity 1.7 kW. The shared reheating calculation assumes a 45°C water rise; original heating-capacity air and water test conditions are not specified.",
+        "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-Evo150-1.pdf"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 32.5 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published compressor heating capacity. Comparison assumes a 45°C rise in water temperature and constant stated thermal output. The manual labels its separate COP at 20°C air but does not give air/start-water/end-water test conditions for the heating-capacity row. Extra electric heating excluded.",
         "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-Evo150-1.pdf"
       }
     ],
@@ -7196,12 +7518,11 @@
         "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-Evo150-1.pdf"
       },
       "recovery": {
-        "airTemperatureC": 20,
-        "waterStartC": 15,
-        "waterEndC": 55,
+        "airTemperatureC": null,
         "sourceUrl": "https://evoheat.com.au/wp-content/uploads/2026/10/MANUAL-Evo150-1.pdf",
-        "basis": "Published heating-only test. Outdoor temperature, starting water and operating mode affect actual reheating.",
-        "thermalOutputKw": 1.7
+        "basis": "Published compressor heating capacity. Comparison assumes a 45°C rise in water temperature and constant stated thermal output. The manual labels its separate COP at 20°C air but does not give air/start-water/end-water test conditions for the heating-capacity row. Extra electric heating excluded.",
+        "thermalOutputKw": 1.7,
+        "waterTemperatureRiseC": 45
       }
     }
   },
@@ -7326,6 +7647,11 @@
       {
         "label": "Noise and heating test",
         "value": "Noise 47 dB(A), sound pressure, at 1 m; LA90 at 1 m; test mode not stated Heating-only output 4.6 kW; air 19 C, water 10 to 60 C.",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-565E315-VE-122941-Rev-02-2025-December.pdf?context=bWFzdGVyfHBkZnN8MjU3ODY5MHxhcHBsaWNhdGlvbi9wZGZ8YUdWa0wyZ3pOaTg1TXpNd01EWTFNVFExT0RnMkwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UWTFSVE14TlNCV1JTQXRJREV5TWprME1TQlNaWFl0TURJZ0xTQXlNREkxSUVSbFkyVnRZbVZ5TG5Ca1pnfDYyNDlhMTFhYjY3NjI2NmJhNGFkOTQwMGRkZDJiODQyZmRhOTI2NTM2MGE2NGVjOWNjMjBjZjU3YmZhNTg2MWQ&attachment=true"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 87.9 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Average heating-only thermal output over the entire water heat-up, air 19 C dry/15 C wet, water 10 to 60 C; AS/NZS 5125.1:2014. This is thermal output, not electrical input. Original maker air temperature: 19°C.",
         "sourceUrl": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-565E315-VE-122941-Rev-02-2025-December.pdf?context=bWFzdGVyfHBkZnN8MjU3ODY5MHxhcHBsaWNhdGlvbi9wZGZ8YUdWa0wyZ3pOaTg1TXpNd01EWTFNVFExT0RnMkwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UWTFSVE14TlNCV1JTQXRJREV5TWprME1TQlNaWFl0TURJZ0xTQXlNREkxSUVSbFkyVnRZbVZ5TG5Ca1pnfDYyNDlhMTFhYjY3NjI2NmJhNGFkOTQwMGRkZDJiODQyZmRhOTI2NTM2MGE2NGVjOWNjMjBjZjU3YmZhNTg2MWQ&attachment=true"
       }
     ],
@@ -7483,6 +7809,11 @@
         "label": "Noise and heating test",
         "value": "Noise 47 dB(A), sound pressure, at 1 m; LA90 at 1 m; test mode not stated Heating-only output 4.6 kW; air 19 C, water 10 to 60 C.",
         "sourceUrl": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-565E32A-SS-AQ0901164-Rev-02-2025-Dec.pdf?context=bWFzdGVyfHBkZnN8MjQ1NTgxN3xhcHBsaWNhdGlvbi9wZGZ8YUdZekwyZ3haQzg1TXpNd01EWTBOemcxTkRNNEwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UWTFSVE15UVNCVFV5QXRJRUZSTURrd01URTJOQ0JTWlhZdE1ESWdMU0F5TURJMUlFUmxZeTV3WkdZfDlmOTQwOGU2ZjY5NzM2N2JkN2Y5ZjhmMzQwYzU5Mzk0NDQxOGU2ZWQxYTE3MzE3MTljZWQ4NTRlOTMzNzkzZTk&attachment=true"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 87.9 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Average heating-only thermal output over the entire water heat-up, air 19 C dry/15 C wet, water 10 to 60 C; AS/NZS 5125.1:2014. This is thermal output, not electrical input. Original maker air temperature: 19°C.",
+        "sourceUrl": "https://www.rheem.com.au/rheem/medias/install-instruct-Rheem-heat-pump-565E32A-SS-AQ0901164-Rev-02-2025-Dec.pdf?context=bWFzdGVyfHBkZnN8MjQ1NTgxN3xhcHBsaWNhdGlvbi9wZGZ8YUdZekwyZ3haQzg1TXpNd01EWTBOemcxTkRNNEwybHVjM1JoYkd3Z2FXNXpkSEoxWTNRZ0xTQlNhR1ZsYlNCb1pXRjBJSEIxYlhBZ05UWTFSVE15UVNCVFV5QXRJRUZSTURrd01URTJOQ0JTWlhZdE1ESWdMU0F5TURJMUlFUmxZeTV3WkdZfDlmOTQwOGU2ZjY5NzM2N2JkN2Y5ZjhmMzQwYzU5Mzk0NDQxOGU2ZWQxYTE3MzE3MTljZWQ4NTRlOTMzNzkzZTk&attachment=true"
       }
     ],
     "pros": [
@@ -7542,10 +7873,10 @@
         "revision": "Current Australian document checked 10 October 2026"
       },
       {
-        "title": "Australian equipment cost evidence",
+        "title": "Appliances Online exact-model seller noise specification",
         "url": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw/",
-        "kind": "Public Australian retailer equipment listing",
-        "revision": "Published equipment listing checked 10 October 2026; no stock or quote guarantee"
+        "kind": "Australian retailer published specifications",
+        "revision": "Exact 290L RVW variant listing checked 12 October 2026; seller-published noise, measurement method and distance unspecified"
       },
       {
         "title": "Retailer GST and separate installation terms",
@@ -7656,7 +7987,12 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "The current exact-model maker manual and datasheet give no measured dB noise figure. Typical heating-water production is 50 to 60 litres/hour, depending on model and weather; water and air test temperatures are not specified for the rate range.",
+        "value": "51 dB, seller-published by Appliances Online for this exact model. Original test distance not stated; pressure/power method not stated. The listing describes outside operating noise, while its generic table labels the same figure Indoor Sound Level. This is not a maker-verified noise measurement. Heating output and the shared 45°C reheating calculation are recorded separately.",
+        "sourceUrl": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw/"
+      },
+      {
+        "label": "Reheating calculation",
+        "value": "About 50.6 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Exact RVW and RVW-2.0E datasheet publishes 2650 W heating capacity. Comparison assumes a 45°C water rise and constant stated thermal output. Air test temperature is not specified. Extra electric booster excluded. Original maker air temperature: not specified.",
         "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf"
       }
     ],
@@ -7668,13 +8004,19 @@
       "There is no extra electric heater for emergency heating."
     ],
     "hotWaterPerformance": {
-      "noise": null,
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "litresPerHourMinimum": 50,
-        "litresPerHourMaximum": 60,
+      "noise": {
+        "value": 51,
+        "metric": "not-stated",
+        "distanceMetres": null,
+        "mode": "Seller-published operating noise. Appliances Online describes an outside noise rating; its generic table labels the same figure Indoor Sound Level. Test distance, pressure/power method and operating mode are not stated.",
+        "sourceUrl": "https://www.appliancesonline.com.au/product/econova-290l-all-in-one-heat-pump-hot-water-system-obsidian-grey-econ-300rvw/"
+      },
+      "recovery": {
+        "thermalOutputKw": 2.65,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": null,
         "sourceUrl": "https://econova.com.au/assets/sheet/DATASHEET-ECON-300RVW.pdf",
-        "basis": "Maker datasheet footnote 8 gives typical production of 50 to 60 litres/hour depending on the model and weather conditions. Water start/end temperatures and an air test temperature are not specified for this range. Electric-boost performance is not separately quantified."
+        "basis": "Exact RVW and RVW-2.0E datasheet publishes 2650 W heating capacity. Comparison assumes a 45°C water rise and constant stated thermal output. Air test temperature is not specified. Extra electric booster excluded."
       }
     }
   },
@@ -7954,13 +8296,13 @@
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Reheating evidence",
-        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "label": "Water and servicing",
+        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Water and servicing",
-        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "label": "Reheating calculation",
+        "value": "About 133.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       }
     ],
@@ -7981,7 +8323,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 7,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "basis": "Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded."
+      }
     }
   },
   {
@@ -8108,13 +8456,13 @@
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Reheating evidence",
-        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "label": "Water and servicing",
+        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Water and servicing",
-        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "label": "Reheating calculation",
+        "value": "About 133.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       }
     ],
@@ -8135,7 +8483,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 7,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "basis": "Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded."
+      }
     }
   },
   {
@@ -8262,13 +8616,13 @@
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Reheating evidence",
-        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "label": "Water and servicing",
+        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Water and servicing",
-        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "label": "Reheating calculation",
+        "value": "About 133.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       }
     ],
@@ -8289,7 +8643,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 7,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "basis": "Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded."
+      }
     }
   },
   {
@@ -8416,13 +8776,13 @@
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Reheating evidence",
-        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "label": "Water and servicing",
+        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Water and servicing",
-        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "label": "Reheating calculation",
+        "value": "About 133.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       }
     ],
@@ -8443,7 +8803,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 7,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "basis": "Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded."
+      }
     }
   },
   {
@@ -8570,13 +8936,13 @@
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Reheating evidence",
-        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "label": "Water and servicing",
+        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Water and servicing",
-        "value": "Standard protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "label": "Reheating calculation",
+        "value": "About 133.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       }
     ],
@@ -8597,7 +8963,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 7,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "basis": "Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded."
+      }
     }
   },
   {
@@ -8724,13 +9096,13 @@
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Reheating evidence",
-        "value": "No usable heating-rate or measured recovery-time test is published for this exact S7 system. The7.8 kW relief-valve sizing figure is not an actual recovery test.",
+        "label": "Water and servicing",
+        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
       {
-        "label": "Water and servicing",
-        "value": "Hard-water protective rod option. Inspect protective rods at least every5 years; water-quality limits and regular servicing apply.",
+        "label": "Reheating calculation",
+        "value": "About 133.8 litres/hour for a shared 45°C rise in water temperature, assuming the stated heat output is maintained. Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded. Original maker air temperature: 32.6°C.",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       }
     ],
@@ -8751,7 +9123,13 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf"
       },
-      "recovery": null
+      "recovery": {
+        "thermalOutputKw": 7,
+        "waterTemperatureRiseC": 45,
+        "airTemperatureC": 32.6,
+        "sourceUrl": "https://www.rinnai.com.au/documents/53b068ccab/hw-electric-hp-enviroflo-s7-oim.pdf",
+        "basis": "Published 7.0 kW SHPL70 heat output. Maker heat-output reference: 32.6°C air and 21.1°C inlet. Comparison assumes a 45°C water rise; final water temperature was not published. Extra electric element and relief-valve sizing figure excluded."
+      }
     }
   },
   {
@@ -8886,7 +9264,7 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test.",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test. Shared comparison: about 80.5 litres/hour for a 45°C water rise. Colder air can slow reheating.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       },
       {
@@ -8917,11 +9295,14 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
       },
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "litresPerHour": 78.8,
-        "basis": "Estimated from the maker 315-litre reference test: 17 to 63 C water at 20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
-        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      "recovery": {
+        "minutes": 240,
+        "heatedLitres": 315,
+        "waterStartC": 17,
+        "waterEndC": 63,
+        "airTemperatureC": 20,
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "basis": "Maker 315-litre reference example: four-hour heat-up at 20°C air, water 17 to 63°C, using GAU-A45HPD. Converted to the shared 45°C rise. Other selected tank sizes use the same heating unit; their tanks were not separately tested in this example."
       }
     }
   },
@@ -9057,7 +9438,7 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test.",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test. Shared comparison: about 80.5 litres/hour for a 45°C water rise. Colder air can slow reheating.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       },
       {
@@ -9088,11 +9469,14 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
       },
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "litresPerHour": 78.8,
-        "basis": "Estimated from the maker 315-litre reference test: 17 to 63 C water at 20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
-        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      "recovery": {
+        "minutes": 240,
+        "heatedLitres": 315,
+        "waterStartC": 17,
+        "waterEndC": 63,
+        "airTemperatureC": 20,
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "basis": "Maker 315-litre reference example: four-hour heat-up at 20°C air, water 17 to 63°C, using GAU-A45HPD. Converted to the shared 45°C rise. Other selected tank sizes use the same heating unit; their tanks were not separately tested in this example."
       }
     }
   },
@@ -9228,7 +9612,7 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test.",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. The selected tank uses the same GAU-A45HPD pump; the displayed rate is estimated from that 315-litre reference, not a separately measured tank test. Shared comparison: about 80.5 litres/hour for a 45°C water rise. Colder air can slow reheating.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       },
       {
@@ -9259,11 +9643,14 @@
         "mode": "Operating mode not specified",
         "sourceUrl": "https://www.sanden-hot-water.com.au/specifications/"
       },
-      "recovery": null,
-      "recoveryTimeEstimate": {
-        "litresPerHour": 78.8,
-        "basis": "Estimated from the maker 315-litre reference test: 17 to 63 C water at 20 C air, using the same GAU-A45HPD heating unit. This selected smaller tank package was not separately tested in the published example.",
-        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+      "recovery": {
+        "minutes": 240,
+        "heatedLitres": 315,
+        "waterStartC": 17,
+        "waterEndC": 63,
+        "airTemperatureC": 20,
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "basis": "Maker 315-litre reference example: four-hour heat-up at 20°C air, water 17 to 63°C, using GAU-A45HPD. Converted to the shared 45°C rise. Other selected tank sizes use the same heating unit; their tanks were not separately tested in this example."
       }
     }
   },
@@ -9399,7 +9786,7 @@
       },
       {
         "label": "Noise and heating test",
-        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. This is the selected tank size.",
+        "value": "37 dB at 1 m from the heating unit; pressure/power method not stated, operating mode not specified. Maker recovery example: 315 litres heated from 17 to 63 C in 4 hours at 20 C air. This is the selected tank size. Shared comparison: about 80.5 litres/hour for a 45°C water rise. Colder air can slow reheating.",
         "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
       },
       {
@@ -9433,11 +9820,11 @@
       "recovery": {
         "minutes": 240,
         "heatedLitres": 315,
-        "airTemperatureC": 20,
         "waterStartC": 17,
         "waterEndC": 63,
-        "basis": "Maker current 315-litre recovery example: 4 hours, water17 to63 C, air20 C; no boost element.",
-        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/"
+        "airTemperatureC": 20,
+        "sourceUrl": "https://www.sanden-hot-water.com.au/why-choose-sanden/",
+        "basis": "Maker 315-litre reference example: four-hour heat-up at 20°C air, water 17 to 63°C, using GAU-A45HPD. Converted to the shared 45°C rise. Other selected tank sizes use the same heating unit; their tanks were not separately tested in this example."
       }
     }
   }

@@ -1,9 +1,15 @@
 # Next task handover
 
-Status: SECCCA council feedback: customer enquiry windows, council-branded journeys and official-source council reporting; matching GitHub/Sites publication authorised.
-Prepared: 8 October 2026
+Status: Product comparison corrections and separate Creditex/business-created form compliance; matching GitHub/Sites publication authorised.
+Prepared: 12 October 2026
 
-## Current delivery: council journey and reporting
+## Current follow-up, 12 October 2026
+
+Deliver the corrected product measurements, click sorting, approved multihead rebate matching and separate Creditex/business-created form compliance workflow. Migration 0260 retains immutable questionnaire/review versions and current permission/source checks. Special report/PDF and rental/gas/electrical safety forms are excluded by the user's explicit scope decision. Do not reintroduce them or add questions to installers' quoting workflow.
+
+Evidence and exact publication identity: `C:/Webproject/outputs/aea-products-followup-20261012/release-report.json`. Eight researched product-source gaps remain; do not fill them with guessed figures. Broad-suite baseline failures are recorded separately from affected checks. The sections below retain the earlier council delivery history.
+
+## Retained prior delivery: council journey and reporting, 8 October 2026
 
 Outcome: customers choose a quote/contact window which closes automatically and a requested work-completion deadline. Council administrators publish an attributed council-branded enquiry journey using their existing profile and a return-home link; custom domains activate only after verified hosting/DNS setup. City of Port Phillip is an explicitly labelled demonstration. Official CER/VEU community activity is the main council view, with business/residential breakdowns only where the source supports them. TLink participation stays separately labelled. Council-nominated report recipients receive a branded PDF after a new CER monthly edition is detected, with a durable snapshot, per-recipient delivery history and no duplicate ambiguous resends.
 

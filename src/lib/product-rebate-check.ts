@@ -72,6 +72,8 @@ export type ProductRebateProgramResult = {
   issueCode: string | null;
   retryable: boolean;
   certificateValue: ProductCertificateValue | null;
+  /** Quote-only planning assumption for a multi-room outdoor unit without a selected room-unit package. */
+  capacityAssumption?: { heatingCapacityKw: string; coolingCapacityKw: string };
 };
 export type ProductRebateCheckResult = {
   ok: true;
@@ -193,6 +195,11 @@ function isProgramResult(value: unknown): value is ProductRebateProgramResult {
       && (source.version === undefined || typeof source.version === "string"))
     && nullableString(value.matchedModel) && nullableString(value.sourceCheckedAt) && nullableString(value.receiptHash)
     && nullableString(value.issueCode) && typeof value.retryable === "boolean"
+    && (value.capacityAssumption === undefined || value.program === "veu" && value.status === "calculated"
+      && isRecord(value.capacityAssumption)
+      && Object.keys(value.capacityAssumption).length === 2
+      && [value.capacityAssumption.heatingCapacityKw, value.capacityAssumption.coolingCapacityKw].every(capacity =>
+        typeof capacity === "string" && /^\d+(?:\.\d+)?$/.test(capacity) && Number.isFinite(Number(capacity)) && Number(capacity) > 0))
     && (value.certificateValue === null || value.status === "calculated" && isCertificateValue(value.certificateValue))
     && (!isRecord(value.certificateValue) || value.certificateValue.grossValueCents === null || typeof value.quantity === "number" && typeof value.certificateValue.unitPriceCents === "number" && value.certificateValue.grossValueCents === value.quantity * value.certificateValue.unitPriceCents)
     && (value.quantity === null ? value.unit === null : value.status === "calculated" && value.unit !== null)
@@ -207,6 +214,7 @@ export function isProductRebateCheckResult(value: unknown): value is ProductReba
     && (value.category === "hot-water" || value.category === "air-conditioning" || value.category === "multi-split")
     && currentRebateSystemOptions(value.category).some(option => option.value === value.currentSystem)
     && Array.isArray(value.results) && value.results.every(isProgramResult)
+    && value.results.every(result => result.capacityAssumption === undefined || value.category === "multi-split")
     && (value.category === "hot-water"
       ? value.results.length === 3 && new Set(value.results.map(result => result.program)).size === 3
       : value.results.length === 1 && value.results[0].program === "veu");

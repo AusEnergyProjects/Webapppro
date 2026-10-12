@@ -44,7 +44,7 @@ function harness({ canManage = true, answer = async () => ({ ok: true, result, s
   const window = { confirm: () => confirm, addEventListener() {}, removeEventListener() {} };
   const editor = compile('src/components/TradeBusinessFormEditor.tsx', {
     react: hooks, 'react/jsx-runtime': jsx, './TradeBusinessProvider': { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => business },
-    './TlinkFormMindMap': { TlinkFormMindMap: 'mind-map' }, './CreditexFormPhonePreview': { CreditexFormPhonePreview: 'phone-preview' },
+    './FormCompliancePanel': { FormComplianceEditor: 'compliance-editor' }, './TlinkFormMindMap': { TlinkFormMindMap: 'mind-map' }, './CreditexFormPhonePreview': { CreditexFormPhonePreview: 'phone-preview' },
     '@/lib/trade-business-form-design': design, '@/lib/creditex-form-pages': pages, '@/lib/trade-business-form-ai': contract,
     './TradeFormsWorkspace.module.css': { default: {} }, '@/lib/energy-service-catalogue.mjs': { ENERGY_SERVICE_IDS, ENERGY_SERVICE_LABELS },
   }, window);

@@ -1,12 +1,20 @@
 # Australian Energy Assessments and TLink forward roadmap
 
+## Product comparison and form compliance follow-up, 12 October 2026
+
+Implemented: common-basis calculated hot-water reheating, corrected iStore noise, direct figure sorting, exact approved multihead matching and full-rated-capacity planning examples. Twenty-five recorded source gaps resolved; eight need reliable exact-model evidence.
+
+Implemented: editable reviewer questionnaires and separate saved review workflow for Creditex forms and business-created TLink forms, backed by migration 0260. Special rental and report/PDF safety forms are outside this scope. Reviews preserve actor/history and require current permissions, assignment, template and installer/evidence snapshots. This does not add trade quote-preparation steps or replace programme approval.
+
+Release evidence: `C:/Webproject/outputs/aea-products-followup-20261012/release-report.json`.
+
 Status: current
 
 Roadmap owner: product owner
 
 Engineering owner: technical lead
 
-Last reconciled: 8 October 2026
+Last reconciled: 12 October 2026
 
 ## Current implementation: SECCCA council journey and reporting feedback
 

@@ -173,7 +173,8 @@
         "ACSS35"
       ],
       "brands": [
-        "Emerald"
+        "Emerald",
+        "Emerald Energy"
       ],
       "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/08/Emerald-Air-Con-Split-System-data-sheet.pdf",
       "indoorUnits": null,
@@ -1160,7 +1161,8 @@
         "ACR126U"
       ],
       "brands": [
-        "Emerald"
+        "Emerald",
+        "Emerald Energy"
       ],
       "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2025/04/Emerald-Air-Con-Multi-Head-Pro-data-sheet.pdf",
       "indoorUnits": null,
@@ -1172,10 +1174,12 @@
       "brand": "Emerald",
       "category": "multi-split",
       "models": [
-        "ACV180U"
+        "ACV180U",
+        "ACV180U-Non-Ducted"
       ],
       "brands": [
-        "Emerald"
+        "Emerald",
+        "Emerald Energy"
       ],
       "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-18kW-data-sheet.pdf",
       "indoorUnits": null,
@@ -1187,10 +1191,12 @@
       "brand": "Emerald",
       "category": "multi-split",
       "models": [
-        "ACV200U"
+        "ACV200U",
+        "ACV200U - Non-Ducted"
       ],
       "brands": [
-        "Emerald"
+        "Emerald",
+        "Emerald Energy"
       ],
       "modelSourceUrl": "https://www.emerald.com.au/wp-content/uploads/2026/05/Emerald-Air-Con-Multi-Head-Ultra-20kW-data-sheet.pdf",
       "indoorUnits": null,
@@ -1202,7 +1208,8 @@
       "brand": "Rinnai",
       "category": "multi-split",
       "models": [
-        "MON3H07B1LA"
+        "MON3H07B1LA",
+        "MON3H07B1LA-Non-Ducted"
       ],
       "brands": [
         "Rinnai"
@@ -1225,7 +1232,8 @@
       "brand": "Mitsubishi Electric",
       "category": "multi-split",
       "models": [
-        "MXZ-2F52VGD-A1"
+        "MXZ-2F52VGD-A1",
+        "MXZ-2F52VGD"
       ],
       "brands": [
         "Mitsubishi Electric"
@@ -1271,7 +1279,8 @@
       "brand": "Mitsubishi Electric",
       "category": "multi-split",
       "models": [
-        "MXZ-4F71VGD-A1"
+        "MXZ-4F71VGD-A1",
+        "MXZ-4F71VGD"
       ],
       "brands": [
         "Mitsubishi Electric"
@@ -1294,7 +1303,8 @@
       "brand": "Mitsubishi Electric",
       "category": "multi-split",
       "models": [
-        "MXZ-4F80VGD-A1"
+        "MXZ-4F80VGD-A1",
+        "MXZ-4F80VGD"
       ],
       "brands": [
         "Mitsubishi Electric"
@@ -1317,7 +1327,8 @@
       "brand": "Mitsubishi Electric",
       "category": "multi-split",
       "models": [
-        "MXZ-4F80VGD-A1"
+        "MXZ-4F80VGD-A1",
+        "MXZ-4F80VGD"
       ],
       "brands": [
         "Mitsubishi Electric"
@@ -1347,7 +1358,8 @@
       "brand": "Mitsubishi Electric",
       "category": "multi-split",
       "models": [
-        "MXZ-5F100VGD-A1"
+        "MXZ-5F100VGD-A1",
+        "MXZ-5F100VGD"
       ],
       "brands": [
         "Mitsubishi Electric"
@@ -1590,7 +1602,8 @@
       "brand": "Daikin",
       "category": "multi-split",
       "models": [
-        "3MXM52RVMA"
+        "3MXM52RVMA",
+        "3MXM52RVMA-Non-Ducted"
       ],
       "brands": [
         "Daikin"
@@ -1620,7 +1633,8 @@
       "brand": "Daikin",
       "category": "multi-split",
       "models": [
-        "4MXM68RVMA"
+        "4MXM68RVMA",
+        "4MXM68RVMA-Non-Ducted"
       ],
       "brands": [
         "Daikin"
@@ -1650,7 +1664,8 @@
       "brand": "Daikin",
       "category": "multi-split",
       "models": [
-        "4MXM80RVMA"
+        "4MXM80RVMA",
+        "4MXM80RVMA-Non-Ducted"
       ],
       "brands": [
         "Daikin"
@@ -1683,40 +1698,18 @@
     },
     {
       "id": "daikin-multi-5mxm100rvma-cora-rated",
-      "name": "Daikin Cora 5-room 10 kW rated combination",
+      "name": "Daikin Super Multi NX 5MXM100R2VMA 10 kW",
       "brand": "Daikin",
       "category": "multi-split",
       "models": [
-        "5MXM100RVMA"
+        "5MXM100R2VMA"
       ],
       "brands": [
         "Daikin"
       ],
-      "modelSourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
-      "indoorUnits": [
-        {
-          "model": "CTXM20RVMA",
-          "quantity": "1",
-          "heatingCapacityKw": "1.42",
-          "coolingCapacityKw": "1.29",
-          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
-        },
-        {
-          "model": "CTXM25RVMA",
-          "quantity": "3",
-          "heatingCapacityKw": "1.77",
-          "coolingCapacityKw": "1.61",
-          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
-        },
-        {
-          "model": "CTXM60RVMA",
-          "quantity": "1",
-          "heatingCapacityKw": "4.26",
-          "coolingCapacityKw": "3.87",
-          "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
-        }
-      ],
-      "combination": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA"
+      "modelSourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf",
+      "indoorUnits": null,
+      "combination": null
     },
     {
       "id": "gree-pular-07",

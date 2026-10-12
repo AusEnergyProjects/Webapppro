@@ -21,6 +21,7 @@ import { CreditexOfficialSourceBatchAcquisition } from "./CreditexOfficialSource
 import { CreditexWorkPackDocumentOutputEditor } from "./CreditexWorkPackDocumentOutputEditor";
 import { CreditexStatutorySourceLibrary } from "./CreditexStatutorySourceLibrary";
 import { CreditexFieldFormMasters } from "./CreditexFieldFormMasters";
+import { FormComplianceEditor } from './FormCompliancePanel';
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
 
 type Api = (
@@ -1094,6 +1095,12 @@ export function CreditexActivityWorkPackGovernance({
   });
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [selectedVersionId, setSelectedVersionId] = useState("");
+  const [complianceTemplateId, setComplianceTemplateId] = useState('');
+  const fieldFormDirty = useRef(false);
+  const workPackComplianceDirty = useRef(false);
+  const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; onFieldFormDirtyChange?.(dirty || workPackComplianceDirty.current); }, [onFieldFormDirtyChange]);
+  const reportWorkPackComplianceDirty = useCallback((dirty: boolean) => { workPackComplianceDirty.current = dirty; onFieldFormDirtyChange?.(dirty || fieldFormDirty.current); }, [onFieldFormDirtyChange]);
+  useEffect(() => () => onFieldFormDirtyChange?.(false), [onFieldFormDirtyChange]);
   const [draft, setDraft] = useState<WorkPackDraft | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -1175,6 +1182,15 @@ export function CreditexActivityWorkPackGovernance({
   const pendingCalculatorReviews = snapshot.calculatorReviews.filter(
     (item) => item.status === "pending_review",
   );
+
+  function closeWorkPackCompliance() {
+    if (workPackComplianceDirty.current && !window.confirm('Discard unsaved compliance questionnaire changes?')) return false;
+    reportWorkPackComplianceDirty(false); setComplianceTemplateId(''); return true;
+  }
+  function openWorkPackCompliance(version: WorkPackVersion) {
+    if (complianceTemplateId !== version.schema.activityTemplateId && !closeWorkPackCompliance()) return;
+    setComplianceTemplateId(version.schema.activityTemplateId);
+  }
 
   function beginNewDraft() {
     if (!selectedActivity) return;
@@ -1445,7 +1461,7 @@ export function CreditexActivityWorkPackGovernance({
 
   return (
     <section className={styles.workspace} aria-label={`${contextLabel} compliance form governance`}>
-      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} canPublish={fieldMasterCanPublish} onManageAccess={onManageFormAccess} onDirtyChange={onFieldFormDirtyChange} />
+      <CreditexFieldFormMasters api={api} actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'creditex'} canAuthor={fieldMasterCanAuthor ?? snapshot.access.canAuthor} canPublish={fieldMasterCanPublish} onManageAccess={onManageFormAccess} onDirtyChange={reportFieldFormDirty} />
 
       {canManageGovernance && <details className={styles.advancedGovernance}>
         <summary><strong>Source review &amp; publication rules</strong><span>{pendingCalculatorReviews.length ? `${pendingCalculatorReviews.length} calculations awaiting review · ` : ""}Official documents, governed versions and calculation approvals</span></summary>
@@ -1516,6 +1532,7 @@ export function CreditexActivityWorkPackGovernance({
               const row = snapshot.coverage.find((item) => item.activityVersionId === activity.id);
               return (
                 <button key={activity.id} type="button" data-selected={selectedActivityId === activity.id} onClick={() => {
+                  if (!closeWorkPackCompliance()) return;
                   setSelectedActivityId(activity.id);
                   const first = snapshot.versions.find((version) => version.activityVersionId === activity.id);
                   setSelectedVersionId(first?.id || "");
@@ -1594,6 +1611,7 @@ export function CreditexActivityWorkPackGovernance({
                       <small>{version.originKind === "source_candidate" ? "Source-backed candidate draft" : stateLabel(version.state)} | updated {dateTime(version.updatedAt)}</small>
                     </button>
                     <div className={styles.versionActions}>
+                      {snapshot.access.canAuthor && ['draft', 'published'].includes(version.state) && <button type="button" onClick={() => openWorkPackCompliance(version)}>Compliance checks</button>}
                       <button type="button" onClick={() => { setSelectedVersionId(version.id); setPreviewOpen(true); }}>Preview</button>
                       {snapshot.access.canAuthor && version.state === "draft" && <button type="button" onClick={() => editVersion(version)}>Edit draft</button>}
                       {snapshot.access.canAuthor && <button type="button" onClick={() => editVersion(version, true)}>Clone</button>}
@@ -1604,6 +1622,8 @@ export function CreditexActivityWorkPackGovernance({
                   </article>
                 )) : <div className={styles.empty}><strong>No governed workflow attached</strong><p>Create the first source-bound draft for this activity.</p></div>}
               </section>
+
+              {complianceTemplateId && <section className={styles.builderSection} aria-label="Activity work-pack compliance"><button type="button" onClick={() => closeWorkPackCompliance()}>Close compliance checks</button><FormComplianceEditor key={complianceTemplateId} api={api} scope="creditex" actorMode={endpoint.startsWith('/api/admin/') ? 'admin' : 'compliance'} formKey={`work-pack:${complianceTemplateId}`} onDirtyChange={reportWorkPackComplianceDirty} /></section>}
 
               {selectedVersion && (
                 <section className={styles.builderSection} aria-labelledby="work-pack-source-register-title">

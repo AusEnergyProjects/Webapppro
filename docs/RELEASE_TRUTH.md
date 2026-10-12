@@ -1,5 +1,13 @@
 # TLink and Australian Energy Assessments release truth
 
+## Product measurements and independent form reviews, 12 October 2026
+
+The product catalogue corrects iStore R290 noise to 46/47 dB and calculated reheating to 47.8/76.4 litres per hour for the same 45 degree water-temperature rise. Published air-temperature conditions remain in Specs. Research resolved 25 of 33 recorded source gaps; eight measurements remain unsupported rather than invented. Product figures can be sorted directly. All 25 multihead outdoor identities have reviewed approved-product matches; outdoor-only rebate examples use approved rated heating/cooling capacity and explain the effect of a smaller connected system.
+
+Migration 0260 adds independent, append-only compliance questionnaires and reviews. Creditex owns programme/work-pack and created shared-form checks; businesses own checks for their created TLink forms. Defaults contain 16 to 25 editable questions. Installer answers and existing approval decisions remain separate. Current account, role, job/case assignment, template revision and evidence snapshots are rechecked when saving. Changed work requires a fresh review. Special rental, gas/electrical safety and report/PDF forms are excluded from this delivery.
+
+Validation, source gaps and matching GitHub/Sites publication identity are recorded in `C:/Webproject/outputs/aea-products-followup-20261012/release-report.json`. The broad suite has pre-existing source-approval, harness, copy and browser-timeout failures; it is not reported as clean.
+
 ## Council enquiry controls and official community reporting, 8 October 2026
 
 The SECCCA feedback implementation adds customer-selected quote/contact windows of 1 to 365 days or 1 to 12 calendar months, plus a requested work-completion timeframe/date. Existing opportunity expiry controls contact access, new quote issue and queued quote delivery; accepted work remains available. Migrations 0257 through 0259 are additive. Customers identify a residential or business project; existing unclassified enquiries stay unclassified. Trades see both timing requests before choosing the work.

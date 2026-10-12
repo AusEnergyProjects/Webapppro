@@ -9,6 +9,7 @@ import { createEditorFormHistory, changeEditorFormHistory, endEditorFormHistoryG
 import { TlinkFormMindMap, TlinkMindMapMark } from "./TlinkFormMindMap";
 import { ACTIVITY_WIZARD_PAGE_FIELD_LIMIT } from "@/lib/trade-activity-form-flow";
 import { CreditexFormPhonePreview } from "./CreditexFormPhonePreview";
+import { FormComplianceEditor } from './FormCompliancePanel';
 import styles from "./CreditexActivityWorkPackGovernance.module.css";
 
 type Api = (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;
@@ -114,7 +115,8 @@ function ConditionEditor({ form, targetKey, phase, condition, locked, label, onC
 }
 
 export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, canPublish = canAuthor, onManageAccess, onDirtyChange }: { api: Api; actorMode: "admin" | "creditex"; canAuthor?: boolean; canPublish?: boolean; onManageAccess?: () => void; onDirtyChange?: (dirty: boolean) => void }) {
-  const [editorView, setEditorView] = useState<"form" | "map">("form");
+  const [editorView, setEditorView] = useState<"form" | "map" | "compliance">("form");
+  const [complianceDirty, setComplianceDirty] = useState(false);
   const [mapOpened, setMapOpened] = useState(false);
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
   const [catalogue, setCatalogue] = useState<Option[]>([]);
@@ -158,9 +160,9 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
     setMessage(direction === "undo" ? "Last form change undone." : "Form change restored.");
   }
   useEffect(() => {
-    onDirtyChange?.(dirty);
+    onDirtyChange?.(dirty || complianceDirty);
     return () => onDirtyChange?.(false);
-  }, [dirty, onDirtyChange]);
+  }, [dirty, complianceDirty, onDirtyChange]);
   useEffect(() => {
     if (!dirty) return;
     const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); };
@@ -190,7 +192,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
   }, [requestCatalogue]);
   async function load(templateId: string, variantId = "") {
     if (busy) return;
-    if (dirty && !window.confirm("Discard unsaved master-form changes?")) return;
+    if ((dirty || complianceDirty) && !window.confirm("Discard unsaved form or compliance changes?")) return;
     setBusy(true); setMessage("");
     try { const result = await api(`${endpoint}?view=masters&actorMode=${actorMode}&activityTemplateId=${encodeURIComponent(templateId)}&variantId=${encodeURIComponent(variantId)}`);
       if (!result.form || typeof result.form !== "object" || !("fields" in result.form) || !Array.isArray(result.form.fields)) throw new Error("The activity form could not be read.");
@@ -199,7 +201,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
     finally { setBusy(false); }
   }
   function backToCatalogue() {
-    if (busy || (dirty && !window.confirm("Discard unsaved master-form changes?"))) return;
+    if (busy || ((dirty || complianceDirty) && !window.confirm("Discard unsaved form or compliance changes?"))) return;
     setForm(null); setSelected(""); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); setMessage(""); setDraftCopy(null); setDraftConfirmation(null); setEditorView("form"); setMapOpened(false); setMapEditorOpen(false);
     setSearch(""); setProgram("");
   }
@@ -223,7 +225,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
     setDrafts((current) => [...current.filter((item) => item.id !== value.id), value]);
   }
   async function openDraft(draftId: string) {
-    if (busy || (dirty && !window.confirm("Discard unsaved changes before opening this saved draft?"))) return;
+    if (busy || ((dirty || complianceDirty) && !window.confirm("Discard unsaved changes before opening this saved draft?"))) return;
     setBusy(true); setMessage("");
     try { const result = await api(`${endpoint}?view=master_drafts&actorMode=${actorMode}&draftId=${encodeURIComponent(draftId)}`); acceptDraft(result.draft); setQuestion(0); setSigningItem(""); setRemoval(null); setRenamingPage(""); }
     catch (error) { setMessage(error instanceof Error ? error.message : "The draft could not be opened."); }
@@ -532,7 +534,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
     </>}
     {!form && !busy && !catalogue.length && !message && <p>No activity forms are available.</p>}
     {form && field ? <div className={styles.masterEditingLayout}>
-    <div className={styles.masterEditor} onBlurCapture={() => setFormHistory(endEditorFormHistoryGroup)} onKeyDown={(event) => {
+    <div className={styles.masterEditor} style={editorView === 'compliance' ? { gridColumn: '1 / -1' } : undefined} onBlurCapture={() => setFormHistory(endEditorFormHistoryGroup)} onKeyDown={(event) => {
       if (event.defaultPrevented || event.altKey || !(event.ctrlKey || event.metaKey)) return;
       if (event.target instanceof HTMLElement && event.target.closest('textarea, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"])')) return;
       const key = event.key.toLowerCase();
@@ -543,7 +545,8 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
     <div className={styles.masterSaveBar}><span role="status">{draftCopy ? `Draft copy ${draftCopy.revision}${dirty ? " | Unsaved changes" : " | Saved"}` : canEditCurrent ? dirty ? "Unsaved changes" : "Published form" : "Read-only preview"} · {draftCopy ? draftCopy.baseMasterVersion ? `Published version ${draftCopy.baseMasterVersion}` : "Based on built-in form" : `Published version ${form.version}`}</span>{canAuthor && <div className={styles.masterRowActions}>{canEditCurrent && <button type="button" disabled={!dirty || busy} onClick={() => void saveCurrent()}>{busy ? "Saving..." : draftCopy ? "Save draft" : "Save and publish master"}</button>}{draftCopy ? <>{canPublish && <button type="button" disabled={busy || dirty || !draftCopy.baseIsCurrent} onClick={() => setDraftConfirmation("publish")}>Replace published form</button>}<button type="button" disabled={busy} onClick={() => setDraftConfirmation("discard")}>Discard draft</button></> : <button type="button" disabled={busy || dirty} onClick={() => void duplicate(form.activityTemplateId)}>Duplicate to draft</button>}</div>}</div>
     {draftCopy && <p className={styles.masterLibraryNote}>{dirty ? canPublish ? "Save your draft before replacing the published form." : "Save your changes so your team can review this draft." : "You can leave and return to this saved draft at any time."} {!draftCopy.baseIsCurrent && "The published form has changed since this copy was created. This copy cannot replace it; create a new copy of the current form."}</p>}
     {draftConfirmation && draftCopy && canAuthor && (draftConfirmation !== "publish" || canPublish) && <div className={styles.masterAccess} role="alert"><strong>{draftConfirmation === "publish" ? draftCopy.baseMasterVersion ? `Replace published version ${draftCopy.baseMasterVersion} with this saved draft?` : "Replace the built-in form with this saved draft?" : "Discard this draft copy?"}</strong><p>{draftConfirmation === "publish" ? "New records will use the replacement. Signed and submitted records keep their original version." : "The published form stays unchanged. Any unsaved edits in this copy will be discarded."}</p><div className={styles.masterRowActions}><button type="button" disabled={busy || (draftConfirmation === "publish" && (dirty || !draftCopy.baseIsCurrent))} onClick={() => void finishDraft(draftConfirmation === "publish" ? "publish_master_draft" : "discard_master_draft")}>{draftConfirmation === "publish" ? "Confirm replacement" : "Confirm discard"}</button><button type="button" disabled={busy} onClick={() => setDraftConfirmation(null)}>Keep editing</button></div></div>}
-    <div className={styles.masterViewPicker} role="group" aria-label="Form design view"><button type="button" aria-pressed={editorView === "form"} onClick={() => setEditorView("form")}>Form editor</button><button type="button" aria-pressed={editorView === "map"} onClick={() => { setMapOpened(true); setEditorView("map"); }}><TlinkMindMapMark /> TLink Mind Map</button></div>
+    <div className={styles.masterViewPicker} role="group" aria-label="Form design view"><button type="button" aria-pressed={editorView === "form"} onClick={() => { if (complianceDirty && !window.confirm('Discard unsaved compliance questions?')) return; setEditorView("form"); }}>Form editor</button><button type="button" aria-pressed={editorView === "map"} onClick={() => { if (complianceDirty && !window.confirm('Discard unsaved compliance questions?')) return; setMapOpened(true); setEditorView("map"); }}><TlinkMindMapMark /> TLink Mind Map</button><button type="button" aria-pressed={editorView === 'compliance'} disabled={dirty || Boolean(draftCopy && !draftCopy.baseMasterVersion)} onClick={() => setEditorView('compliance')}>Compliance</button></div>
+    {editorView === 'compliance' && <FormComplianceEditor key={`${form.activityTemplateId}:${form.variantId}`} api={api} scope="creditex" actorMode={actorMode} formKey={`activity:${form.activityTemplateId}:${form.variantId}`} onDirtyChange={setComplianceDirty} />}
     {editorView === "form" && historyControls}
     <div hidden={editorView !== "map"}>
       {mapOpened && <TlinkFormMindMap key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} editable={canEditCurrent && !busy} selectedKey={signingItem ? '@declaration:' + signingItem : field.key}
@@ -582,7 +585,7 @@ export function CreditexFieldFormMasters({ api, actorMode, canAuthor = true, can
     {form.variantOptions.length > 1 ? <label>Premises<select disabled={busy || Boolean(draftCopy)} value={form.variantId} onChange={(event) => void load(selected, event.target.value)}>{form.variantOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
     {itemEditor}</>}
     </div>
-    <CreditexFormPhonePreview key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} canEdit={canEditCurrent} selectedFieldKey={signingItem ? undefined : field.key} selectedDeclarationKey={signingItem || undefined} onSelectDeclaration={selectSignature} onSelectField={(key) => { const index = form.fields.findIndex((item) => item.key === key); if (index >= 0) selectQuestion(index); }} />
+    {editorView !== 'compliance' && <CreditexFormPhonePreview key={`${form.activityTemplateId}:${form.variantId}:${draftCopy?.id || "published"}`} form={form} canEdit={canEditCurrent} selectedFieldKey={signingItem ? undefined : field.key} selectedDeclarationKey={signingItem || undefined} onSelectDeclaration={selectSignature} onSelectField={(key) => { const index = form.fields.findIndex((item) => item.key === key); if (index >= 0) selectQuestion(index); }} />}
     </div> : null}
     {records.length ? <table><thead><tr><th>Field record</th><th>Activity</th><th>Submitted</th><th>Job</th><th>Report</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.recordNumber}</td><td>{record.form.title}</td><td>{record.submittedAt}</td><td>{record.workOrderId}</td><td><button type="button" disabled={busy} onClick={() => void viewReport(record.id)}>View report</button></td></tr>)}</tbody></table> : null}
   </section>;

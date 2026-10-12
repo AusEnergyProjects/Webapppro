@@ -9,7 +9,7 @@ import { PUBLIC_SITE, buildPlatformMetadata } from "../src/lib/public-site.ts";
 import { searchPublicSite } from "../src/lib/public-site-search.ts";
 import { calculateProductRating, productRatingMethods } from "../src/lib/product-ratings.ts";
 import { hotWaterComparisonFacts, hotWaterComparisonMeasurements } from "../src/lib/product-hot-water.ts";
-import { filterProductComparisons, productComparisonFilterOptions } from "../src/components/product-comparison-filters.ts";
+import { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons } from "../src/components/product-comparison-sort.ts";
 function compile(relative, dependencies) {
   const compiled = ts.transpileModule(readFileSync(new URL(relative, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const loaded = {};
@@ -23,7 +23,7 @@ const browser = compile("../src/components/ProductComparisonBrowser.tsx", {
   react,
   "react/jsx-runtime": jsx,
   "./product-comparison.css": {},
-  "./product-comparison-filters": { filterProductComparisons, productComparisonFilterOptions },
+  "./product-comparison-sort": { nextProductComparisonSort, productComparisonSortLabel, sortProductComparisons },
   "./ProductRebateChecker": {
     useProductRebateCheck: category => ({ category, profile: {}, lookup: {}, readyToCheck: false, entryFor: () => undefined }),
     ProductRebateChecker: () => jsx.jsx("section", { "data-testid": "product-rebate-checker" }),
@@ -229,7 +229,7 @@ test("comparable rows render immediately, with explicit unknowns, visible safety
     const methods = productRatingMethods(category.slug);
     const ratings = category.options.flatMap(product => methods.map(method => calculateProductRating(method, measurementsFor(category, product)[method.id])));
     assert.equal((html.match(/role="meter"/g) || []).length, ratings.filter(rating => rating.score !== null).length);
-    assert.equal((html.match(/Not scored<\/span>/g) || []).length, ratings.filter(rating => rating.score === null).length);
+    assert.equal((html.match(/See note<\/span>/g) || []).length, ratings.filter(rating => rating.score === null).length);
     for (const method of methods) assert.equal(html.split(`data-rating="${method.id}"`).length - 1, count);
     assert.match(html, /aria-label="Product categories"/);
     assert.match(html, /aria-label="Search products"|Search products<input/);
@@ -352,8 +352,9 @@ test("server-rendered controls stay disabled until the client can respond", () =
   const html = renderToStaticMarkup(page.ProductComparisonPage({ category }));
   assert.match(html, /aria-busy="true"/);
   assert.match(html, /<input[^>]*type="search"[^>]*disabled=""/);
-  assert.match(html, /<select[^>]*disabled=""/);
-  assert.equal((html.match(/<button[^>]*disabled=""/g) || []).length, category.options.length * 2 + 2);
+  assert.match(html, /aria-label="Sort products"/);
+  assert.doesNotMatch(html, /<select/);
+  assert.equal((html.match(/<button[^>]*disabled=""/g) || []).length, category.options.length * 2 + 2 + productRatingMethods(category.slug).length);
   assert.equal((html.match(/<article /g) || []).length, category.options.length);
 });
 

@@ -7,6 +7,7 @@ import { TradeBusinessFormEditor, type RegisterFormLeave } from './TradeBusiness
 import { CreditexFormPhonePreview } from './CreditexFormPhonePreview';
 import { TlinkFormMindMap } from './TlinkFormMindMap';
 import { VeuElectricalFormLibrary } from './TradeVeuElectricalAssessmentPanel';
+import { TradeFormComplianceWorkflow } from './FormCompliancePanel';
 import styles from './TradeFormsWorkspace.module.css';
 type CatalogueItem = { activityTemplateId: string; title: string; programCode: string; activityCode: string };
 export function TradeFormsWorkspace({ user, onRegisterLeave }: { user: User; onRegisterLeave?: RegisterFormLeave }) {
@@ -14,11 +15,11 @@ export function TradeFormsWorkspace({ user, onRegisterLeave }: { user: User; onR
   return <FormsWorkspace key={`${user.uid}:${business?.ownerUid || ''}:${business?.memberId || ''}`} user={user} onRegisterLeave={onRegisterLeave} />;
 }
 function FormsWorkspace({ user, onRegisterLeave }: { user: User; onRegisterLeave?: RegisterFormLeave }) {
-  const [tab, setTab] = useState<'compliance' | 'business' | 'safety'>('business');
+  const [tab, setTab] = useState<'compliance' | 'business' | 'safety' | 'reviews'>('business');
   const leave = useRef<(() => Promise<unknown>) | null>(null);
   const register = useCallback<RegisterFormLeave>(check => { leave.current = check; onRegisterLeave?.(check); }, [onRegisterLeave]);
   async function open(next: typeof tab) { if (next === tab) return; try { await leave.current?.(); setTab(next); } catch { /* The editor keeps the unsaved draft open. */ } }
-  return <section className={styles.workspace} aria-label="Forms"><header><span>BUSINESS TOOLS</span><h1>Forms</h1><p>Design your team&apos;s forms and explore official safety and Creditex compliance forms.</p></header><div className={styles.tabs} role="tablist" aria-label="Form libraries"><button role="tab" type="button" aria-selected={tab === 'compliance'} onClick={() => void open('compliance')}>Creditex compliance forms</button><button role="tab" type="button" aria-selected={tab === 'business'} onClick={() => void open('business')}>Forms</button><button role="tab" type="button" aria-selected={tab === 'safety'} onClick={() => void open('safety')}>Job safety forms</button></div>{tab === 'business' ? <TradeBusinessFormEditor user={user} onRegisterLeave={register} /> : tab === 'safety' ? <VeuElectricalFormLibrary user={user} /> : <ComplianceForms user={user} />}</section>;
+  return <section className={styles.workspace} aria-label="Forms"><header><span>BUSINESS TOOLS</span><h1>Forms</h1><p>Design your team&apos;s forms, review completed work and explore official safety and Creditex forms.</p></header><div className={styles.tabs} role="tablist" aria-label="Form libraries"><button role="tab" type="button" aria-selected={tab === 'compliance'} onClick={() => void open('compliance')}>Creditex compliance forms</button><button role="tab" type="button" aria-selected={tab === 'business'} onClick={() => void open('business')}>Forms</button><button role="tab" type="button" aria-selected={tab === 'safety'} onClick={() => void open('safety')}>Job safety forms</button><button role="tab" type="button" aria-selected={tab === 'reviews'} onClick={() => void open('reviews')}>Compliance reviews</button></div>{tab === 'business' ? <TradeBusinessFormEditor user={user} onRegisterLeave={register} /> : tab === 'reviews' ? <TradeFormComplianceWorkflow user={user} onRegisterLeave={register} /> : tab === 'safety' ? <VeuElectricalFormLibrary user={user} /> : <ComplianceForms user={user} />}</section>;
 }
 function ComplianceForms({ user }: { user: User }) {
   const fetch = useTradeBusinessFetch(); const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);

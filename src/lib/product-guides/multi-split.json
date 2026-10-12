@@ -2789,132 +2789,109 @@
   },
   {
     "id": "daikin-multi-5mxm100rvma-cora-rated",
-    "name": "Daikin Cora 5-room 10 kW rated combination",
+    "name": "Daikin Super Multi NX 5MXM100R2VMA 10 kW",
     "brand": "Daikin",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
-        "title": "Exact Australian model and supported combinations",
-        "url": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
-        "kind": "Manufacturer Australian information",
-        "revision": "Currently linked Australian PCRAU1729B; exact rated combinations page7 and CTXM-R table page19"
+        "title": "Daikin Australian R2 outdoor models and capacities",
+        "url": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf",
+        "kind": "manufacturer_specification",
+        "revision": "PCRAU2208A; exact R2 model and current approved identity reviewed 12 October 2026. No launch date inferred."
       },
       {
-        "title": "Included residential product warranty",
+        "title": "Current Australian Super Multi NX product range",
         "url": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
-        "kind": "Manufacturer Australian information",
-        "revision": "Current Australian information checked 10 October 2026"
+        "kind": "manufacturer_specification",
+        "revision": "Current maker range, feature descriptions and outdoor photograph checked 12 October 2026"
       },
       {
-        "title": "Current equipment component: 5MXM100RVMA",
-        "url": "https://www.ozaironline.com.au/products/daikin-10kw-super-multi-nx-outdoor-unit-only-5mxm100rvma",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CTXM20RVMA",
-        "url": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CTXM25RVMA",
-        "url": "https://www.ozaironline.com.au/products/daikin-2-5kw-multi-cora-series-indoor-unit-only-ctxm25rvma",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Current equipment component: CTXM60RVMA",
-        "url": "https://www.ozaironline.com.au/products/daikin-6kw-multi-cora-series-indoor-unit-only-ctxm60rvma",
-        "kind": "Australian public retailer equipment listing",
-        "revision": "Current Australian information checked 10 October 2026"
-      },
-      {
-        "title": "Retailer GST and delivery terms",
-        "url": "https://www.ozaironline.com.au/policies/shipping-policy",
-        "kind": "Australian public retailer price terms",
-        "revision": "Current Australian information checked 10 October 2026"
+        "title": "Current Daikin Australian warranty card",
+        "url": "https://www.daikin.com.au/_files/ugd/ea7b3d_f5bbf278308a4a27b50b5dfb517c11de.pdf",
+        "kind": "manufacturer_warranty",
+        "revision": "Current maker warranty page download checked 12 October 2026; Multi: five years parts and labour."
       }
     ],
     "image": {
-      "src": "/products/multi-split/daikin-ctxm-r-20-20261010.webp",
-      "alt": "Daikin CTXM-R Cora indoor unit; representative same-range photograph, outdoor unit and other selected heads not pictured",
-      "sourceUrl": "https://www.ozaironline.com.au/products/daikin-2kw-multi-cora-series-indoor-unit-only-ctxm20rvma"
+      "src": "/products/multi-split/daikin-super-multi-nx-outdoor-20261012.webp",
+      "alt": "Daikin Super Multi NX outdoor unit. Maker's representative range photograph; exact casing may vary by model.",
+      "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
     },
     "measurements": {
       "capacity": {
         "value": 10,
         "unit": "cooling-kw",
         "basisId": "multi-split-rated-cooling",
-        "variant": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
-        "basis": "Manufacturer rated outdoor/system simultaneous cooling for the listed complete supported equipment combination; not a sum of indoor unit capacity labels.",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
-        "checkedAt": "2026-10-10"
+        "variant": "5MXM100R2VMA",
+        "basis": "Rated outdoor simultaneous cooling capacity. This outdoor-only profile does not assume a particular room-unit combination; connected room capacity can be lower.",
+        "sourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf",
+        "checkedAt": "2026-10-12"
       },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
         "basisId": "main-product-parts",
-        "variant": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
-        "basis": "Included five-year residential manufacturing-defect parts cover for the main indoor and outdoor air conditioner. Installation and separate optional accessories follow their own terms.",
-        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx",
-        "checkedAt": "2026-10-10"
+        "variant": "5MXM100R2VMA",
+        "basis": "Current Australian manufacturer warranty card includes five years parts and labour for Multi systems. The bar measures main-product parts cover; installation workmanship and optional accessories have separate terms.",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_f5bbf278308a4a27b50b5dfb517c11de.pdf",
+        "checkedAt": "2026-10-12"
       }
     },
     "technicalSpecs": [
       {
-        "label": "Exact equipment combination",
-        "value": "1 x 5MXM100RVMA + 1 x CTXM20RVMA + 3 x CTXM25RVMA + 1 x CTXM60RVMA",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        "label": "Exact outdoor model",
+        "value": "5MXM100R2VMA",
+        "sourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf"
       },
       {
-        "label": "Selected room units",
-        "value": "5 high-wall room units, with handheld controls",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        "label": "Rated cooling output",
+        "value": "10 kW; outdoor output is shared between the connected rooms",
+        "sourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf"
       },
       {
-        "label": "Rated system cooling output",
-        "value": "10 kW; shared outdoor output, not the sum of room labels",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        "label": "Supported rooms",
+        "value": "Up to five indoor units; the installer selects compatible room models",
+        "sourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf"
       },
       {
-        "label": "Phone and room controls",
-        "value": "Handheld remote and weekly timer per room; optional wireless LAN adapter for CTXM-R phone control",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        "label": "Room controls",
+        "value": "Each room can have its own temperature and schedule. All connected rooms use the same heating or cooling mode.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
       },
       {
         "label": "Refrigerant",
         "value": "R32",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
-      },
-      {
-        "label": "Residential product fault cover",
-        "value": "Five years main indoor/outdoor parts; installation and accessory terms are separate",
         "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
       },
       {
-        "label": "Household power supply",
-        "value": "Single-phase 220-240 V, 50 Hz",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        "label": "Residential product fault cover",
+        "value": "Five years parts and labour under the current Australian Multi warranty; installation and accessory terms are separate",
+        "sourceUrl": "https://www.daikin.com.au/_files/ugd/ea7b3d_f5bbf278308a4a27b50b5dfb517c11de.pdf"
       },
       {
-        "label": "Outdoor heating operating range",
-        "value": "-15 to 18 C outside",
-        "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf"
+        "label": "Equipment included in this comparison",
+        "value": "Outdoor unit only. Indoor units and their capacities are selected for your home.",
+        "sourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf"
+      },
+      {
+        "label": "Photo shown",
+        "value": "Maker's representative Super Multi NX outdoor range photograph. Exact casing may vary by model.",
+        "sourceUrl": "https://www.daikin.com.au/products/residential/multi-split-air-conditioning/super-multi-nx"
       }
     ],
     "pros": [
-      "5 rooms share one outdoor unit.",
-      "Weekly timers can follow a separate routine in each room."
+      "Up to five rooms can share one outdoor unit, with separate temperature settings.",
+      "A priority-room setting can give extra heating or cooling to the room that needs it."
     ],
     "cons": [
-      "Phone control needs an optional adapter for every selected room unit."
+      "Room units are selected separately; this outdoor unit is not a complete five-room package.",
+      "The connected rooms cannot heat and cool at the same time."
     ],
     "freshness": {
-      "generation": "5MXM100RVMA with selected current AU room units",
+      "generation": "Current 5MXM100R2VMA outdoor model",
       "released": null,
-      "sourceUrl": "https://www.daikin.com.au/_files/ugd/b0568f_673e81fde66d4361871fc57ee7280307.pdf",
-      "note": "Exact Australian equipment remains listed by the maker and supplier. A brochure revision does not establish first launch."
+      "sourceUrl": "https://www.daikin.com.au/sites/default/files/brochures/files/PCRAU2208A-Daikin-Super-Multi-NX-Brochure_LR.pdf",
+      "note": "The exact R2 model appears in the reviewed Australian maker documentation and the accepted VEU register for the selected date. Its release year has not been assumed."
     }
   }
 ]

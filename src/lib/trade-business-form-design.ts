@@ -6,7 +6,7 @@ export type BusinessFormField = {
   section?: string; phase?: 'before' | 'after'; condition?: ActivityCondition;
 };
 export type BusinessFormTemplate = {
-  id: string; version: number; updatedAt: string; name: string; description: string;
+  id: string; templateKey?: string; version: number; updatedAt: string; name: string; description: string;
   guidance: string; categories: string[]; jurisdiction: string; fields: BusinessFormField[];
 };
 export function businessFormDesign(template: BusinessFormTemplate): ActivityForm {

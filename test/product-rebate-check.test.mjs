@@ -447,11 +447,10 @@ test("multi-split uses the exact installed heads and their verified rated capaci
   assert.equal(actual.inputs.outdoor_cooling_capacity_kw, "5.2");
   assert.equal(actual.inputs.rated_cooling_capacity_kw, undefined);
   assert.match(output.results[0].conditions[1], /\$1,000/);
-  const unrated = await run(coolingRequest({ productId: "emerald-multi-ultra-20" }), coolingDependencies(selection));
-  assert.equal(unrated.results[0].quantity, null); assert.equal(unrated.results[0].issueCode, "INDOOR_COMBINATION_UNCONFIRMED");
+  assert.equal(output.results[0].capacityAssumption, undefined, "A specified package must use its actual indoor capacities");
 });
 
-test("Panasonic outdoor profiles do not invent room-unit combinations or reuse outdoor-only capacity", async () => {
+test("outdoor-only profiles use the approved rated-capacity planning assumption without inventing room-unit identities", async () => {
   const products = coolingData.products.filter(product => product.category === "multi-split" && product.brand === "Panasonic");
   assert.equal(products.length, 5);
   for (const product of products) {
@@ -459,13 +458,104 @@ test("Panasonic outdoor profiles do not invent room-unit combinations or reuse o
     assert.equal(product.combination, null);
     assert.equal(product.models.length, 1);
     assert.match(product.models[0], /^CU-(?:2Z52|3Z54|4Z71|4Z80|5Z100)VBR$/);
+    let actual;
     const output = await run(coolingRequest({ productId: product.id }), coolingDependencies(
       coolingSelection(product.models[0], "multi", { brand: "Panasonic" }), {
-        searchVeu: async () => { throw new Error("An unspecified room-unit combination must not calculate"); },
+        estimateVeu: input => { actual = input; return veu.estimateCreditexVeu(input); },
       }));
-    assert.equal(output.results[0].quantity, null);
-    assert.equal(output.results[0].issueCode, "INDOOR_COMBINATION_UNCONFIRMED");
+    assert.equal(output.results[0].status, "calculated", output.results[0].summary);
+    assert.deepEqual(output.results[0].capacityAssumption, { heatingCapacityKw: "6.8", coolingCapacityKw: "5.2" });
+    assert.equal(actual.inputs.rated_heating_capacity_kw, actual.inputs.outdoor_heating_capacity_kw);
+    assert.equal(actual.inputs.rated_cooling_capacity_kw, actual.inputs.outdoor_cooling_capacity_kw);
+    assert.equal(actual.inputs.indoor_units, undefined);
+    assert.equal(actual.estimatePurpose, "quote");
+    assert.ok(output.results[0].conditions.some(condition => /Lower combined room-unit.*fewer VEECs.*smaller rebate/.test(condition)));
+    assert.equal(contract.isProductRebateCheckResult(output), true);
   }
+});
+
+test("an outdoor planning example still requires exact approval and authoritative performance values", async () => {
+  const product = coolingData.products.find(product => product.id === "emerald-multi-ultra-20");
+  const selection = coolingSelection(product.models[0], "multi", { brand: "Emerald" });
+  const unmatched = await run(coolingRequest({ productId: product.id }), coolingDependencies(selection, {searchVeu: async () => ({products: []})}));
+  assert.equal(unmatched.results[0].quantity, null);
+  assert.equal(unmatched.results[0].capacityAssumption, undefined);
+  const noPerformance = structuredClone(selection);
+  delete noPerformance.attributes.gemsHspfColdResidential;
+  const unavailable = await run(coolingRequest({ productId: product.id }), coolingDependencies(noPerformance));
+  assert.equal(unavailable.results[0].quantity, null);
+  assert.equal(unavailable.results[0].capacityAssumption, undefined);
+});
+
+test("reviewed Emerald Energy owner alias resolves exact models while preserving suffix and unrelated-brand boundaries", async () => {
+  const products = coolingData.products.filter(product => product.brand === "Emerald");
+  assert.equal(products.length, 4);
+  for (const product of products) assert.deepEqual(product.brands, ["Emerald", "Emerald Energy"]);
+  const selection = coolingSelection("ACV200U - Non-Ducted", "multi", {brand: "Emerald Energy"});
+  Object.assign(selection.attributes, {veuProductCategoryNumber:"6F", ratedCoolingCapacityKw:20, ratedHeatingCapacityKw:26, refrigerantType:"R-410A"});
+  const output = await run(coolingRequest({productId:"emerald-multi-ultra-20"}), coolingDependencies(selection));
+  assert.equal(output.results[0].status, "calculated", output.results[0].summary);
+  assert.deepEqual(output.results[0].capacityAssumption, {heatingCapacityKw:"26", coolingCapacityKw:"20"});
+  for (const mismatch of [{model:"ACV200U-1"},{model:"ACV200U - Ducted"},{brand:"Emerald Energy Solutions"}]) {
+    const rejected = await run(coolingRequest({productId:"emerald-multi-ultra-20"}), coolingDependencies({...selection,...mismatch}));
+    assert.equal(rejected.results[0].quantity, null);
+  }
+});
+
+test("reviewed registry names resolve Mitsubishi retail suffixes and precise non-ducted classifications explicitly", async () => {
+  const products = coolingData.products.filter(product => product.category === "multi-split" && product.models.length === 2);
+  assert.equal(products.length, 11);
+  for (const product of products) {
+    const approvedName = product.models[1];
+    const selection = coolingSelection(approvedName, "multi", {brand:product.brand});
+    const output = await run(coolingRequest({productId:product.id}), coolingDependencies(selection));
+    assert.equal(output.results[0].status, "calculated", product.id+": "+output.results[0].summary);
+    assert.equal(output.results[0].matchedModel, product.brand+" "+approvedName);
+    const different = approvedName.includes("Non-Ducted") ? approvedName.replace("Non-Ducted", "Ducted") : approvedName+"-A2";
+    const rejected = await run(coolingRequest({productId:product.id}), coolingDependencies({...selection,model:different}));
+    assert.equal(rejected.results[0].quantity, null, product.id+": another hardware/type suffix must not match");
+  }
+});
+
+test("the current Daikin R2 profile preserves its saved ID and uses approved outdoor capacity without the older room package", async () => {
+  const product = coolingData.products.find(product => product.id === "daikin-multi-5mxm100rvma-cora-rated");
+  assert.equal(product.name, "Daikin Super Multi NX 5MXM100R2VMA 10 kW");
+  assert.deepEqual(product.models, ["5MXM100R2VMA"]);
+  assert.equal(product.indoorUnits, null);
+  assert.equal(product.combination, null);
+  const profileData = JSON.parse(readFileSync(new URL("../src/lib/product-guides/multi-split.json", import.meta.url), "utf8"));
+  const profile = profileData.find(profile => profile.id === product.id);
+  assert.equal(profile.name, product.name);
+  assert.equal(profile.measurements.capacity.value, 10);
+  assert.equal(profile.measurements.warranty.value, 5);
+  assert.ok(profile.image.src.includes("outdoor"));
+  assert.match(profile.image.alt, /representative range photograph/);
+  assert.ok(profile.technicalSpecs.some(spec => spec.label === "Photo shown"));
+  assert.doesNotMatch(JSON.stringify({...profile,id:undefined}), /5MXM100RVMA|CTXM20RVMA|CTXM25RVMA|CTXM60RVMA|five-room package.*included/i);
+  const selection = coolingSelection("5MXM100R2VMA", "multi", {brand:"Daikin"});
+  Object.assign(selection.attributes,{veuProductCategoryNumber:"6F",ratedHeatingCapacityKw:11,ratedCoolingCapacityKw:10});
+  const output = await run(coolingRequest({productId:product.id}), coolingDependencies(selection));
+  assert.equal(output.results[0].status, "calculated", output.results[0].summary);
+  assert.deepEqual(output.results[0].capacityAssumption,{heatingCapacityKw:"11",coolingCapacityKw:"10"});
+  const previous = await run(coolingRequest({productId:product.id}), coolingDependencies({...selection,model:"5MXM100RVMA"}));
+  assert.equal(previous.results[0].quantity,null,"A previous outdoor generation must not be treated as R2");
+  const ducted = await run(coolingRequest({productId:product.id}), coolingDependencies({...selection,model:"5MXM100R2VMA-Ducted"}));
+  assert.equal(ducted.results[0].quantity,null,"The approved ducted variant must not replace this non-ducted outdoor selection");
+});
+
+test("capacity assumptions cannot be attached to an uncalculated result, another category or malformed capacities", async () => {
+  const product = coolingData.products.find(product => product.category === "multi-split" && product.brand === "Panasonic");
+  const valid = await run(coolingRequest({ productId: product.id }), coolingDependencies(coolingSelection(product.models[0], "multi", {brand: "Panasonic"})));
+  assert.equal(contract.isProductRebateCheckResult(valid), true);
+  for (const value of ["0", "-5", "NaN", "Infinity", 5, null]) {
+    const malformed = structuredClone(valid);
+    malformed.results[0].capacityAssumption.heatingCapacityKw = value;
+    assert.equal(contract.isProductRebateCheckResult(malformed), false);
+  }
+  const uncalculated = structuredClone(valid); uncalculated.results[0].status = "not-confirmed";
+  assert.equal(contract.isProductRebateCheckResult(uncalculated), false);
+  const wrongCategory = structuredClone(valid); wrongCategory.category = "air-conditioning";
+  assert.equal(contract.isProductRebateCheckResult(wrongCategory), false);
 });
 
 test("multi-room contribution follows the governed installation-date transition rather than a repeated fee table", async () => {

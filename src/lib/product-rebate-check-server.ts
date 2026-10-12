@@ -93,12 +93,7 @@ async function coolingResult(db: D1Database, request: ProductRebateCheckRequest,
   const scenario = heatingVeuScenario(request.currentSystem);
   if (!scenario) return { ...base, issueCode: "EXISTING_HEATING_UNCONFIRMED", summary: "Choose the heating system being replaced. We have not guessed which replacement rules apply." };
   if (!model.models.length) return { ...base, summary: "The exact registered indoor and outdoor model pair needs confirmation before calculating a rebate." };
-  if (model.category === "multi-split" && !model.indoorUnits?.length) return {
-    ...base, issueCode: "INDOOR_COMBINATION_UNCONFIRMED",
-    summary: model.combination
-      ? "The listed room-unit combination still needs verified heating and cooling capacities before its rebate can be calculated. No capacity has been guessed."
-      : "This outdoor unit supports different room-unit combinations. The selected indoor models and their capacities must be confirmed before calculating its rebate.",
-  };
+  const assumesOutdoorCapacity = model.category === "multi-split" && !model.indoorUnits?.length;
   try {
     const postcode = resolveCreditexVeuPostcode({ postcode: request.postcode, installationDate: request.installationDate });
     const searches = await Promise.all(model.models.map(modelName => deps.searchVeu(db, {
@@ -126,19 +121,36 @@ async function coolingResult(db: D1Database, request: ProductRebateCheckRequest,
       scenario, premises: "residential", location_class: postcode.locationClass,
       ...(model.indoorUnits ? { indoor_units: model.indoorUnits.map(unit => ({ model: unit.model, quantity: unit.quantity, heatingCapacityKw: unit.heatingCapacityKw, coolingCapacityKw: unit.coolingCapacityKw })) } : {}),
     }, validated.selections);
+    let capacityAssumption: ProductRebateProgramResult["capacityAssumption"];
+    if (assumesOutdoorCapacity) {
+      const heatingCapacityKw = inputs.outdoor_heating_capacity_kw;
+      const coolingCapacityKw = inputs.outdoor_cooling_capacity_kw;
+      if (typeof heatingCapacityKw !== "string" || typeof coolingCapacityKw !== "string") throw new Error("Approved outdoor capacities were not resolved.");
+      // Existing quote-mode contract accepts connected capacity totals. Assume a
+      // sufficiently sized same-brand indoor package; do not invent indoor model
+      // identities or alter the approved outdoor performance/capacity ceilings.
+      inputs.rated_heating_capacity_kw = heatingCapacityKw;
+      inputs.rated_cooling_capacity_kw = coolingCapacityKw;
+      capacityAssumption = { heatingCapacityKw, coolingCapacityKw };
+    }
     const estimate = deps.estimateVeu({ activityCode: "6", installationDate: request.installationDate, estimatePurpose: "quote", inputs, product: veuProductEvidence(selected) });
     const minimumContribution = estimate.trace.find(entry => entry.key === "minimum_co_payment")?.output.decimal;
     if (minimumContribution === undefined || !/^\d+(\.\d+)?$/.test(minimumContribution)) throw new Error("The governed calculator did not return its minimum contribution.");
     const registry = searches.find(search => search.products.some(product => product.id === selected.id))?.registry;
     return {
       ...base, status: "calculated", quantity: wholeCertificateQuantity(estimate.output.wholeCertificates), unit: "VEEC", issueCode: null,
-      summary: "Calculated using the exact approved model, your postcode and selected heating replacement. This remains an eligibility example.",
+      summary: assumesOutdoorCapacity
+        ? "Planning example using this exact approved outdoor unit at its full rated heating and cooling capacity, your postcode and the heater being replaced."
+        : "Calculated using the exact approved model, your postcode and selected heating replacement. This remains an eligibility example.",
+      ...(capacityAssumption ? { capacityAssumption } : {}),
       matchedModel: `${selected.brand} ${selected.model}`, sourceCheckedAt: registry?.lastCheckedAt || null, receiptHash: estimate.receiptHash,
       conditions: [...base.conditions,
         `The customer must contribute at least $${Number(minimumContribution).toLocaleString("en-AU")} including GST per installed system. It cannot be rebated or reimbursed.`,
         "The installer must confirm the old equipment and rooms match the replacement rules, and arrange lawful removal where required.",
         "The rebate provider must confirm the home's claim history, sizing advice, consumer information and required warranty.",
-        ...(model.category === "multi-split" ? ["This example uses the listed indoor units, capped by the approved outdoor capacity and applicable residential limits. A different combination may change the result."] : []),
+        ...(model.category === "multi-split" ? [assumesOutdoorCapacity
+          ? "This example assumes enough same-brand room units to reach the approved outdoor capacity. Lower combined room-unit heating or cooling capacity can mean fewer VEECs and a smaller rebate. Residential and replacement caps still apply."
+          : "This example uses the listed indoor units, capped by the approved outdoor capacity and applicable residential limits. A different combination may change the result."] : []),
       ],
       sources: [...base.sources, { title: estimate.officialSourceTitle, url: estimate.officialSourceUrl, version: estimate.specificationVersion }, { title: postcode.source.title, url: postcode.source.sourceUrl, version: postcode.source.specificationVersion },
         ...[...new Set(model.indoorUnits?.map(unit => unit.sourceUrl) ?? [])].map(url => ({ title: "Selected indoor-unit capacities", url }))],

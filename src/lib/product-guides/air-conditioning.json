@@ -1000,7 +1000,7 @@
   {
     "id": "samsung-geo-windfree",
     "name": "Samsung Geo WindFree AR12DX",
-    "checkedAt": "2026-10-10",
+    "checkedAt": "2026-10-12",
     "sources": [
       {
         "title": "Manufacturer Australian product information",
@@ -1022,7 +1022,15 @@
       "sourceUrl": "https://images.samsung.com/is/image/samsung/p6pim/au/ar12dxeanwknsa/gallery/au-wall-mount-ar12dxeanwknsa-geo-windfree--purification-split-system-ai-smart-----kw-white-554025824?$Q90_684_547_JPG$"
     },
     "measurements": {
-      "efficiency": null,
+      "efficiency": {
+        "value": 2.5,
+        "unit": "zoned-heating-stars",
+        "basisId": "mixed-climate-heating-stars",
+        "variant": "AR12DXEANWKNSA / AR12DXEANWKXSA exact AU 3.5 kW Geo WindFree pair",
+        "basis": "Samsung AU specifies heating stars hot/mixed/cold 3.5/2.5/2.0, and cooling stars 4.0/4.0/4.0. This bar uses the 2.5 heating stars for the mixed climate zone.",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/",
+        "checkedAt": "2026-10-12"
+      },
       "warranty": {
         "value": 5,
         "unit": "included-product-years",
@@ -1069,6 +1077,11 @@
         "label": "Main equipment fault cover",
         "value": "Five-year Australian air-conditioner warranty; compressor extensions are separate.",
         "sourceUrl": "https://www.samsung.com/au/support/warranty/"
+      },
+      {
+        "label": "Heating stars",
+        "value": "Hot 3.5 stars; mixed 2.5 stars; cold 2.0 stars. The bar uses the mixed-climate heating rating for the exact Australian pair.",
+        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
       }
     ],
     "pros": [
@@ -1078,12 +1091,7 @@
     "cons": [
       "WindFree maintains an already-cooled room; normal airflow is needed to cool it down first."
     ],
-    "measurementGaps": {
-      "efficiency": {
-        "reason": "The exact Australian matched pair's mixed-climate heating star rating was not verified.",
-        "sourceUrl": "https://www.samsung.com/au/business/air-conditioners/wall-mount/ar9500t-ar10dyeabwknst-wind-free-ar12dxeanwknsa/"
-      }
-    }
+    "measurementGaps": {}
   },
   {
     "id": "emerald-select-split",

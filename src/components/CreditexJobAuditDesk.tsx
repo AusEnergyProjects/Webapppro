@@ -10,6 +10,7 @@ import {
 } from "@/lib/creditex-job-audit";
 import { CreditexAuditCallPanel } from "./CreditexAuditCallPanel";
 import { CreditexJobLifecycleActions } from "./CreditexJobLifecycleActions";
+import { FormComplianceReview } from './FormCompliancePanel';
 import styles from "./CreditexJobAuditDesk.module.css";
 import type { CreditexAuditAiReview, CreditexAuditAiSource } from "@/lib/creditex-job-audit-ai";
 import { requestWattzunAssistant } from "@/lib/wattzun-appearance";
@@ -46,6 +47,14 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recordIndex, setRecordIndex] = useState(0);
+  const [showFormCompliance, setShowFormCompliance] = useState(false);
+  const [complianceDirty, setComplianceDirty] = useState(false);
+  const complianceApi = useCallback(async (path: string, init?: RequestInit): Promise<unknown> => {
+    const response = await fetch(path, { ...init, cache: 'no-store', headers: { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' } });
+    const result: unknown = await response.json();
+    if (!response.ok) throw new Error(result && typeof result === 'object' && 'error' in result && typeof result.error === 'string' ? result.error : 'Could not open the compliance review.');
+    return result;
+  }, [user]);
   const [fileIndex, setFileIndex] = useState(0);
   const [preview, setPreview] = useState<{ url: string; type: string; key: string } | null>(null);
   const [previewError, setPreviewError] = useState("");
@@ -66,7 +75,7 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
   const sequence = useRef(0);
   const requestId = useRef<{ signature: string; id: string } | null>(null);
   const endpoint = `/api/creditex/job-audit?intentId=${encodeURIComponent(intentId)}&actorMode=${actorMode === "admin" ? "admin" : "compliance"}`;
-  const hasUnsaved = dirty || Boolean(resolutionNote.trim());
+  const hasUnsaved = dirty || complianceDirty || Boolean(resolutionNote.trim());
 
   const apply = useCallback((next: CreditexJobAuditWorkspace) => {
     setWorkspace(next);
@@ -280,8 +289,10 @@ export function CreditexJobAuditDesk({ user, intentId, actorMode = "creditex", f
           <section id="audit-records" tabIndex={-1} className={styles.card} aria-label="Field answers">
             <header><h3>Field answers</h3><span>{workspace.records.length} forms</span></header>
             {workspace.records.length > 0 ? <>
-              <label className={styles.control}>Form<select value={recordIndex} onChange={event => setRecordIndex(Number(event.target.value))}>{workspace.records.map((item, index) => <option key={`${item.kind}:${item.id}`} value={index}>{item.title} · {item.status}</option>)}</select></label>
-              {record && <><p className={styles.muted}>Revision {record.revision} · Saved {displayDate(record.updatedAt)}</p><dl className={styles.answers}>{record.answers.map((answer, index) => <div key={`${answer.key}:${index}`}><dt>{answer.section && <small>{answer.section}</small>}{answer.label}</dt><dd><AnswerValue value={answer.value} /></dd></div>)}</dl>{!record.answers.length && <p>No answers recorded in this form.</p>}</>}
+              <label className={styles.control}>Form<select value={recordIndex} onChange={event => { if (complianceDirty && !window.confirm('Discard unsaved compliance review changes?')) return; setRecordIndex(Number(event.target.value)); }}>{workspace.records.map((item, index) => <option key={`${item.kind}:${item.id}`} value={index}>{item.title} · {item.status}</option>)}</select></label>
+              <div role="group" aria-label="Saved form views"><button type="button" aria-pressed={!showFormCompliance} onClick={() => { if (complianceDirty && !window.confirm('Discard unsaved compliance review changes?')) return; setShowFormCompliance(false); }}>Installer answers</button><button type="button" aria-pressed={showFormCompliance} onClick={() => setShowFormCompliance(true)}>Compliance review</button></div>
+              {record && showFormCompliance && <FormComplianceReview key={`${record.kind}:${record.id}`} api={complianceApi} scope="creditex" actorMode={actorMode} target={{ intentId, recordId: record.id, recordKind: record.kind }} onDirtyChange={setComplianceDirty} />}
+              {record && !showFormCompliance && <><p className={styles.muted}>Revision {record.revision} · Saved {displayDate(record.updatedAt)}</p><dl className={styles.answers}>{record.answers.map((answer, index) => <div key={`${answer.key}:${index}`}><dt>{answer.section && <small>{answer.section}</small>}{answer.label}</dt><dd><AnswerValue value={answer.value} /></dd></div>)}</dl>{!record.answers.length && <p>No answers recorded in this form.</p>}</>}
             </> : <p>No field forms have been submitted for this job.</p>}
           </section>
           <section id="audit-files" tabIndex={-1} className={styles.card} aria-label="Job files">

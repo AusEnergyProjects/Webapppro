@@ -158,6 +158,7 @@ export function AdminOperationsPortal() {
   const [tab, setTab] = useState<AdminWorkspaceTab>("overview");
   const questionnaireDirty = useRef(false);
   const fieldFormDirty = useRef(false);
+  const supportingFormComplianceDirty = useRef(false);
   const auditDirty = useRef(false);
   const callActive = useRef(false);
   const reportCallActive = useCallback((active: boolean) => { callActive.current = active; }, []);
@@ -165,15 +166,18 @@ export function AdminOperationsPortal() {
   const restoringHistory = useRef(false);
   const reportQuestionnaireDirty = useCallback((dirty: boolean) => { questionnaireDirty.current = dirty; }, []);
   const reportFieldFormDirty = useCallback((dirty: boolean) => { fieldFormDirty.current = dirty; }, []);
+  const reportSupportingFormComplianceDirty = useCallback((dirty: boolean) => { supportingFormComplianceDirty.current = dirty; }, []);
   const reportAuditDirty = useCallback((dirty: boolean) => { auditDirty.current = dirty; }, []);
   const selectTab = useCallback((next: AdminWorkspaceTab, updateHistory = true) => {
     if (next === tab) return true;
     if (callActive.current && !window.confirm("End the active customer call and leave Connect?")) return false;
     if (questionnaireDirty.current && !window.confirm("Discard the unsaved changes to this questionnaire?")) return false;
     if (fieldFormDirty.current && !window.confirm("Discard the unsaved changes to this activity form?")) return false;
+    if (supportingFormComplianceDirty.current && !window.confirm('Discard unsaved compliance questionnaire changes?')) return false;
     if (auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false;
     questionnaireDirty.current = false;
     fieldFormDirty.current = false;
+    supportingFormComplianceDirty.current = false;
     auditDirty.current = false;
     setTab(next);
     if (updateHistory && window.location.hash !== adminWorkspaceHash(next)) {
@@ -741,9 +745,9 @@ export function AdminOperationsPortal() {
         content?.focus({ preventScroll: true });
         content?.scrollIntoView({ block: "start" });
       }}>Skip to workspace</a>
-      <PortalWorkspaceHeader onPortalSwitch={() => (!callActive.current || window.confirm("End the active call and switch dashboard?")) && (!auditDirty.current || window.confirm("Leave this audit without saving your changes?"))} context="Administration" organisation="Australian Energy Assessments" displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences} notificationCount={notificationCounts.unread || 0}
+      <PortalWorkspaceHeader onPortalSwitch={() => (!callActive.current || window.confirm("End the active call and switch dashboard?")) && (!auditDirty.current || window.confirm("Leave this audit without saving your changes?")) && (!fieldFormDirty.current || window.confirm('Discard the unsaved changes to this activity form?')) && (!supportingFormComplianceDirty.current || window.confirm('Discard unsaved compliance questionnaire changes?'))} context="Administration" organisation="Australian Energy Assessments" displayName={preferences.profile.displayName || session.displayName || session.email} preferences={preferences} notificationCount={notificationCounts.unread || 0}
         onSearch={query => { if (tab === "jobs" && auditDirty.current && !window.confirm("Leave this audit without saving your changes?")) return false; if (!selectTab("jobs")) return false; auditDirty.current = false; setJobSearch(current => ({ query, nonce: current.nonce + 1 })); return true; }}
-        onNotifications={openNotificationInbox} onProfile={() => selectTab("settings")} onSettings={() => selectTab("settings")} onSignOut={() => { if (!callActive.current || window.confirm("End the active customer call and sign out?")) void signOut(firebaseAuth); }} />
+        onNotifications={openNotificationInbox} onProfile={() => selectTab("settings")} onSettings={() => selectTab("settings")} onSignOut={() => { if (callActive.current && !window.confirm("End the active customer call and sign out?")) return; if ((fieldFormDirty.current || supportingFormComplianceDirty.current || auditDirty.current) && !window.confirm("Discard unsaved form or compliance review changes and sign out?")) return; void signOut(firebaseAuth); }} />
       <div className="admin-layout">
         <AdminWorkspaceNavigation selected={tab} role={session.role} unread={notificationCounts.unread} onSelect={selectTab} />
         <section className="admin-content" id="admin-workspace-content" aria-label="Selected operations workspace" tabIndex={-1}>
@@ -815,7 +819,7 @@ export function AdminOperationsPortal() {
               />
               <details className="admin-card admin-supporting-form-templates">
                 <summary>Supporting non-program field templates</summary>
-                <AdminFormTemplates api={api} role={session.role} />
+                <AdminFormTemplates api={api} role={session.role} onDirtyChange={reportSupportingFormComplianceDirty} />
               </details>
             </>
           )}
