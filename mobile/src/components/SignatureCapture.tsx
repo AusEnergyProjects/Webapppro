@@ -184,7 +184,7 @@ export function SignatureCapture({
 
   useLayoutEffect(() => {
     captureContext.current = { enabled: !captureDisabled, identity: captureIdentity };
-    cancelDrawing();
+    if (activeDrawing.current) cancelDrawing();
   }, [cancelDrawing, captureDisabled, captureIdentity]);
 
   useEffect(() => () => {

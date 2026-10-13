@@ -146,7 +146,7 @@ test('termination, native cancellation, rejection and unmount always release the
 
 test('permission, signer-role and identity changes discard unfinished ink and reject stale native callbacks', () => {
   for (const change of [
-    h => ({ disabled: true }), h => ({ displayOnly: true }),
+    () => ({ disabled: true }), () => ({ displayOnly: true }),
     h => ({ signerRole: { ...h.props.signerRole, roleKey: 'installer' } }),
     h => ({ value: { ...h.props.value, signerName: 'Different Owner', strokes: [], capturedAt: '' } }),
     h => ({ value: { ...h.props.value, identity: { authority: 'Different authority' }, strokes: [], capturedAt: '' } }),
@@ -171,7 +171,11 @@ test('a second finger cancels the unfinished stroke without appending to earlier
 
 test('stroke and point caps do not acquire scrolling or append out-of-bound ink', () => {
   for (const strokes of [
-    Array.from({ length: 32 }, (_, index) => ({ strokeKey: `saved-${index}`, points: [event(), event()] })),
+    Array.from({ length: 32 }, (_, index) => ({ strokeKey: `saved-${index}`, points: [
+      { x: 0.1, y: 0.1, capturedAtMs: 1, pressure: null },
+      { x: 0.2, y: 0.2, capturedAtMs: 2, pressure: null },
+      { x: 0.3, y: 0.3, capturedAtMs: 3, pressure: null },
+    ] })),
     [{ strokeKey: 'full', points: Array.from({ length: 1_024 }, () => ({ x: 0.1, y: 0.1, capturedAtMs: 1, pressure: null })) }],
   ]) {
     const h = fixture(); h.update({ value: { ...h.props.value, strokes } });
