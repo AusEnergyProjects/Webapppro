@@ -29,6 +29,9 @@ import {
 import {
   CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
 } from "../src/lib/creditex-veu-product-sources.ts";
+import { parseOfficialProductSource } from "../src/lib/creditex-official-product-parsers.ts";
+import { GEMS_PRODUCT_SOURCES } from "../src/lib/creditex-official-product-sources.ts";
+import { CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS } from "../src/lib/creditex-tessa-product-parser.ts";
 
 const sresMigration = fs.readFileSync(
   new URL(
@@ -3061,6 +3064,95 @@ test("GEMS exposes only approved status while retaining approved historical vers
   }
 });
 
+test("GEMS retains superseded rows without registration numbers but rejects their selection", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const officialSource = {
+    ...GEMS_PRODUCT_SOURCES.find(({ sourceKey }) => sourceKey === "gems-air-conditioners"),
+    minimumRecords: 2,
+    maximumRecords: 10,
+  };
+  const records = [
+    {
+      Brand: "Fixture Air",
+      Model_No: "CURRENT-5",
+      Sold_in: "Australia",
+      Submit_ID: "900001",
+      SubmitStatus: "Approved",
+      ExpDate: "2030-08-08",
+      GrandDate: "2026-08-08",
+      "Availability Status": "Available",
+      "Registration Number": "ZAC900001",
+    },
+    {
+      Brand: "Fixture Air",
+      Model_No: "SUPERSEDED-8",
+      Sold_in: "Australia",
+      Submit_ID: "900002",
+      SubmitStatus: "Superseded",
+      ExpDate: "2030-08-08",
+      GrandDate: "2026-08-08",
+      "Availability Status": "Available",
+      "Registration Number": "",
+    },
+  ];
+  const bytes = new TextEncoder().encode([
+    officialSource.expectedFields.join(","),
+    ...records.map((values) => officialSource.expectedFields.map(
+      (field) => values[field] ?? "",
+    ).join(",")),
+    "",
+  ].join("\r\n"));
+  const parsed = parseOfficialProductSource(officialSource, bytes, "text/csv");
+  assert.equal(parsed[1].registrationNumber, null);
+  assert.equal(parsed[1].approvalStatus, "Superseded");
+  const registry = {
+    registryCode: "gems-products",
+    title: "Fixture GEMS register",
+    sources: [{
+      ...source(officialSource.sourceKey, "air_conditioner", "gems-products"),
+      expectedContentTypes: ["text/csv"],
+      accept: "text/csv",
+      parse: (sourceBytes, contentType) => parseOfficialProductSource(
+        officialSource, sourceBytes, contentType,
+      ).map((record) => ({
+        ...record,
+        manufacturer: record.manufacturer || "",
+        brand: record.brand || "",
+        series: record.series || "",
+        registrationNumber: record.registrationNumber || "",
+        certificateNumber: record.certificateNumber || "",
+        eligibleFrom: record.eligibleFrom || "",
+        eligibleTo: record.eligibleTo || "",
+      })),
+    }],
+  };
+  await syncOfficialProductRegistry(d1, registry, {
+    artifactStore,
+    fetchImpl: async () => new Response(bytes, {
+      headers: { "Content-Type": "text/csv" },
+    }),
+    now: new Date("2026-08-08T00:00:00.000Z"),
+  });
+  assert.equal(database.prepare("SELECT count(*) count FROM compliance_official_products").get().count, 2);
+  const retained = database.prepare(`SELECT id, approval_status, registration_number
+    FROM compliance_official_products WHERE model = 'SUPERSEDED-8'`).get();
+  assert.equal(retained.approval_status, "superseded");
+  assert.equal(retained.registration_number, "");
+  const current = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-08-08",
+  }, { now: new Date("2026-08-08T01:00:00.000Z") });
+  assert.deepEqual(current.products.map(({ model }) => model), ["CURRENT-5"]);
+  await assert.rejects(validateOfficialProductSelections(d1, {
+    installationDate: "2026-08-08",
+    requiredKinds: ["air_conditioner"],
+    selectedProductIds: {
+      air_conditioner: stableProductId(parsed[1].sourceKey, parsed[1].sourceRecordKey),
+    },
+  }, { now: new Date("2026-08-08T01:00:00.000Z") }), expectedError("OFFICIAL_PRODUCT_NOT_ELIGIBLE"));
+});
+
 test("changed refreshes retain historical deltas and prune unchanged product copies", async () => {
   const { database, d1, artifactStore } = fixture();
   const first = await syncOfficialProductRegistry(d1, definition, {
@@ -4298,6 +4390,58 @@ test("unknown approval start dates are not backdated before the accepted snapsho
     WHERE source_record_key = 'PV-001|Maker|Panel 400'`).get().count, 1);
 });
 
+test("first-seen expired products retain official dates without breaking a refresh or gaining eligibility", async (t) => {
+  const { database, d1, artifactStore } = fixture();
+  t.after(() => database.close());
+  const base = rows["fixture-gems-ac"][0];
+  const firstRows = [
+    { ...base, model: "EXPIRED", sourceRecordKey: "EXPIRED", eligibleFrom: "", eligibleTo: "2026-10-12" },
+    { ...base, model: "CURRENT", sourceRecordKey: "CURRENT", eligibleFrom: "" },
+    { ...base, model: "CARRIED", sourceRecordKey: "CARRIED", eligibleFrom: "", eligibleTo: "2026-10-14" },
+  ];
+  const sync = (sourceRows, day) => syncOfficialProductRegistry(d1, gemsDefinition, {
+    fetchImpl: fetchFixture({ "fixture-gems-ac": sourceRows }),
+    artifactStore,
+    now: new Date(`${day}T00:00:00.000Z`),
+  });
+  await sync(firstRows, "2026-10-13");
+  const expired = database.prepare(`SELECT eligible_from, eligible_to, registry_effective_from
+    FROM compliance_official_products WHERE model = 'EXPIRED'`).get();
+  assert.deepEqual({ ...expired }, {
+    eligible_from: "",
+    eligible_to: "2026-10-12",
+    registry_effective_from: "2026-10-13",
+  });
+  const current = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-10-13",
+  }, { now: new Date("2026-10-13T01:00:00.000Z") });
+  assert.deepEqual(current.products.map(({ model }) => model), ["CARRIED", "CURRENT"]);
+  for (const installationDate of ["2026-10-12", "2026-10-13"]) {
+    await assert.rejects(validateOfficialProductSelections(d1, {
+      installationDate,
+      requiredKinds: ["air_conditioner"],
+      selectedProductIds: { air_conditioner: stableProductId(base.sourceKey, "EXPIRED") },
+    }, { now: new Date("2026-10-13T01:00:00.000Z") }), expectedError("OFFICIAL_PRODUCT_NOT_ELIGIBLE"));
+  }
+  await sync(firstRows.map((record) => record.model === "CURRENT"
+    ? { ...record, attributes: { ratedCoolingCapacityKw: 5.1 } }
+    : record), "2026-10-15");
+  const carried = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-10-14",
+    query: "carried",
+  }, { now: new Date("2026-10-15T01:00:00.000Z") });
+  assert.equal(carried.products.length, 1);
+  assert.equal(carried.products[0].eligibleFrom, "2026-10-13");
+  assert.equal(carried.products[0].eligibleTo, "2026-10-14");
+  const currentAfter = await searchOfficialProducts(d1, {
+    productKind: "air_conditioner",
+    installationDate: "2026-10-15",
+  }, { now: new Date("2026-10-15T01:00:00.000Z") });
+  assert.deepEqual(currentAfter.products.map(({ model }) => model), ["CURRENT"]);
+});
+
 test("product search rejects fractional and out-of-range limits", async () => {
   const { d1, artifactStore } = fixture();
   await syncOfficialProductRegistry(d1, definition, {
@@ -4578,21 +4722,25 @@ test("VEU retains Legacy custody but requires review before any source-count dec
   );
 });
 
-test("live automatic feeds activate official products into searchable snapshots", {
-  skip: process.env.CREDITEX_LIVE_OFFICIAL_REGISTRY !== "1",
-}, async (t) => {
+test("live automatic feeds activate official products into searchable snapshots", async (t) => {
   const { database, d1, artifactStore } = fixture();
   t.after(() => database.close());
   const results = [];
+  const now = new Date();
+  const installationDate = now.toLocaleDateString("en-CA", {
+    timeZone: "Australia/Sydney",
+  });
   for (const registry of CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES) {
-    results.push(await syncOfficialProductRegistry(d1, registry, {
+    const result = await syncOfficialProductRegistry(d1, registry, {
       fetchImpl: fetch,
       artifactStore,
-      now: new Date("2026-08-08T12:00:00.000Z"),
-    }));
+      now,
+    });
+    results.push(result);
+    t.diagnostic(`${registry.registryCode}: activated ${result.recordCount} official records`);
   }
   assert.ok(results[0].recordCount >= 30_000);
-  assert.ok(results[1].recordCount >= 500);
+  assert.ok(results[1].recordCount >= CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS);
   assert.ok(results[2].recordCount >= 70_000);
   assert.equal(database.prepare(`SELECT count(*) count
     FROM compliance_official_products`).get().count, results.reduce(
@@ -4605,10 +4753,10 @@ test("live automatic feeds activate official products into searchable snapshots"
 
   const refrigerator = await searchOfficialProducts(d1, {
     productKind: "refrigerator_freezer",
-    installationDate: "2026-08-08",
+    installationDate,
     query: "",
     limit: 1,
-  }, { now: new Date("2026-08-08T13:00:00.000Z") });
+  }, { now });
   assert.equal(refrigerator.products.length, 1);
 });
 
@@ -4701,9 +4849,7 @@ async function runLiveVeuQuantum(d1, artifactStore, fetchImpl) {
   }
 }
 
-test("live VEU feed retains its exact artifact and activates every row", {
-  skip: process.env.CREDITEX_LIVE_VEU_REGISTRY_SYNC !== "1",
-}, async (t) => {
+test("live VEU feed retains its exact artifact and activates every row", async (t) => {
   const { database, d1 } = fixture();
   const artifactStore = fileArtifactStore();
   const pageRequestCounts = new Map();
@@ -4753,9 +4899,7 @@ test("live VEU feed retains its exact artifact and activates every row", {
   );
 });
 
-test("live VEU background acquisition finishes inside its bounded source quantum", {
-  skip: process.env.CREDITEX_LIVE_VEU_REGISTRY_SYNC !== "1",
-}, async (t) => {
+test("live VEU background acquisition finishes inside its bounded source quantum", async (t) => {
   const { database, d1 } = fixture();
   const artifactStore = fileArtifactStore();
   const pageRequestCounts = new Map();

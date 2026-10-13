@@ -6,7 +6,13 @@ export const CREDITEX_TESSA_PRODUCT_REGISTRY_CODE =
   "nsw-tessa-products" as const;
 export const CREDITEX_TESSA_PRODUCT_SOURCE_KEY =
   "nsw-tessa-accepted-water-heaters" as const;
-export const CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS = 500;
+// Reviewed 2026-10-13: the complete D17-D20 public CSV contains 318 records.
+// Capture SHA-256: 72c58839aeb48cc13a29108a155e7cc34fefd077b3b5df9e7e53ebc393c4316b.
+// The current HEER guide (V1.3, published 2026-09-29) removes activity D21;
+// its historical rows must not be added merely to meet the former 500 floor.
+// https://www.energysustainabilityschemes.nsw.gov.au/ess/documents/guide/guide-water-heater-product-acceptance-heer-method
+// Registry source-count decreases still require exact, verified review.
+export const CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS = 318;
 export const CREDITEX_TESSA_PRODUCT_MAXIMUM_RECORDS = 20_000;
 export const CREDITEX_TESSA_PRODUCT_MAXIMUM_BYTES = 10_000_000;
 

@@ -1687,9 +1687,7 @@ test("VEU artifact fails closed on aggregate-count and pagination drift", () => 
   );
 });
 
-test("VEU public source live acquisition is opt-in", {
-  skip: process.env.CREDITEX_LIVE_VEU_REGISTRY !== "1",
-}, async () => {
+test("VEU public source live acquisition retains exact registered products", async () => {
   const { fetchCreditexVeuProductSources } = await import(
     "../src/lib/creditex-veu-product-sources.ts"
   );

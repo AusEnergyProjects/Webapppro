@@ -2640,7 +2640,7 @@ html[data-tlink-colour-mode="night"] :is(.tlink-call-dock,.tlink-call-buttons) {
 .crm-manual-time > p { color: var(--trade-muted, #607873); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
 
 /* TradeTeamPresence */
-.tlink-presence-presence { position: relative; align-self: center; flex: 0 0 auto; color: #fff; font-size: .61rem; font-weight: 800; white-space: nowrap; }
+.tlink-presence-presence { position: relative; display: flex; align-items: center; gap: 6px; align-self: center; flex: 0 0 auto; color: #fff; font-size: .61rem; font-weight: 800; white-space: nowrap; }
 .tlink-presence-control { display: flex; align-items: center; gap: 8px; min-height: 35px; padding: 0 11px; border: 1px solid var(--trade-header-control-border, #3c6870); border-radius: 9px; background: color-mix(in srgb, var(--trade-header-control, #082f3a) 72%, transparent); cursor: pointer; }
 .tlink-presence-control:hover { background: var(--trade-header-control-hover, #0b3d48); border-color: #ffffff99; }
 .tlink-presence-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #8a939c; }
@@ -2657,11 +2657,15 @@ html[data-tlink-colour-mode="night"] :is(.tlink-call-dock,.tlink-call-buttons) {
 .tlink-message-receipt svg { flex: 0 0 auto; height: 13px; width: 21px; }
 .tlink-message-receipt.read { color: var(--message-read, #087f68); }
 .tlink-presence-control select { min-width: 76px; min-height: 33px; margin: 0; padding: 0; border: 0; font: inherit; color: inherit; background: transparent; color-scheme: dark; cursor: pointer; }
-.tlink-presence-control select:disabled { opacity: .6; cursor: wait; }
-.tlink-presence-control select:focus-visible, .tlink-presence-error button:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 2px; }
+.tlink-presence-control select:disabled { opacity: .6; cursor: default; }
+.tlink-presence-control select:focus-visible, .tlink-presence-details-trigger:focus-visible, .tlink-presence-error button:focus-visible { outline: 3px solid var(--trade-accent-readable, #087f68); outline-offset: 2px; }
+.tlink-presence-details-trigger { min-height: 35px; border: 1px solid var(--trade-header-control-border, #3c6870); border-radius: 9px; padding: 0 8px; background: var(--trade-header-control, #082f3a); color: inherit; font: inherit; cursor: pointer; }
 .tlink-presence-help { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tlink-presence-error { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(260px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 10px; background: var(--trade-surface, #fff); color: var(--trade-ink, #163e37); box-shadow: 0 8px 24px #0003; font-size: 12px; font-weight: 500; line-height: 1.4; white-space: normal; }
-.tlink-presence-error button { min-height: 32px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 6px; color: inherit; background: var(--trade-surface, #fff); font: inherit; cursor: pointer; }
+.tlink-presence-error p { margin: 0 0 10px; }
+.tlink-presence-error-actions { display: flex; gap: 8px; }
+.tlink-presence-error button { min-height: 44px; padding: 0 12px; border: 1px solid var(--trade-line, #c9ddd8); border-radius: 6px; color: inherit; background: var(--trade-surface, #fff); font: inherit; cursor: pointer; }
+.tlink-presence-error button:disabled { opacity: .6; cursor: default; }
 .tlink-team-headerActions .tlink-presence-control { min-height: 44px; font-size: 14px; }
 .tlink-team-headerActions .tlink-presence-control select { min-height: 42px; }
 

@@ -201,8 +201,9 @@ test('battery results retain different load timing for households with equal ann
   );
 });
 
-const suppliedFixture = process.env.NEM12_FIXTURE;
-test('supplied Origin demo file regression', { skip: !suppliedFixture }, () => {
+const suppliedFixture = process.env.NEM12_FIXTURE || path.join(__dirname, '..', '.local-fixtures', 'origin-demo.csv');
+test('supplied Origin demo file regression', () => {
+  assert.ok(fs.existsSync(suppliedFixture), 'Provide the private Origin fixture in .local-fixtures/origin-demo.csv or set NEM12_FIXTURE; see test/fixtures/NEM12.md');
   const result = model.parseNem12(fs.readFileSync(path.resolve(suppliedFixture), 'utf8'));
   assert.equal(result.ok, true);
   assert.equal(result.spanDays, 10);

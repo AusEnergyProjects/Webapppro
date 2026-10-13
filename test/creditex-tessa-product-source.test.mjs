@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CREDITEX_TESSA_PRODUCT_EXPORT_HEADER,
+  CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS,
   parseCreditexTessaAcceptedProductCsv,
 } from "../src/lib/creditex-tessa-product-parser.ts";
 import {
@@ -157,6 +158,31 @@ test("TESSA CSV parser fails closed on schema, activity, date and identity drift
   );
 });
 
+test("TESSA requires the complete reviewed D17-D20 floor and rejects retired D21", () => {
+  assert.equal(CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS, 318);
+  const complete = fixtureRows().slice(0, CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS);
+  assert.equal(
+    parseCreditexTessaAcceptedProductCsv(csvBytes(complete), "text/csv").length,
+    CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS,
+  );
+  assert.throws(
+    () => parseCreditexTessaAcceptedProductCsv(
+      csvBytes(complete.slice(0, -1)),
+      "text/csv",
+    ),
+    /export record count is outside its reviewed range/,
+  );
+  const retiredActivity = structuredClone(complete);
+  retiredActivity[0]["Activity Definition"] = "D21";
+  assert.throws(
+    () => parseCreditexTessaAcceptedProductCsv(
+      csvBytes(retiredActivity),
+      "text/csv",
+    ),
+    /unsupported activity set/,
+  );
+});
+
 test("TESSA definition uses only the official supported CSV export contract", () => {
   assert.equal(CREDITEX_TESSA_PRODUCT_REGISTRY.registryCode, "nsw-tessa-products");
   assert.equal(CREDITEX_TESSA_PRODUCT_REGISTRY.sources.length, 1);
@@ -185,22 +211,36 @@ test("TESSA definition uses only the official supported CSV export contract", ()
 });
 
 test("live TESSA export matches the reviewed CSV contract", {
-  skip: process.env.CREDITEX_LIVE_TESSA_PRODUCTS !== "1",
+  timeout: 60_000,
 }, async () => {
   const response = await fetch(CREDITEX_TESSA_WATER_HEATER_EXPORT_URL, {
     redirect: "manual",
     headers: { Accept: "text/csv" },
+    signal: AbortSignal.timeout(30_000),
   });
   assert.equal(response.status, 200);
   const records = parseCreditexTessaAcceptedProductCsv(
     new Uint8Array(await response.arrayBuffer()),
     response.headers.get("content-type") || "",
   );
-  assert.ok(records.length >= 500);
+  assert.ok(records.length >= CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS);
   assert.ok(records.some((record) => (
     record.attributes.tessaOfficialStatus === "Active"
   )));
   assert.ok(records.some((record) => (
     record.attributes.tessaOfficialStatus === "Cancelled"
   )));
+  assert.ok(records.every((record) => (
+    record.attributes.tessaAcceptedActivities.split(",")
+      .every((activity) => ["D17", "D18", "D19", "D20"].includes(activity))
+  )));
+  const sample = records.find((record) => record.sourceRecordKey === "ACC0309607");
+  assert.ok(sample);
+  assert.equal(sample.brand, "Emerald Energy");
+  assert.equal(sample.model, "HPA1-S220");
+  assert.equal(sample.eligibleFrom, "2026-04-08");
+  assert.equal(sample.attributes.zone3BsGjPerYear, 3.7806);
+  assert.equal(sample.attributes.zone3BeGjPerYear, 0.0267);
+  assert.equal(sample.attributes.zone5BsGjPerYear, 4.614);
+  assert.equal(sample.attributes.zone5BeGjPerYear, 0.0255);
 });

@@ -88,7 +88,10 @@ test("reasoned annual overrides scale register totals without changing their all
   assert.equal(scaleNem12AnnualAllocation(allocation, 0), null);
 });
 
-const suppliedFixture = process.env.NEM12_FIXTURE;
-test("typed parser matches the compatibility parser for the supplied Origin fixture", { skip: !suppliedFixture }, () => {
-  assertParity(fs.readFileSync(path.resolve(suppliedFixture), "utf8"));
+const suppliedFixture = process.env.NEM12_FIXTURE
+  ? path.resolve(process.env.NEM12_FIXTURE)
+  : new URL("../.local-fixtures/origin-demo.csv", import.meta.url);
+test("typed parser matches the compatibility parser for the supplied Origin fixture", () => {
+  assert.ok(fs.existsSync(suppliedFixture), "Provide the private Origin fixture in .local-fixtures/origin-demo.csv or set NEM12_FIXTURE; see test/fixtures/NEM12.md");
+  assertParity(fs.readFileSync(suppliedFixture, "utf8"));
 });

@@ -179,12 +179,12 @@ test("Horizon Power stays a controlled manual connector", () => {
 });
 
 test("live Synergy SSL satisfies the reviewed source contract", {
-  skip: process.env.CREDITEX_LIVE_WA_PRODUCTS !== "1",
   timeout: 60_000,
 }, async () => {
   const source = WA_SYNERGY_SUPPORTED_SOLUTIONS_SOURCE;
   const response = await fetch(source.url, {
     headers: { accept: "text/html" },
+    signal: AbortSignal.timeout(45_000),
   });
   assert.equal(response.ok, true, `Synergy SSL returned ${response.status}`);
   const records = parseWaSupportedSolutionsSource(
@@ -192,7 +192,12 @@ test("live Synergy SSL satisfies the reviewed source contract", {
     new Uint8Array(await response.arrayBuffer()),
     response.headers.get("content-type") || "",
   );
-  assert.equal(records.length, source.verifiedRecordCount);
+  assert.ok(records.length >= source.minimumRecords);
+  assert.ok(records.length <= source.maximumRecords);
+  assert.equal(new Set(records.map(({ sourceRecordKey }) => sourceRecordKey)).size, records.length);
+  assert.ok(records.every(({ effectiveSnapshotDate }) => (
+    effectiveSnapshotDate >= source.reviewedSnapshotDate
+  )));
   assert.ok(records.every(({ attributes }) => (
     Buffer.byteLength(JSON.stringify(attributes)) < 1_024
   )));

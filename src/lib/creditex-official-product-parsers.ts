@@ -367,6 +367,15 @@ function createSourceRecordKey(
   const identity = source.identityFields.map((fieldName) => {
     const value = attributes[fieldName];
     if (value === null || value === undefined || String(value).trim() === "") {
+      // GEMS retains superseded registrations without a registration number.
+      // Keep that absence in the existing composite key; the submission, brand
+      // and model remain required, and the row retains its inactive status.
+      if (
+        source.registryCode === "gems-products"
+        && fieldName === "Registration Number"
+        && source.approvalStatusField !== null
+        && attributes[source.approvalStatusField] === "Superseded"
+      ) return "0:";
       throw sourceError(
         "OFFICIAL_PRODUCT_SOURCE_IDENTITY_MISSING",
         source,

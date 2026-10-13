@@ -827,6 +827,10 @@ async function resolveEligibilityStarts(
     const eligibleFrom = officialStart || carriedStarts.get(
       eligibilityIdentity(record.sourceKey, record.sourceRecordKey),
     ) || activatedOn;
+    // A first sighting after the official expiry is not an approval start.
+    // Keep the absent start and exact expiry; the snapshot boundary still
+    // prevents this row from becoming eligible for earlier installations.
+    if (record.eligibleTo && eligibleFrom > record.eligibleTo) return record;
     return Object.assign(record, {
       eligibleFrom,
       attributes: {

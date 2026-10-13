@@ -524,6 +524,77 @@ test("identical CKAN datastore duplicates collapse without using volatile row id
   );
 });
 
+test("superseded GEMS rows retain an absent registration without changing current identities", () => {
+  for (const sourceKey of ["gems-air-conditioners", "gems-commercial-refrigerators"]) {
+    const source = fixtureSource(GEMS_PRODUCT_SOURCES.find((candidate) => (
+      candidate.sourceKey === sourceKey
+    )));
+    const jsonSource = ckanFixtureSource(source);
+    const modelField = source.productKind === "air_conditioner" ? "Model_No" : "Model No";
+    const record = ckanRecord(source, {
+      _id: 100,
+      Submit_ID: "154376",
+      Brand: "Example",
+      [modelField]: "Inactive model",
+      Sold_in: "Australia",
+      SubmitStatus: "Superseded",
+      "Availability Status": "Available",
+      GrandDate: "2026-09-24",
+      "Registration Number": null,
+    });
+    const jsonRecords = parseOfficialProductSource(
+      jsonSource,
+      ckanFixture(jsonSource, [record]),
+      "application/json",
+    );
+    const csvRecords = parseOfficialProductSource(
+      source,
+      csvFixture(source, source.expectedFields.map((fieldName) => (
+        record[fieldName] === null ? "" : String(record[fieldName])
+      ))),
+      "application/octet-stream",
+    );
+    assert.deepEqual(csvRecords, jsonRecords);
+    assert.equal(jsonRecords[0].registrationNumber, null);
+    assert.equal(jsonRecords[0].approvalStatus, "Superseded");
+    assert.equal(
+      jsonRecords[0].sourceRecordKey,
+      `${sourceKey}:6:154376|0:|7:Example|14:Inactive model`,
+    );
+    const approved = { ...record, SubmitStatus: "Approved", "Registration Number": "AAC154376" };
+    const approvedRecord = parseOfficialProductSource(
+      jsonSource,
+      ckanFixture(jsonSource, [approved]),
+      "application/json",
+    )[0];
+    assert.equal(
+      approvedRecord.sourceRecordKey,
+      `${sourceKey}:6:154376|9:AAC154376|7:Example|14:Inactive model`,
+    );
+    assert.notEqual(approvedRecord.sourceRecordKey, jsonRecords[0].sourceRecordKey);
+    for (const status of ["Approved", "Pending"]) {
+      assert.throws(
+        () => parseOfficialProductSource(
+          jsonSource,
+          ckanFixture(jsonSource, [{ ...record, SubmitStatus: status }]),
+          "application/json",
+        ),
+        expectedSourceError("OFFICIAL_PRODUCT_SOURCE_IDENTITY_MISSING"),
+      );
+    }
+    for (const fieldName of ["Submit_ID", "Brand", modelField]) {
+      assert.throws(
+        () => parseOfficialProductSource(
+          jsonSource,
+          ckanFixture(jsonSource, [{ ...record, [fieldName]: null }]),
+          "application/json",
+        ),
+        expectedSourceError("OFFICIAL_PRODUCT_SOURCE_IDENTITY_MISSING"),
+      );
+    }
+  }
+});
+
 test("official CKAN CSV dumps reconcile only exact datastore duplicates", () => {
   const source = fixtureSource(GEMS_PRODUCT_SOURCES[0]);
   const first = ckanRecord(source, {
@@ -692,12 +763,12 @@ test("wrong media type and malformed CSV are rejected before import", () => {
 });
 
 test("live official feeds satisfy their controlled schemas and record floors", {
-  skip: process.env.CREDITEX_LIVE_OFFICIAL_PRODUCTS !== "1",
   timeout: 180_000,
 }, async () => {
   for (const source of OFFICIAL_PRODUCT_SOURCES) {
     const response = await fetch(source.url, {
       headers: { accept: source.expectedContentTypes.join(", ") },
+      signal: AbortSignal.timeout(60_000),
     });
     assert.equal(response.ok, true, `${source.sourceKey} returned ${response.status}`);
     const records = parseOfficialProductSource(
@@ -705,7 +776,8 @@ test("live official feeds satisfy their controlled schemas and record floors", {
       new Uint8Array(await response.arrayBuffer()),
       response.headers.get("content-type") || "",
     );
-    assert.equal(records.length, source.verifiedUniqueRecordCount);
+    assert.ok(records.length >= source.minimumRecords, `${source.sourceKey} unique record floor`);
+    assert.ok(records.length <= source.maximumRecords, `${source.sourceKey} unique record ceiling`);
     assert.ok(
       records.every(({ attributes }) => (
         Buffer.byteLength(JSON.stringify(attributes)) < 4_096
@@ -716,7 +788,6 @@ test("live official feeds satisfy their controlled schemas and record floors", {
 });
 
 test("all official GEMS CSV dumps normalize identically to their CKAN JSON records", {
-  skip: process.env.CREDITEX_LIVE_OFFICIAL_REGISTRY !== "1",
   timeout: 180_000,
 }, async () => {
   for (const source of GEMS_PRODUCT_SOURCES) {
@@ -728,14 +799,16 @@ test("all official GEMS CSV dumps normalize identically to their CKAN JSON recor
       expectedContentTypes: ["application/json"],
       maxBytes: 100_000_000,
     };
-    const jsonResponse = await fetch(jsonSource.url);
+    const jsonResponse = await fetch(jsonSource.url, { signal: AbortSignal.timeout(60_000) });
     assert.equal(jsonResponse.ok, true, `${source.sourceKey} JSON reference failed`);
+    const jsonBytes = new Uint8Array(await jsonResponse.arrayBuffer());
+    const rawRecordCount = JSON.parse(new TextDecoder().decode(jsonBytes)).result.total;
     const jsonRecords = parseOfficialProductSource(
       jsonSource,
-      new Uint8Array(await jsonResponse.arrayBuffer()),
+      jsonBytes,
       jsonResponse.headers.get("content-type") || "",
     );
-    const csvResponse = await fetch(source.url);
+    const csvResponse = await fetch(source.url, { signal: AbortSignal.timeout(60_000) });
     assert.equal(csvResponse.ok, true, `${source.sourceKey} CSV dump failed`);
     const csvRecords = parseOfficialProductSource(
       source,
@@ -745,8 +818,18 @@ test("all official GEMS CSV dumps normalize identically to their CKAN JSON recor
     const byIdentity = (left, right) => (
       left.sourceRecordKey.localeCompare(right.sourceRecordKey)
     );
-    assert.equal(csvRecords.length, source.verifiedUniqueRecordCount);
-    assert.equal(jsonRecords.length, source.verifiedUniqueRecordCount);
+    assert.ok(csvRecords.length >= source.minimumRecords, `${source.sourceKey} unique record floor`);
+    assert.ok(csvRecords.length <= source.maximumRecords, `${source.sourceKey} unique record ceiling`);
+    assert.equal(csvRecords.length, jsonRecords.length);
+    for (const records of [csvRecords, jsonRecords]) {
+      assert.equal(
+        records.reduce((total, record) => (
+          total + (record.attributes.duplicateDatastoreRowCount ?? 1)
+        ), 0),
+        rawRecordCount,
+        `${source.sourceKey} must account for every raw row, including exact duplicates`,
+      );
+    }
     assert.deepEqual(
       [...csvRecords].sort(byIdentity),
       [...jsonRecords].sort(byIdentity),

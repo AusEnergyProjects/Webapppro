@@ -2196,7 +2196,7 @@ test("protected APIs, bounded scheduled Worker and UI enforce server-derived reg
 });
 
 test("live CER product exports satisfy the controlled ingestion contract", {
-  skip: process.env.CREDITEX_LIVE_CER !== "1",
+  timeout: 120_000,
 }, async () => {
   const { database, d1, artifactStore } = fixture();
   const result = await syncCerSresProductRegistry(d1, {
