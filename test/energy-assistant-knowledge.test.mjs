@@ -7,7 +7,6 @@ import {
 } from "../src/data/energy-assistant-knowledge.ts";
 import { searchEnergyAssistantKnowledge } from "../src/lib/energy-assistant.ts";
 
-const REVIEW_DAY = "2026-10-13";
 const PROHIBITED_RUNTIME_HOSTS = [
   "choice.com.au",
   "drkarl.com",
