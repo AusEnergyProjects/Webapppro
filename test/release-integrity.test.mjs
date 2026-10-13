@@ -93,7 +93,10 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: official safety records and phone completion; matching GitHub\/Sites\/iOS publication authorised\.\r?\nPrepared: 13 October 2026/);
   assert.match(currentHandover, /## Official safety phone flow, 13 October 2026/);
   assert.match(currentHandover, /Do not sign, complete or email a real customer's safety paperwork merely as QA/);
-  assert.match(releaseTruth, /Migration 0262 stores business-scoped official safety records, versions and delivery\/mutation receipts/);
+  assert.match(releaseTruth, /Migration 0262 stores business-scoped official safety records, versions, delivery\/mutation receipts and private customer report capabilities/);
+  assert.match(releaseTruth, /retained without business or TLink branding/);
+  assert.match(releaseTruth, /customer report page opened from the email link/);
+  assert.match(releaseTruth, /Customers need no account/);
   assert.match(roadmap, /## Official safety forms and phone completion, 13 October 2026/);
   assert.match(
     handover,

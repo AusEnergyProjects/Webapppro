@@ -3,8 +3,7 @@ import { PDFDict, PDFDocument, PDFName, rgb, type PDFFont, type PDFPage } from '
 import fontkit from '@pdf-lib/fontkit';
 import electricalTemplate from '../../public/forms/official-vic-electrical-safety-check.pdf?inline';
 import gasTemplate from '../../public/forms/official-vic-gas-safety-check-june-2022.pdf?inline';
-import tlinkLogo from '../../public/tlink-icon-192.png?inline';
-import type { SafetyCheckRecord, SafetyCheckBranding } from './job-safety-check';
+import type { SafetyCheckRecord } from './job-safety-check';
 import type { CustomerPlanPdfFonts } from './customer-plan-pdf-fonts';
 import { OFFICIAL_SAFETY_PDF_MAP } from './official-safety-check-forms';
 import { activityHash, activityMissing } from './trade-activity-forms';
@@ -26,7 +25,6 @@ export function officialSafetyCheckAssets(): Map<string, Asset> {
   return new Map([
     ['official-electrical-template', { bytes: bytes(electricalTemplate), contentType: 'application/pdf' }],
     ['official-gas-template', { bytes: bytes(gasTemplate), contentType: 'application/pdf' }],
-    ['tlink-logo', { bytes: bytes(tlinkLogo), contentType: 'image/png' }],
   ]);
 }
 function wrapped(value: string, font: PDFFont, size: number, width: number) {
@@ -51,7 +49,7 @@ function wrapped(value: string, font: PDFFont, size: number, width: number) {
 }
 function date(value: string) { return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10).split('-').reverse().join('/') : value; }
 
-export async function renderOfficialSafetyCheckPdf(record: SafetyCheckRecord, assets: ReadonlyMap<string, Asset>, fonts: CustomerPlanPdfFonts, branding: SafetyCheckBranding): Promise<Uint8Array> {
+export async function renderOfficialSafetyCheckPdf(record: SafetyCheckRecord, assets: ReadonlyMap<string, Asset>, fonts: CustomerPlanPdfFonts): Promise<Uint8Array> {
   if (record.status !== 'complete' || activityMissing(record).length) throw new Error('OFFICIAL_SAFETY_RECORD_INCOMPLETE');
   for (const evidence of record.evidence) {
     const captured = assets.get(evidence.id);
@@ -144,36 +142,21 @@ export async function renderOfficialSafetyCheckPdf(record: SafetyCheckRecord, as
     if (field.type === 'photo' || field.type === 'document' || mapped.has(field.key) || value === undefined || value === '') continue;
     continuation.push({ label: `${field.section} / ${fieldLabel(field.key, field.label)}`, value: field.type === 'date' ? date(String(value)) : field.type === 'select' ? activityOptionLabel(String(value), field.optionLabels?.[String(value)]) : String(value) });
   }
-  const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit);
-  const bodyFont = await pdf.embedFont(fonts.regular, { subset: true }), bold = await pdf.embedFont(fonts.bold, { subset: true });
-  const tlink = assets.get('tlink-logo'); if (!tlink) throw new Error('OFFICIAL_SAFETY_BRAND_MISSING');
-  const tlinkImage = await pdf.embedPng(tlink.bytes);
-  const businessLogo = branding.logo ? branding.logo.contentType === 'image/png' ? await pdf.embedPng(branding.logo.bytes) : branding.logo.contentType === 'image/jpeg' ? await pdf.embedJpg(branding.logo.bytes) : undefined : undefined;
-  const header = (page: PDFPage, label: string) => {
-    page.drawRectangle({ x: 0, y: 790, width: 595.28, height: 51.89, color: rgb(.03, .18, .22) });
-    let left = 27;
-    if (businessLogo) { const ratio = Math.min(55 / businessLogo.width, 31 / businessLogo.height); page.drawImage(businessLogo, { x: 27, y: 801, width: businessLogo.width * ratio, height: businessLogo.height * ratio }); left = 94; }
-    let nameSize = 13; while (nameSize > 8 && bold.widthOfTextAtSize(branding.businessName, nameSize) > 395 - left) nameSize -= .5;
-    page.drawText(branding.businessName, { x: left, y: 815, size: nameSize, font: bold, color: rgb(1, 1, 1), maxWidth: 395 - left });
-    page.drawText(label, { x: left, y: 800, size: 9, font: bodyFont, color: rgb(.67, .92, .85) });
-    page.drawImage(tlinkImage, { x: 505, y: 800, width: 30, height: 30 }); page.drawText('TLink', { x: 540, y: 811, size: 11, font: bold, color: rgb(1, 1, 1) });
-  };
-  // Materialize newly embedded source fonts and flattened widget appearances
-  // before copying their resource references into the branded document.
-  await original.flush();
-  const sourcePages = await pdf.embedPages(original.getPages());
-  for (const embedded of sourcePages) {
-    const page = pdf.addPage([595.28, 841.89]); header(page, record.form.title);
-    const scale = Math.min(541 / embedded.width, 745 / embedded.height);
-    page.drawPage(embedded, { x: (595.28 - embedded.width * scale) / 2, y: 34, width: embedded.width * scale, height: embedded.height * scale });
-  }
+  // Deliver the filled government pages at their original size, without any
+  // business or TLink branding. Presentation belongs to the customer link.
+  const pdf = original, bodyFont = regular, bold = await original.embedFont(fonts.bold, { subset: true });
+  const sourcePageCount = original.getPageCount();
   // Keep only the source form plus actual overflow and qualifications. Audit
   // hashes and original evidence remain in the immutable job record.
-  let page: PDFPage | undefined, y = 751;
+  let page: PDFPage | undefined, y = 779;
   const line = (value: string, heading = false) => {
     const font = heading ? bold : bodyFont, size = heading ? 11 : 10;
     for (const text of wrapped(value, font, size, 527)) {
-      if (!page || y < 52) { page = pdf.addPage([595.28, 841.89]); header(page, 'Inspection record and continuation'); y = 751; }
+      if (!page || y < 52) {
+        page = pdf.addPage([595.28, 841.89]);
+        page.drawText('Inspection record continuation', { x: 34, y: 807, size: 12, font: bold, color: rgb(.04, .13, .17) });
+        y = 779;
+      }
       page.drawText(text, { x: 34, y, size, font, color: rgb(.04, .16, .2) }); y -= size + 5;
     }
     y -= 5;
@@ -182,8 +165,8 @@ export async function renderOfficialSafetyCheckPdf(record: SafetyCheckRecord, as
     line(record.recordNumber, true); line(`Property: ${record.answers.property_address}`);
     for (const [index, item] of continuation.entries()) { line(`Continuation ${index + 1}: ${item.label}`, true); line(item.value); }
   }
-  for (const [index, current] of pdf.getPages().entries()) current.drawText(`${record.recordNumber}  |  ${index + 1} / ${pdf.getPageCount()}`, { x: 34, y: 17, size: 8, font: bodyFont, color: rgb(.3, .43, .47) });
+  for (const [index, current] of pdf.getPages().entries()) if (index >= sourcePageCount) current.drawText(`${record.recordNumber}  |  Continuation ${index - sourcePageCount + 1}`, { x: 34, y: 17, size: 8, font: bodyFont, color: rgb(.3, .43, .47) });
   const completedAt = new Date(record.completedAt); pdf.setCreationDate(completedAt); pdf.setModificationDate(completedAt);
-  pdf.setTitle(`${record.form.title} | ${record.recordNumber}`); pdf.setAuthor(branding.businessName);
+  pdf.setTitle(`${record.form.title} | ${record.recordNumber}`);
   return pdf.save({ useObjectStreams: false });
 }

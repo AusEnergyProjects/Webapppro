@@ -14,7 +14,7 @@ test("public document cache uses a stable representation and exact release", () 
 });
 
 test("private, signed, query-dependent and RSC requests never share public documents", () => {
-  for (const path of ["/account", "/direct-trade/dashboard", "/creditex/compliance", "/council", "/operations", "/customer-hub", "/api/address-localities", "/plan?postcode=3000"]) {
+  for (const path of ["/account", "/direct-trade/dashboard", "/creditex/compliance", "/council", "/operations", "/customer-hub", "/reports/safety/example.secret", "/api/trade-safety-check-report?token=example.secret", "/api/address-localities", "/plan?postcode=3000"]) {
     assert.equal(publicPageCacheKey(document(path), environment), null, path);
   }
   for (const headers of [{ Cookie: "session=example" }, { Authorization: "Bearer example" }, { RSC: "1" }, { "Next-Router-State-Tree": "example" }, { "Next-Router-Prefetch": "1" }, { "Next-Url": "/plan" }, { Accept: "application/json" }]) {

@@ -97,8 +97,10 @@ type RuntimeCacheStorage = CacheStorage & { default?: Cache };
 function secureResponse(response: Response, request: Request, environment?: unknown) {
   const headers = new Headers(response.headers);
   const pathname = new URL(request.url).pathname;
+  const safetyCustomerReport = pathname === "/reports/safety" || pathname.startsWith("/reports/safety/")
+    || pathname === "/api/trade-safety-check-report";
   if (
-    (pathname === "/account" || pathname.startsWith("/account/") || pathname.startsWith("/direct-trade/"))
+    (pathname === "/account" || pathname.startsWith("/account/") || pathname.startsWith("/direct-trade/") || safetyCustomerReport)
     && (headers.get("content-type") || "").includes("text/html")
   ) {
     headers.set("Cache-Control", PRIVATE_HTML_CACHE_CONTROL);
@@ -107,7 +109,8 @@ function secureResponse(response: Response, request: Request, environment?: unkn
   const microphonePolicy = teamMediaPage || pathname === "/council" || pathname === "/council/" || pathname === "/creditex/compliance"
     || pathname === "/creditex/compliance/" ? "(self)" : "()";
   headers.set("Permissions-Policy", `camera=${teamMediaPage ? "(self)" : "()"}, geolocation=(), microphone=${microphonePolicy}`);
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Referrer-Policy", safetyCustomerReport ? "no-referrer" : "strict-origin-when-cross-origin");
+  if (safetyCustomerReport) headers.set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
   // Baseline document restrictions; Firebase sign-in and existing embeds keep their own sources.

@@ -23,6 +23,8 @@ import * as emailProvider from '../src/lib/trade-email-provider.ts';
 import * as integrationState from '../src/lib/trade-integration-state.ts';
 import * as rentalCredentials from '../src/lib/trade-rental-credentials.ts';
 import * as draftEmail from '../src/lib/safety-check-email.ts';
+import { PUBLIC_SITE } from '../src/lib/public-site.ts';
+import { isSafetyCustomerReport } from '../src/lib/safety-customer-report.ts';
 import { rentalImageWithinReportLimit } from '../src/lib/trade-rental-image-dimensions.mjs';
 
 const read = relative => fs.readFileSync(new URL(relative, import.meta.url));
@@ -121,9 +123,10 @@ function fixture(t) {
     crm_customer_id: 'official-synthetic-customer', service_site_id: 'official-synthetic-site', customer_source: 'trade_owned',
     pipeline_stage: 'in_progress', created_at: now, updated_at: now,
   });
-  let loseCommit = false, failProgressRead = false, providerMode = 'accept', beforeObjectWrite;
+  let loseCommit = false, failProgressRead = false, providerMode = 'accept', beforeObjectWrite, beforeObjectRead, beforeQuery;
   const objects = new Map(), providerRequests = [];
   const queryHook = query => {
+    beforeQuery?.(query);
     if (failProgressRead && query.includes('SELECT current_job.id, current_job.stage')) {
       failProgressRead = false; throw new Error('SYNTHETIC_PROGRESS_READ_INTERRUPTED');
     }
@@ -142,7 +145,7 @@ function fixture(t) {
   } };
   const bucket = {
     async put(key, bytes, metadata) { if (beforeObjectWrite) await beforeObjectWrite(key); objects.set(key, { bytes: new Uint8Array(bytes), metadata }); },
-    async get(key) { const object = objects.get(key); return object ? { arrayBuffer: async () => object.bytes.slice().buffer } : null; },
+    async get(key) { if(beforeObjectRead)await beforeObjectRead(key);const object = objects.get(key); return object ? { arrayBuffer: async () => object.bytes.slice().buffer } : null; },
     async delete(key) { objects.delete(key); },
   };
   const runtime = { RESEND_API_KEY: 'synthetic-provider-key-only', RESEND_FROM_EMAIL: 'Synthetic TLink <test@example.test>' };
@@ -152,7 +155,8 @@ function fixture(t) {
     if (providerMode === 'uncertain') throw new TypeError('Synthetic transport disconnect after dispatch');
     return Response.json({ id: `synthetic-mail-${providerRequests.length}` });
   };
-  const crypto = load('../src/lib/trade-integration-crypto.ts', { 'cloudflare:workers': { env: {} }, '@/lib/trade-integration-state': integrationState });
+  const crypto = load('../src/lib/trade-integration-crypto.ts', { 'cloudflare:workers': { env: { CRM_INTEGRATION_ENCRYPTION_KEY: Buffer.alloc(32,17).toString('base64') } }, '@/lib/trade-integration-state': integrationState });
+  let reportBackend;
   const email = load('../src/lib/trade-email-server.ts', {
     'cloudflare:workers': { env: {} }, '../../db': { getD1: () => db }, './trade-integration-crypto': crypto,
     './trade-access-server': predicates, './trade-email-provider': emailProvider,
@@ -178,7 +182,15 @@ function fixture(t) {
     './trade-rental-credentials': rentalCredentials, './safety-check-email': draftEmail, './trade-email-server': email,
     './service-reminder-delivery': reminder, './trade-form-job-progress': progress,
     './trade-activity-forms-pdf': { validateActivityEvidenceBytes }, './official-safety-check-pdf': officialPdf,
+    './trade-safety-customer-report-server': { safetyCustomerReportUrl: (...args) => reportBackend.safetyCustomerReportUrl(...args),assertSafetyCustomerReportUrl:(...args)=>reportBackend.assertSafetyCustomerReportUrl(...args) },
     './customer-plan-pdf-fonts': fonts, './trade-quote-pdf-server': { async loadBrandAsset() { throw new Error('No logo requested by synthetic fixture'); } },
+  });
+  const reportLinks=load('../src/lib/trade-rental-report-links.ts',{'@/lib/trade-integration-crypto':crypto});
+  reportBackend=load('../src/lib/trade-safety-customer-report-server.ts',{
+    'cloudflare:workers':{env:{EVIDENCE:bucket}},'../../db':{getD1:()=>db},'./trade-activity-forms':activity,
+    './trade-activity-form-flow':flow,'./trade-account-predicates':predicates,'./trade-integration-crypto':crypto,
+    './trade-rental-report-links':reportLinks,'./public-site':{PUBLIC_SITE},'./trade-safety-checks-server':service,
+    './trade-activity-forms-pdf':{validateActivityEvidenceBytes},
   });
   const state = id => ({
     job: sqlite.prepare('SELECT stage,revision FROM trade_work_orders WHERE id=?').get(jobId),
@@ -207,9 +219,9 @@ function fixture(t) {
     }, `synthetic-sign-${declaration.key}`);
     assert.equal(service.safetyCheckCompletion(record).ready, true); assert.equal(providerRequests.length, 0); return record;
   }
-  return { sqlite, db, service, progress, objects, providerRequests, state, signed, answersAndEvidence, insert,
+  return { sqlite, db, service, reportBackend, progress, objects, providerRequests, state, signed, answersAndEvidence, insert,
     loseCommitOnce() { loseCommit = true; }, failProgressOnce() { failProgressRead = true; }, provider(mode) { providerMode = mode; },
-    onObjectWrite(callback) { beforeObjectWrite = callback; } };
+    onObjectWrite(callback) { beforeObjectWrite = callback; },onObjectRead(callback){beforeObjectRead=callback;},onQuery(callback){beforeQuery=callback;} };
 }
 function answerFixture(form, kind, repeats = 1) {
   const answers = { [`$repeat.${kind === 'gas' ? 'appliances' : 'circuits'}`]: repeats };
@@ -233,6 +245,7 @@ async function assertCompleted(h, record, expectedJobStage = 'completed') {
   assert.equal(credential.confirmedAt, record.completedAt); assert.equal(credential.credentialNumber, record.answers.inspector_licence);
   for (const item of h.providerRequests) {
     assert.match(item.body.html, /Synthetic Safety Pty Ltd/); assert.match(item.body.html, /TLink/);
+    assert.match(item.body.html,/https:\/\/ausenergyassessments\.com\/reports\/safety\//);
     assert.equal(item.body.attachments.length, 1 + record.evidence.length); assert.equal(item.body.attachments[0].filename, final.fileName);
     assert.deepEqual(new Uint8Array(Buffer.from(item.body.attachments[0].content, 'base64')), final.bytes);
     for (let i = 0; i < record.evidence.length; i++) {
@@ -241,6 +254,10 @@ async function assertCompleted(h, record, expectedJobStage = 'completed') {
     }
   }
   return { final, pages: pdf.getPageCount(), state };
+}
+async function customerToken(h,record) {
+  const url=await h.reportBackend.safetyCustomerReportUrl(worker,record,record.kind,h.state(record.id).assessment.pdf_sha256);
+  return decodeURIComponent(new URL(url).pathname.split('/').at(-1));
 }
 
 for (const kind of ['electrical', 'gas']) test(`${kind} true phone-flow chain retains its official PDF, named ink and every separate evidence attachment, emails both copies and closes the job once`, async t => {
@@ -486,4 +503,72 @@ test('HTTP boundary uses the real authoritative flow, strict input, private bina
   actor = { ...worker, ownerUid: 'foreign-business' };
   assert.equal((await route.GET(new Request(`https://test.example/api?recordId=${signed.id}&view=pdf`))).status, 404);
   actor = null; assert.equal((await route.GET(new Request('https://test.example/api?view=catalogue'))).status, 403);
+});
+test('customer report uses real encrypted capability, exact saved findings/photos and unbranded PDF without internal identifiers or object keys',async t=>{
+  const h=fixture(t),signed=await h.signed('gas',2,{ 'gas.outcome':'unsafe','gas.fault.description':'Synthetic recorded fault','gas.fault.remedial_action':'Synthetic urgent action'});
+  const record=await h.service.completeSafetyCheckRecord(worker,signed.id,signed.revision,'synthetic-customer-report'),token=await customerToken(h,record);
+  const link=h.sqlite.prepare('SELECT * FROM trade_safety_report_links').get();assert.equal(link.token_hash,activity.activityHash(token.split('.')[1]));
+  assert.ok(!link.encrypted_token.includes(token.split('.')[1]));assert.match(link.encrypted_token,/^v1\./);
+  const before=h.state(record.id),report=await h.reportBackend.safetyCustomerReport(token);assert.equal(isSafetyCustomerReport(report,token),true);
+  assert.equal(report.outcome.attention,'urgent');assert.ok(report.sections.some(section=>section.title.startsWith('Appliance 2')));
+  assert.equal(report.evidence.length,3);assert.equal(report.recordNumber,record.recordNumber);
+  const serialised=JSON.stringify(report);assert.ok(!serialised.includes(worker.ownerUid));assert.ok(!serialised.includes(worker.actorUid));
+  assert.ok(!serialised.includes('safety-checks/'));assert.ok(!serialised.includes('objectKey'));assert.ok(!serialised.includes('credential_snapshot'));
+  const pdf=await h.reportBackend.safetyCustomerReportFile(token,'pdf');assert.deepEqual(pdf.bytes,(await h.service.readSafetyCheckPdf(worker,record.id)).bytes);
+  for(const evidence of record.evidence)assert.deepEqual((await h.reportBackend.safetyCustomerReportFile(token,'evidence',evidence.id)).bytes,(await h.service.readSafetyCheckEvidence(worker,record.id,evidence.id)).bytes);
+  assert.deepEqual(h.state(record.id),before);assert.equal(h.providerRequests.length,2);
+  await assert.rejects(h.reportBackend.safetyCustomerReportFile(token,'evidence','outside-this-record'),error=>error.status===404);
+  await assert.rejects(h.reportBackend.safetyCustomerReport(`${token.slice(0,-1)}${token.endsWith('A')?'B':'A'}`),error=>error.status===404);
+});
+for(const invalidation of ['revoked','expired','customer','email','business','job','revision'])test(`customer report denies ${invalidation} current capability before exposing saved results or PDF`,async t=>{
+  const h=fixture(t),signed=await h.signed('electrical'),record=await h.service.completeSafetyCheckRecord(worker,signed.id,signed.revision,'synthetic-report-scope'),token=await customerToken(h,record);
+  if(invalidation==='revoked')h.sqlite.prepare("UPDATE trade_safety_report_links SET status='revoked'").run();
+  if(invalidation==='expired')h.sqlite.prepare("UPDATE trade_safety_report_links SET expires_at='2000-01-01T00:00:00.000Z'").run();
+  if(invalidation==='customer')h.sqlite.prepare("UPDATE trade_crm_job_details SET crm_customer_id='unrelated-customer'").run();
+  if(invalidation==='email')h.sqlite.prepare("UPDATE trade_crm_customers SET email='different@example.test'").run();
+  if(invalidation==='business')h.sqlite.prepare("UPDATE trade_accounts SET verification_status='pending'").run();
+  if(invalidation==='job')h.sqlite.prepare("UPDATE trade_work_orders SET record_status='archived'").run();
+  if(invalidation==='revision')h.sqlite.prepare('UPDATE trade_safety_report_links SET record_revision=record_revision+1').run();
+  await assert.rejects(h.reportBackend.safetyCustomerReport(token),error=>error.status===404);
+  await assert.rejects(h.reportBackend.safetyCustomerReportFile(token,'pdf'),error=>error.status===404);assert.equal(h.providerRequests.length,2);
+});
+test('private logo/evidence routes reauthorise after storage reads so revoked capability cannot finish a download',async t=>{
+  const h=fixture(t),signed=await h.signed('gas'),record=await h.service.completeSafetyCheckRecord(worker,signed.id,signed.revision,'synthetic-logo-report'),token=await customerToken(h,record);
+  const key=`trade-branding/${worker.ownerUid}/logo/synthetic-logo`;h.objects.set(key,{bytes:new Uint8Array(photo)});
+  h.sqlite.prepare('UPDATE trade_accounts SET logo_object_key=?,logo_content_type=?').run(key,'image/png');
+  const report=await h.reportBackend.safetyCustomerReport(token);assert.equal(isSafetyCustomerReport(report,token),true);
+  assert.deepEqual((await h.reportBackend.safetyCustomerReportFile(token,'brand-logo')).bytes,new Uint8Array(photo));
+  h.onObjectRead(()=>h.sqlite.prepare("UPDATE trade_safety_report_links SET status='revoked'").run());
+  await assert.rejects(h.reportBackend.safetyCustomerReportFile(token,'evidence',record.evidence[0].id),error=>error.status===404);
+});
+test('business owner revocation is authorised and does not rewrite signed record, PDF or accepted mail',async t=>{
+  const h=fixture(t),signed=await h.signed('gas'),record=await h.service.completeSafetyCheckRecord(worker,signed.id,signed.revision,'synthetic-revoke-report'),token=await customerToken(h,record);
+  await assert.rejects(h.reportBackend.revokeSafetyCustomerReportLink(worker,record.id,'gas'),error=>error.status===404);
+  const before=h.state(record.id);await h.reportBackend.revokeSafetyCustomerReportLink({...worker,isOwner:true,actorUid:worker.ownerUid},record.id,'gas');
+  await assert.rejects(h.reportBackend.safetyCustomerReport(token),error=>error.status===404);
+  await h.service.retrySafetyCheckDelivery(worker,record.id);assert.deepEqual(h.state(record.id),before);assert.equal(h.providerRequests.length,2);
+});
+test('public report endpoint exposes only the capability snapshot and protects JSON/PDF/evidence/branding with private noindex headers',async t=>{
+  const h=fixture(t),signed=await h.signed('gas'),record=await h.service.completeSafetyCheckRecord(worker,signed.id,signed.revision,'synthetic-report-http'),token=await customerToken(h,record);
+  const route=load('../src/app/api/trade-safety-check-report/route.ts',{
+    '@/lib/trade-safety-customer-report-server':h.reportBackend,'@/lib/trade-team-server':{async requireInstallerTeamAccess(){return worker;}},
+    '@/lib/admin-server':{sameOrigin:()=>true,mfaErrorResponse:()=>null},'@/lib/bounded-json-request':load('../src/lib/bounded-json-request.ts'),
+  });
+  for(const suffix of ['', '&view=pdf',`&view=evidence&evidenceId=${record.evidence[0].id}`]) {
+    const response=await route.GET(new Request(`https://test.example/api/trade-safety-check-report?token=${encodeURIComponent(token)}${suffix}`));
+    assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+    assert.equal(response.headers.get('Referrer-Policy'),'no-referrer');assert.equal(response.headers.get('X-Content-Type-Options'),'nosniff');
+    assert.equal(response.headers.get('X-Robots-Tag'),'noindex, nofollow, noarchive');
+    if(!suffix)assert.equal(isSafetyCustomerReport((await response.json()).report,token),true);
+  }
+  assert.equal((await route.GET(new Request('https://test.example/api/trade-safety-check-report?token=wrong'))).status,404);
+  assert.equal((await route.POST(new Request('https://test.example/api/trade-safety-check-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'revoke',recordId:record.id,kind:'gas'})}))).status,404,'ordinary staff cannot revoke owner sharing');
+});
+test('revocation before actual provider transport prevents a failed delivery retry from emailing an invalid link',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:new Date('2026-10-13T12:00:00Z')});const h=fixture(t),signed=await h.signed('gas');h.provider('reject');
+  const record=await h.service.completeSafetyCheckRecord(worker,signed.id,signed.revision,'synthetic-mail-link-race');
+  h.provider('accept');t.mock.timers.tick(61_000);let revoked=false;
+  h.onQuery(query=>{if(!revoked&&query.includes("AND status='sending' AND lease_token=?")){revoked=true;h.sqlite.prepare("UPDATE trade_safety_report_links SET status='revoked'").run();}});
+  await h.service.retrySafetyCheckDelivery(worker,record.id);assert.equal(revoked,true);assert.equal(h.providerRequests.length,2);
+  assert.ok(h.state(record.id).deliveries.every(row=>row.status==='failed'));assert.equal(h.state(record.id).job.stage,'completed');
 });

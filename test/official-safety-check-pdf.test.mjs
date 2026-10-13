@@ -79,19 +79,29 @@ async function fixture(kind, repeats = 1) {
       scopeSha256: activity.activitySigningScope(record, item.phase), signedAt: '2026-10-13T00:00:00.000Z', actorUid: 'example-worker',
       strokes: [{ points: [{ x: .1, y: .2 }, { x: .4, y: .7 }, { x: .8, y: .3 }] }] });
   }
-  const branding = { businessName: 'Example business | Demonstration only', businessEmail: 'example@example.test', businessPhone: '', logo: { bytes: photo, contentType: 'image/png' } };
-  return { record, assets, branding };
+  return { record, assets };
 }
 
 for (const kind of ['electrical', 'gas']) test(`${kind} fills the retained official pages, uses real vector ink and keeps all completed fields in its continuation`, async () => {
   const value = await fixture(kind, kind === 'electrical' ? 12 : 5);
   assert.deepEqual(activity.activityMissing(value.record), []);
-  const bytes = await renderOfficialSafetyCheckPdf(value.record, value.assets, fonts, value.branding);
+  const bytes = await renderOfficialSafetyCheckPdf(value.record, value.assets, fonts);
   const pdf = await pdfLib.PDFDocument.load(bytes);
-  assert.ok(pdf.getPageCount() >= 3); assert.equal(pdf.getForm().getFields().length, 0);
+  const source = await pdfLib.PDFDocument.load(value.assets.get(`official-${kind}-template`).bytes);
+  assert.ok(pdf.getPageCount() >= 3); assert.equal(pdf.catalog.has(pdfLib.PDFName.of('AcroForm')), false);
+  assert.equal(pdf.getForm().getFields().length, 0);
   assert.match(pdf.getTitle(), /Safety Check/); assert.ok(bytes.length > 50_000);
+  assert.equal(pdf.getAuthor(), source.getAuthor(), 'No business or TLink publisher is added to the government document');
+  assert.equal(value.assets.has('tlink-logo'), false, 'Brand artwork belongs to the customer report link');
+  for (const [index, page] of source.getPages().entries()) {
+    assert.deepEqual(pdf.getPage(index).getSize(), page.getSize(), 'Filled official pages retain their original size');
+  }
   for (const page of pdf.getPages()) {
-    assert.equal(page.node.Annots()?.size() || 0, 0);
+    const annotations = page.node.Annots();
+    for (let index = 0; index < (annotations?.size() || 0); index++) {
+      const annotation = pdf.context.lookup(annotations.get(index), pdfLib.PDFDict);
+      assert.notEqual(annotation.get(pdfLib.PDFName.of('Subtype')), pdfLib.PDFName.of('Widget'), 'Completed PDF has no editable widgets');
+    }
     assertResourceFonts(pdf, page.node.Resources());
   }
   const directory = process.env.SAFETY_PDF_QA_DIR;
@@ -100,13 +110,13 @@ for (const kind of ['electrical', 'gas']) test(`${kind} fills the retained offic
 test('source template alteration fails before any completed PDF is produced', async () => {
   const value = await fixture('electrical');
   value.assets.set('official-electrical-template', { bytes: photo, contentType: 'application/pdf' });
-  await assert.rejects(renderOfficialSafetyCheckPdf(value.record, value.assets, fonts, value.branding), /SOURCE_INTEGRITY/);
+  await assert.rejects(renderOfficialSafetyCheckPdf(value.record, value.assets, fonts), /SOURCE_INTEGRITY/);
 });
 test('missing genuine signature or required source answer cannot produce a completed report', async () => {
   const value = await fixture('gas'); value.record.signatures = [];
-  await assert.rejects(renderOfficialSafetyCheckPdf(value.record, value.assets, fonts, value.branding), /RECORD_INCOMPLETE/);
+  await assert.rejects(renderOfficialSafetyCheckPdf(value.record, value.assets, fonts), /RECORD_INCOMPLETE/);
 });
 test('required saved evidence must still match its retained bytes and checksum', async () => {
   const value = await fixture('gas'); value.assets.delete(value.record.evidence[0].id);
-  await assert.rejects(renderOfficialSafetyCheckPdf(value.record, value.assets, fonts, value.branding), /EVIDENCE_INTEGRITY/);
+  await assert.rejects(renderOfficialSafetyCheckPdf(value.record, value.assets, fonts), /EVIDENCE_INTEGRITY/);
 });

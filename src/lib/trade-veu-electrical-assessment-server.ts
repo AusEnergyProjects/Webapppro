@@ -109,6 +109,14 @@ async function stored(access:TeamAccess,id:string,mutate=false) {
   return {row,record:parse(row)};
 }
 export async function readPiesaRecord(access:TeamAccess,id:string) {return (await stored(access,id)).record;}
+/** Internal adapter for the separately authorised, immutable customer-report capability. */
+export async function completedPiesaReportSnapshot(ownerUid:string,id:string,workOrderId:string,revision:number,pdfSha256:string) {
+  const row=await getD1().prepare("SELECT * FROM trade_veu_electrical_assessments WHERE id=? AND owner_uid=? AND work_order_id=? AND revision=? AND status='complete' AND pdf_sha256=?")
+    .bind(identifier(id),ownerUid,identifier(workOrderId),revision,pdfSha256).first<Row>();
+  if(!row)fail("PIESA_NOT_FOUND","This completed assessment was not found.",404);
+  const record=parse(row);if(!veuElectricalCompletion(record).ready)fail("PIESA_INTEGRITY","The completed assessment could not pass its integrity check.");
+  return {record,pdfObjectKey:row.pdf_object_key,pdfSha256:row.pdf_sha256,pdfSize:row.pdf_size_bytes};
+}
 export async function listPiesaRecords(access:TeamAccess,workOrderId:string) {
   await scope(access,workOrderId);
   const rows=await getD1().prepare("SELECT * FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=? ORDER BY created_at").bind(workOrderId,access.ownerUid).all<Row>();
@@ -401,11 +409,18 @@ export async function retryPiesaDelivery(access:TeamAccess,id:string) {
     FROM trade_accounts a WHERE firebase_uid=? AND partner_type='installer' AND ${verifiedTradeAccountPredicate("a")}`)
     .bind(access.ownerUid).first<{business_name:string;email:string;phone:string}>();
   if(!business)fail("PIESA_ACCESS_REQUIRED","Active authorised business access is required.",403);
-  const draft=safetyCheckEmailDraft({businessName:business.business_name,recordNumber:record.recordNumber,
+  let draft:ReturnType<typeof safetyCheckEmailDraft>|undefined,reportUrl='';
+  const brandedDraft=async()=>{
+    if(draft)return draft;
+    const {safetyCustomerReportUrl}=await import('./trade-safety-customer-report-server');
+    reportUrl=await safetyCustomerReportUrl(access,record,'piesa',activityHash(pdf.bytes));
+    draft=safetyCheckEmailDraft({businessName:business.business_name,recordNumber:record.recordNumber,
+    reportUrl,
     title:"Pre-installation electrical safety assessment",propertyAddress:String(record.answers.property_address||""),
     inspectionDate:String(record.answers.inspection_date||""),inspectorName:String(record.answers.initial_electrician_name||""),
     photoCount:0,businessEmail:email(business.email),businessPhone:business.phone,
-    actionRequired:"Read the recorded outcome, conditions and required controls before arranging insulation work. Provide this assessment to the insulation installer and property owner or representative at least 24 hours before installation."});
+    actionRequired:"Read the recorded outcome, conditions and required controls before arranging insulation work. Provide this assessment to the insulation installer and property owner or representative at least 24 hours before installation."});return draft;
+  };
   let binary="";for(let i=0;i<pdf.bytes.length;i+=8192)binary+=String.fromCharCode(...pdf.bytes.subarray(i,i+8192));
   for(const row of await deliveryRows(access,id)) {
     if(row.status==="accepted"||row.status==="reconciliation_required")continue;
@@ -427,16 +442,17 @@ export async function retryPiesaDelivery(access:TeamAccess,id:string) {
     try {
       const beforeSend=async()=>{
         await scope(access,record.workOrderId,true,true);
+        if(reportUrl)await (await import('./trade-safety-customer-report-server')).assertSafetyCustomerReportUrl(reportUrl);
         const fresh=await recipients(access.ownerUid,record.workOrderId);if(fresh[row.recipient_role]!==target)fail("PIESA_RECIPIENT_CHANGED","The report recipient changed.");
         const held=await db.prepare("SELECT 1 FROM trade_veu_electrical_deliveries WHERE record_id=? AND owner_uid=? AND recipient_role=? AND status='sending' AND lease_token=? AND lease_expires_at>?")
           .bind(id,access.ownerUid,row.recipient_role,lease,stamp()).first();if(!held)fail("PIESA_DELIVERY_CHANGED","This delivery changed elsewhere.");
       };
-      await beforeSend();transport=true;
       // A pending delivery from the preceding release must replay its original
       // journalled payload. New deliveries use the branded email.
       const oldSubject=`${record.recordNumber} | Pre-installation electrical safety assessment`;
       const content=proof?.subject===oldSubject?{subject:oldSubject,
-        body:`The completed pre-installation electrical safety assessment ${record.recordNumber} is attached. Read the recorded outcome, conditions and required controls in the assessment before arranging insulation work. Keep this document with the job records.`}:draft;
+        body:`The completed pre-installation electrical safety assessment ${record.recordNumber} is attached. Read the recorded outcome, conditions and required controls in the assessment before arranging insulation work. Keep this document with the job records.`}:await brandedDraft();
+      await beforeSend();transport=true;
       const sent=await sendTradeCustomerEmail(access.ownerUid,access.actorUid,{channel:"email",recipient:target,
         ...content,
         attachments:[{filename:pdf.fileName,content:btoa(binary),contentType:"application/pdf"}],idempotencyKey:key,callbackUrl:"",messageType:"piesa_completed_assessment"},{db,beforeSend});

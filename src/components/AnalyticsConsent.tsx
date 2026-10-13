@@ -23,6 +23,7 @@ const PRIVATE_PATH_PREFIXES = [
   "/operations",
   "/quote-review",
   "/rental-report",
+  "/reports/safety",
 ];
 
 type StoredAnalyticsChoice = typeof CONSENT_GRANTED | typeof CONSENT_DENIED;

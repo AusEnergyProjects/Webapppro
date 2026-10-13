@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.resolve(directory, relativePath), "utf8");
@@ -104,6 +105,37 @@ test("basic website analytics is cookieless, bounded and can be disabled without
   assert.doesNotMatch(layout, /googletagmanager|G-3PGGJ0JX4H/);
   assert.doesNotMatch(analyticsConsent, /dangerouslySetInnerHTML/);
   assert.equal(analyticsConsent.match(/"page_view"/g)?.length, 1);
+});
+
+test("private safety report capabilities never become public analytics paths", () => {
+  const prefixes = analyticsConsent.match(/const PRIVATE_PATH_PREFIXES = \[[\s\S]*?\];/)?.[0];
+  const allowed = analyticsConsent.match(/function analyticsAllowedOnPath\(pathname: string\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(prefixes && allowed, "Actual analytics path guard must exist");
+  const guard = vm.runInNewContext(`${prefixes}\n${allowed.replace("pathname: string", "pathname")}\nanalyticsAllowedOnPath`);
+  for (const pathname of ["/reports/safety", "/reports/safety/record.secret", "/reports/safety/record.secret/", "/rental-report/record.secret", "/direct-trade/dashboard", "/creditex/compliance"]) {
+    assert.equal(guard(pathname), false, pathname);
+  }
+  for (const pathname of ["/guides/products/hot-water", "/compare", "/reports/safety-guide"]) assert.equal(guard(pathname), true, pathname);
+});
+
+test("Worker response retains private safety report headers on HTML, API and downloads", async () => {
+  const worker = read("../worker/index.ts");
+  const guard = worker.match(/function secureResponse\([\s\S]*?\n\}/)?.[0];
+  assert.ok(guard, "Actual response guard must exist");
+  const runtime = guard.replace("response: Response, request: Request, environment?: unknown", "response, request, environment");
+  const secure = vm.runInNewContext(`${runtime}\nsecureResponse`, {
+    Headers, Response, URL, PRIVATE_HTML_CACHE_CONTROL: "private, no-store, max-age=0", releaseIdentityFromEnvironment: () => "",
+  });
+  for (const [pathname, contentType] of [["/reports/safety/id.secret", "text/html;charset=utf-8"], ["/api/trade-safety-check-report?token=id.secret", "application/json"], ["/api/trade-safety-check-report?token=id.secret&view=pdf", "application/pdf"]]) {
+    const response = secure(new Response("example", { headers: { "content-type": contentType, "cache-control": "private, no-store", "referrer-policy": "no-referrer" } }), new Request(`https://ausenergyassessments.com${pathname}`));
+    assert.match(response.headers.get("cache-control"), /private, no-store/);
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.match(response.headers.get("x-robots-tag"), /noindex, nofollow/);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  }
+  const ordinary = secure(new Response("public", { headers: { "content-type": "text/html" } }), new Request("https://ausenergyassessments.com/compare"));
+  assert.equal(ordinary.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+  assert.equal(ordinary.headers.get("x-robots-tag"), null);
 });
 
 test("business mailbox privacy distinguishes send access and retained records from disconnection", () => {

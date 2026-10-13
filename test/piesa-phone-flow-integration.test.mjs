@@ -23,6 +23,8 @@ import * as reminder from '../src/lib/service-reminder-delivery.ts';
 import * as emailProvider from '../src/lib/trade-email-provider.ts';
 import * as safetyEmail from '../src/lib/safety-check-email.ts';
 import * as integrationState from '../src/lib/trade-integration-state.ts';
+import { PUBLIC_SITE } from '../src/lib/public-site.ts';
+import { isSafetyCustomerReport } from '../src/lib/safety-customer-report.ts';
 
 const read = relative => fs.readFileSync(new URL(relative, import.meta.url), 'utf8');
 const compiled = new Map();
@@ -135,7 +137,7 @@ function fixture(t) {
     return Response.json({ id: `synthetic-mail-${providerRequests.length}` });
   };
   const crypto = load('../src/lib/trade-integration-crypto.ts', {
-    'cloudflare:workers': { env: {} }, '@/lib/trade-integration-state': integrationState,
+    'cloudflare:workers': { env: { CRM_INTEGRATION_ENCRYPTION_KEY: Buffer.alloc(32,17).toString('base64') } }, '@/lib/trade-integration-state': integrationState,
   });
   const email = load('../src/lib/trade-email-server.ts', {
     'cloudflare:workers': { env: {} }, '../../db': { getD1: () => db }, './trade-integration-crypto': crypto,
@@ -160,6 +162,7 @@ function fixture(t) {
     '../../public/fonts/LiberationSans-Regular.ttf?inline': { default: `data:font/ttf;base64,${fs.readFileSync(new URL('../public/fonts/LiberationSans-Regular.ttf', import.meta.url)).toString('base64')}` },
     '../../public/fonts/LiberationSans-Bold.ttf?inline': { default: `data:font/ttf;base64,${fs.readFileSync(new URL('../public/fonts/LiberationSans-Bold.ttf', import.meta.url)).toString('base64')}` },
   });
+  let reportBackend;
   const service = load('../src/lib/trade-veu-electrical-assessment-server.ts', {
     'cloudflare:workers': { env: { EVIDENCE: bucket } }, '../../db': { getD1: () => db },
     './trade-job-collaboration': membership, './trade-account-predicates': predicates,
@@ -169,6 +172,13 @@ function fixture(t) {
     './trade-veu-electrical-draft': load('../src/lib/trade-veu-electrical-draft.ts', { './trade-activity-forms': activity, './veu-electrical-safety-form': form }),
     './trade-email-server': email, './safety-check-email': safetyEmail, './service-reminder-delivery': reminder, './trade-form-job-progress': progress,
     './veu-electrical-safety-pdf': pdf, './customer-plan-pdf-fonts': fonts,
+    './trade-safety-customer-report-server': { safetyCustomerReportUrl: (...args) => reportBackend.safetyCustomerReportUrl(...args),assertSafetyCustomerReportUrl:(...args)=>reportBackend.assertSafetyCustomerReportUrl(...args) },
+  });
+  const reportLinks=load('../src/lib/trade-rental-report-links.ts',{'@/lib/trade-integration-crypto':crypto});
+  reportBackend=load('../src/lib/trade-safety-customer-report-server.ts',{
+    'cloudflare:workers':{env:{EVIDENCE:bucket}},'../../db':{getD1:()=>db},'./trade-activity-forms':activity,
+    './trade-activity-form-flow':flow,'./trade-account-predicates':predicates,'./trade-integration-crypto':crypto,
+    './trade-rental-report-links':reportLinks,'./public-site':{PUBLIC_SITE},'./trade-veu-electrical-assessment-server':service,
   });
   const state = () => ({
     job: sqlite.prepare('SELECT stage,revision FROM trade_work_orders WHERE id=?').get(jobId),
@@ -177,10 +187,10 @@ function fixture(t) {
     submissions: sqlite.prepare('SELECT * FROM trade_email_submissions ORDER BY recipient_email').all(),
     events: sqlite.prepare("SELECT * FROM trade_work_order_events WHERE work_order_id=? AND event_type='job_completed'").all(jobId),
   });
-  async function signed() {
+  async function signed(overrides={}) {
     let record = await service.startPiesaRecord(worker, jobId);
     assert.equal((await service.startPiesaRecord(worker, jobId)).id, record.id);
-    const answers = electricalFixture().answers;
+    const answers = electricalFixture(overrides).answers;
     answers.initial_correct = false;
     record = await service.savePiesaAnswers(worker, record.id, record.revision, answers, 'synthetic-answers');
     record = await service.attestPiesaInitial(worker, record.id, record.revision, activity.activitySigningScope(record, 'before'), true, 'synthetic-initial');
@@ -195,7 +205,7 @@ function fixture(t) {
     assert.equal(providerRequests.length, 0);
     return record;
   }
-  return { sqlite, db, service, progress, objects, providerRequests, state, signed, insert,
+  return { sqlite, db, service, reportBackend, progress, objects, providerRequests, state, signed, insert,
     loseCommitOnce() { loseCommit = true; }, failProgressOnce() { failProgressRead = true; },
     provider(mode) { providerMode = mode; },
   };
@@ -219,6 +229,7 @@ async function assertCompleted(h, record) {
   assert.match(report.getSubject(), /no_rectification/);
   assert.equal(report.getPages().some(page => page.node.Annots()?.size()), false);
   for (const item of h.providerRequests) {
+    assert.match(item.body.html||'',/https:\/\/ausenergyassessments\.com\/reports\/safety\//);
     assert.match(item.body.html, /Prepared and delivered through TLink/);
     assert.equal(item.body.attachments.length, 1);
     assert.equal(item.body.attachments[0].filename, final.fileName);
@@ -226,6 +237,26 @@ async function assertCompleted(h, record) {
   }
   return { final, pages: report.getPageCount(), state };
 }
+test('PIESA customer link preserves the official PDF and real recorded outcome while leaving medical/life-support details out of the hosted summary',async t=>{
+  const h=fixture(t),signed=await h.signed(),record=await h.service.completePiesaRecord(worker,signed.id,signed.revision,'synthetic-piesa-customer-report');
+  const url=await h.reportBackend.safetyCustomerReportUrl(worker,record,'piesa',h.state().assessment.pdf_sha256),token=decodeURIComponent(new URL(url).pathname.split('/').at(-1));
+  const report=await h.reportBackend.safetyCustomerReport(token);assert.equal(isSafetyCustomerReport(report,token),true);
+  assert.equal(report.kind,'piesa');assert.equal(report.recordNumber,record.recordNumber);assert.ok(report.outcome.label);
+  assert.ok(!report.sections.some(section=>section.items.some(item=>/life.support|medical/i.test(item.label))));
+  assert.ok(!JSON.stringify(report).includes(worker.ownerUid));assert.ok(!JSON.stringify(report).includes('objectKey'));
+  assert.deepEqual((await h.reportBackend.safetyCustomerReportFile(token,'pdf')).bytes,(await h.service.readPiesaPdf(worker,record.id)).bytes);
+  assert.equal(h.providerRequests.length,2);assert.equal(h.state().events.length,1);
+});
+for(const [outcome,answers] of [
+  ['rectification_required',{work_rcd:true,rcd_present:false,electrical_works_performed:true}],
+  ['onsite_isolation',{mains_deenergised:false}],
+])test(`PIESA ${outcome} customer projection preserves the actual source outcome and marks required follow-up`,async t=>{
+  const h=fixture(t),signed=await h.signed({assessment_outcome:outcome,...answers}),record=await h.service.completePiesaRecord(worker,signed.id,signed.revision,`synthetic-report-${outcome}`);
+  const url=await h.reportBackend.safetyCustomerReportUrl(worker,record,'piesa',h.state().assessment.pdf_sha256),token=decodeURIComponent(new URL(url).pathname.split('/').at(-1));
+  const report=await h.reportBackend.safetyCustomerReport(token),field=record.form.fields.find(field=>field.key==='assessment_outcome');
+  assert.equal(report.outcome.attention,'follow_up');assert.equal(report.outcome.label,flow.activityOptionLabel(outcome,field.optionLabels?.[outcome]));
+  assert.equal(h.providerRequests.length,2);assert.equal(h.state().events.length,1);
+});
 
 test('PIESA phone flow signs the official assessment, retains its real PDF, automatically emails both copies and closes the assigned job once', async t => {
   const h = fixture(t), signed = await h.signed();

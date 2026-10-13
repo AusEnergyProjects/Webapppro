@@ -6,7 +6,8 @@ import { wattzunPortalForPath } from "@/lib/wattzun-portal-path";
 const DeferredWattzunPortalAssistant = lazy(() => import("./WattzunPortalAssistant").then((module) => ({ default: module.WattzunPortalAssistant })));
 const DeferredPublicEnergyAssistantWidget = lazy(() => import("./LazyPublicEnergyAssistantWidget").then((module) => ({ default: module.LazyPublicEnergyAssistantWidget })));
 
-const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password|customer-hub|council)(\/|$)/.test(pathname);
+const hiddenRoute = (pathname: string) => /\/(print|pdf|reset-password|customer-hub|council)(\/|$)/.test(pathname)
+  || /^\/reports\/safety(?:\/|$)/.test(pathname);
 
 export function LazyEnergyAssistantWidget() {
   const pathname = usePathname() || "/";

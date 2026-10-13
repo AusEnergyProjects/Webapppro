@@ -11,6 +11,8 @@ import * as membership from '../src/lib/trade-job-collaboration.ts';
 import * as guardSql from '../src/lib/tlink-schema-guards.ts';
 import * as reminder from '../src/lib/service-reminder-delivery.ts';
 import * as safetyCheckEmail from '../src/lib/safety-check-email.ts';
+import * as integrationState from '../src/lib/trade-integration-state.ts';
+import { PUBLIC_SITE } from '../src/lib/public-site.ts';
 import { renderVeuElectricalSafetyPdf } from '../src/lib/veu-electrical-safety-pdf.ts';
 import { PDFDocument } from 'pdf-lib';
 
@@ -62,6 +64,8 @@ function fixture(t,realPdf=false) {
     INSERT INTO trade_team_members VALUES('worker','owner','worker-uid','active',1,1,'team');`);
   sql.exec(`ALTER TABLE trade_accounts ADD COLUMN phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE trade_accounts ADD COLUMN document_phone TEXT NOT NULL DEFAULT '';
+    ALTER TABLE trade_accounts ADD COLUMN logo_object_key TEXT NOT NULL DEFAULT '';
+    ALTER TABLE trade_accounts ADD COLUMN logo_content_type TEXT NOT NULL DEFAULT '';
     ALTER TABLE trade_crm_job_details ADD COLUMN service_site_id TEXT NOT NULL DEFAULT '';
     ALTER TABLE trade_team_members ADD COLUMN first_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE trade_team_members ADD COLUMN last_name TEXT NOT NULL DEFAULT '';
@@ -72,6 +76,7 @@ function fixture(t,realPdf=false) {
     UPDATE trade_crm_job_details SET service_site_id='site';
     UPDATE trade_accounts SET phone='0399990000',document_phone='0399990001' WHERE firebase_uid='owner';`);
   sql.exec(read('../drizzle/0256_trade_veu_electrical_assessments.sql').replaceAll('--> statement-breakpoint', ''));
+  sql.exec(read('../drizzle/0262_trade_official_safety_checks.sql').replaceAll('--> statement-breakpoint', ''));
   let hook = () => {}, lostBatch = false, mailFailure = null, inBatch = false;
   const roundTrips = [];
   const trip = (kind, query) => { if (!inBatch) roundTrips.push({ kind, query }); };
@@ -87,6 +92,7 @@ function fixture(t,realPdf=false) {
   let progressPending = false, completesJob = false;
   const bucket = { async put(key, bytes) { objects.set(key, new Uint8Array(bytes)); }, async get(key) { const bytes = objects.get(key); return bytes ? { async arrayBuffer() { return bytes.slice().buffer; } } : null; }, async delete(key) { objects.delete(key); } };
   const journal = (key, status, id = '', subject = '') => sql.prepare('INSERT OR REPLACE INTO trade_email_submissions VALUES(?,?,?,?,?,?)').run('owner', key, status, 'synthetic', id, subject);
+  let reportBackend;
   const service = compile('../src/lib/trade-veu-electrical-assessment-server.ts', {
     'cloudflare:workers': { env: { EVIDENCE: bucket } }, '../../db': { getD1: () => db }, './trade-job-collaboration': membership,
     './trade-account-predicates': predicates, './trade-activity-forms': activity, './trade-activity-form-flow': flow,
@@ -94,6 +100,7 @@ function fixture(t,realPdf=false) {
     './trade-veu-electrical-draft': draft,
     './service-reminder-delivery': reminder,
     './safety-check-email': safetyCheckEmail,
+    './trade-safety-customer-report-server': { safetyCustomerReportUrl: (...args) => reportBackend.safetyCustomerReportUrl(...args),assertSafetyCustomerReportUrl:(...args)=>reportBackend.assertSafetyCustomerReportUrl(...args) },
     './trade-form-job-progress': { async reconcileTradeFormJobProgress(access, workOrderId, options) {
       const record = sql.prepare('SELECT status,pdf_object_key,pdf_sha256,pdf_size_bytes FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?').get(workOrderId, access.ownerUid);
       assert.equal(record.status, 'complete'); assert.ok(record.pdf_object_key); assert.equal(record.pdf_sha256.length, 64); assert.ok(record.pdf_size_bytes > 4);
@@ -111,6 +118,13 @@ function fixture(t,realPdf=false) {
       return realPdf?renderVeuElectricalSafetyPdf(record,assets,{regular:fs.readFileSync(new URL('../public/fonts/LiberationSans-Regular.ttf',import.meta.url)),bold:fs.readFileSync(new URL('../public/fonts/LiberationSans-Bold.ttf',import.meta.url))}):new TextEncoder().encode(`%PDF-${activity.activityCanonical(record)}`); } },
     './customer-plan-pdf-fonts': { async loadCustomerPlanPdfFonts() { return {}; } },
     './trade-activity-forms-pdf': { async validateActivityEvidenceBytes(bytes, type) { assert.equal(type, 'application/pdf'); assert.ok(bytes.length > 5); } },
+  });
+  const crypto=compile('../src/lib/trade-integration-crypto.ts',{'cloudflare:workers':{env:{CRM_INTEGRATION_ENCRYPTION_KEY:Buffer.alloc(32,17).toString('base64')}},'@/lib/trade-integration-state':integrationState});
+  const reportLinks=compile('../src/lib/trade-rental-report-links.ts',{'@/lib/trade-integration-crypto':crypto});
+  reportBackend=compile('../src/lib/trade-safety-customer-report-server.ts',{
+    'cloudflare:workers':{env:{EVIDENCE:bucket}},'../../db':{getD1:()=>db},'./trade-activity-forms':activity,
+    './trade-activity-form-flow':flow,'./trade-account-predicates':predicates,'./trade-integration-crypto':crypto,
+    './trade-rental-report-links':reportLinks,'./public-site':{PUBLIC_SITE},'./trade-veu-electrical-assessment-server':service,
   });
   async function start() { return service.startPiesaRecord(owner, 'job'); }
   async function answered(overrides = {}) {

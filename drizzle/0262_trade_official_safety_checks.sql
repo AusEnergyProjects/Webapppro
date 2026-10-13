@@ -64,3 +64,25 @@ CREATE TABLE trade_safety_check_mutations (
   created_at TEXT NOT NULL,
   PRIMARY KEY(record_id,request_key)
 );
+--> statement-breakpoint
+CREATE TABLE trade_safety_report_links (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner_uid TEXT NOT NULL,
+  work_order_id TEXT NOT NULL REFERENCES trade_work_orders(id) ON DELETE RESTRICT,
+  record_id TEXT NOT NULL,
+  record_kind TEXT NOT NULL CHECK(record_kind IN ('piesa','electrical','gas')),
+  record_revision INTEGER NOT NULL CHECK(record_revision > 0),
+  pdf_sha256 TEXT NOT NULL CHECK(length(pdf_sha256)=64),
+  crm_customer_id TEXT NOT NULL,
+  customer_email_sha256 TEXT NOT NULL CHECK(length(customer_email_sha256)=64),
+  token_hash TEXT NOT NULL CHECK(length(token_hash)=64),
+  encrypted_token TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')),
+  expires_at TEXT NOT NULL CHECK(datetime(expires_at) IS NOT NULL),
+  created_by_uid TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT NOT NULL DEFAULT '',
+  UNIQUE(owner_uid,record_kind,record_id)
+);
+--> statement-breakpoint
+CREATE INDEX trade_safety_report_link_record ON trade_safety_report_links(owner_uid,record_kind,record_id,status);

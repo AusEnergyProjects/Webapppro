@@ -24,7 +24,7 @@ export function OfficialSafetyFormLibrary({ user }: { user: User }) {
     return () => controller.abort();
   }, [load]);
   return <section className={styles.panel} aria-label="Official electrical and gas form library">
-    <header className={styles.heading}><span className={styles.eyebrow}>GOVERNMENT SAFETY FORMS</span><h4>Fill the official form in TLink</h4><p>Add these from a job&apos;s Forms section. The finished record includes your business branding, the official PDF and the saved evidence.</p></header>
+    <header className={styles.heading}><span className={styles.eyebrow}>GOVERNMENT SAFETY FORMS</span><h4>Fill the official form in TLink</h4><p>Add these from a job&apos;s Forms section. Customers receive the completed government PDF and evidence, plus a private report link with your business and TLink branding. The government PDF keeps its original presentation.</p></header>
     <div className={styles.choices}>{forms.map(form => <button type="button" key={form.id} onClick={() => setSelected(form)}><strong>{form.title}</strong><span>Preview the questions and sign-off</span></button>)}</div>
     {selected && <div className={styles.form}><button type="button" onClick={() => setSelected(null)}>Close preview</button><CreditexFormPhonePreview key={selected.id} form={selected} canEdit={false} /><p>{selected.sources.map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗ </a>)}</p></div>}
     <p className={styles.form}>Smoke alarm service records are available under the job&apos;s rental and safety checks. The official electrical report also includes its smoke-alarm check section.</p>

@@ -118,6 +118,14 @@ async function stored(access:TeamAccess,id:string,mutate=false) {
   return {row,record:parse(row)};
 }
 export async function readSafetyCheckRecord(access:TeamAccess,id:string) {return (await stored(access,id)).record;}
+/** Internal adapter for the separately authorised, immutable customer-report capability. */
+export async function completedSafetyReportSnapshot(ownerUid:string,id:string,workOrderId:string,revision:number,pdfSha256:string) {
+  const row=await getD1().prepare("SELECT * FROM trade_safety_checks WHERE id=? AND owner_uid=? AND work_order_id=? AND revision=? AND status='complete' AND pdf_sha256=?")
+    .bind(identifier(id),ownerUid,identifier(workOrderId),revision,pdfSha256).first<Row>();
+  if(!row)fail("SAFETY_CHECK_NOT_FOUND","This completed safety check was not found.",404);
+  const record=parse(row);if(!safetyCheckCompletion(record).ready)fail("SAFETY_CHECK_INTEGRITY","The completed safety check could not pass its integrity check.");
+  return {record,pdfObjectKey:row.pdf_object_key,pdfSha256:row.pdf_sha256,pdfSize:row.pdf_size_bytes};
+}
 export async function listSafetyCheckRecords(access:TeamAccess,workOrderId:string) {
   await scope(access,workOrderId);
   const rows=await getD1().prepare("SELECT * FROM trade_safety_checks WHERE work_order_id=? AND owner_uid=? ORDER BY created_at").bind(workOrderId,access.ownerUid).all<Row>();
@@ -133,16 +141,12 @@ async function recipients(ownerUid:string,workOrderId:string) {
   return {business:email(row?.business_email),customer:row && row.source_type!=="opportunity" && ["trade_owned","public_lead_released"].includes(row.customer_source)?email(row.customer_email):""};
 }
 async function branding(ownerUid:string):Promise<SafetyCheckBranding> {
-  const account=await getD1().prepare(`SELECT business_name,email,COALESCE(NULLIF(document_phone,''),phone) business_phone,
-    logo_object_key,logo_content_type FROM trade_accounts account WHERE firebase_uid=? AND partner_type='installer'
+  const account=await getD1().prepare(`SELECT business_name,email,COALESCE(NULLIF(document_phone,''),phone) business_phone
+    FROM trade_accounts account WHERE firebase_uid=? AND partner_type='installer'
     AND ${verifiedTradeAccountPredicate("account")}`).bind(ownerUid)
-    .first<{business_name:string;email:string;business_phone:string;logo_object_key:string;logo_content_type:string}>();
+    .first<{business_name:string;email:string;business_phone:string}>();
   if(!account)fail("SAFETY_CHECK_ACCESS_REQUIRED","Active authorised business access is required.",403);
-  const contentType=account.logo_content_type;
-  const {loadBrandAsset}=await import("./trade-quote-pdf-server");
-  const logo=account.logo_object_key&&(contentType==="image/png"||contentType==="image/jpeg")
-    ? await loadBrandAsset({objectKey:account.logo_object_key,contentType}) : undefined;
-  return {businessName:account.business_name.trim(),businessEmail:email(account.email),businessPhone:account.business_phone||"",...(logo?{logo}:{})};
+  return {businessName:account.business_name.trim(),businessEmail:email(account.email),businessPhone:account.business_phone||""};
 }
 async function safetyCheckProfileDefaults(access:TeamAccess,workOrderId:string,kind:SafetyCheckKind) {
   const db=getD1(),guard=currentAccess(access,false);
@@ -382,7 +386,7 @@ export async function completeSafetyCheckRecordWithProgress(access:TeamAccess,id
   const [{renderOfficialSafetyCheckPdf, officialSafetyCheckAssets},{loadCustomerPlanPdfFonts}]=await Promise.all([import("./official-safety-check-pdf"),import("./customer-plan-pdf-fonts")]);
   const officialAssets=await officialSafetyCheckAssets();
   for(const item of previous.evidence)officialAssets.set(item.id,{bytes:assets.get(item.id)!,contentType:item.contentType});
-  const bytes=await renderOfficialSafetyCheckPdf(next,officialAssets,await loadCustomerPlanPdfFonts(),await branding(access.ownerUid));
+  const bytes=await renderOfficialSafetyCheckPdf(next,officialAssets,await loadCustomerPlanPdfFonts());
   if(bytes.length<5||bytes.length>12*1024*1024||new TextDecoder().decode(bytes.slice(0,5))!=="%PDF-")fail("SAFETY_CHECK_PDF_INVALID","The completed PDF could not be prepared.");
   const pdfHash=activityHash(bytes),pdfKey=`safety-checks/${access.ownerUid}/${id}/completed/${next.revision}/${pdfHash}.pdf`;
   await bucket().put(pdfKey,bytes,{httpMetadata:{contentType:"application/pdf"},customMetadata:{sha256:pdfHash,assessmentId:id,revision:String(next.revision),retention:"immutable-completed-assessment"}});
@@ -455,13 +459,20 @@ export async function retrySafetyCheckDelivery(access:TeamAccess,id:string,baseR
     const evidence=await readSafetyCheckEvidence(access,id,item.id);
     attachments.push({filename:evidence.fileName.replace(/[/\\]/g,"_").slice(0,180),content:encoded(evidence.bytes),contentType:evidence.contentType});
   }
-  const draft=safetyCheckEmailDraft({businessName:business.businessName,recordNumber:record.recordNumber,title:record.form.title,
+  let draft:ReturnType<typeof safetyCheckEmailDraft>|undefined,reportUrl='';
+  const brandedDraft=async()=>{
+    if(draft)return draft;
+    const {safetyCustomerReportUrl}=await import('./trade-safety-customer-report-server');
+    reportUrl=await safetyCustomerReportUrl(access,record,record.kind,activityHash(pdf.bytes));
+    draft=safetyCheckEmailDraft({businessName:business.businessName,recordNumber:record.recordNumber,title:record.form.title,
+    reportUrl,
     propertyAddress:String(record.answers.property_address||""),inspectionDate:String(record.answers.inspection_date||""),inspectorName:String(record.answers.inspector_name||""),
     photoCount:record.evidence.filter(item=>item.contentType.startsWith("image/")).length,supportingDocumentCount:record.evidence.filter(item=>item.contentType==="application/pdf").length,
     businessEmail:business.businessEmail,businessPhone:business.businessPhone,
     outcome:record.kind==="gas"?record.form.fields.find(field=>field.key==="gas.outcome")?.optionLabels?.[String(record.answers["gas.outcome"])]||String(record.answers["gas.outcome"]||""):"",
     ...(record.kind==="gas"&&record.answers["gas.outcome"]==="unsafe"?{attention:"urgent",actionRequired:"Contact the inspecting gasfitter immediately about the recorded unsafe finding and required actions. Read the attached report before using the affected installation."}:
-      record.kind==="gas"&&record.answers["gas.outcome"]==="non_compliant"?{attention:"follow_up",actionRequired:"Contact the inspecting gasfitter about the recorded faults and remedial actions in the attached report."}:{})});
+      record.kind==="gas"&&record.answers["gas.outcome"]==="non_compliant"?{attention:"follow_up",actionRequired:"Contact the inspecting gasfitter about the recorded faults and remedial actions in the attached report."}:{})});return draft;
+  };
   for(const row of await deliveryRows(access,id)) {
     if(row.status==="accepted"||row.status==="reconciliation_required")continue;
     const now=stamp(),key=deliveryKey(id,row.recipient_role);
@@ -482,13 +493,14 @@ export async function retrySafetyCheckDelivery(access:TeamAccess,id:string,baseR
     try {
       const beforeSend=async()=>{
         await scope(access,record.workOrderId,true,true);
+        if(reportUrl)await (await import('./trade-safety-customer-report-server')).assertSafetyCustomerReportUrl(reportUrl);
         const fresh=await recipients(access.ownerUid,record.workOrderId);if(fresh[row.recipient_role]!==target)fail("SAFETY_CHECK_RECIPIENT_CHANGED","The report recipient changed.");
         const held=await db.prepare("SELECT 1 FROM trade_safety_check_deliveries WHERE record_id=? AND owner_uid=? AND recipient_role=? AND status='sending' AND lease_token=? AND lease_expires_at>?")
           .bind(id,access.ownerUid,row.recipient_role,lease,stamp()).first();if(!held)fail("SAFETY_CHECK_DELIVERY_CHANGED","This delivery changed elsewhere.");
       };
-      await beforeSend();transport=true;
+      const content=await brandedDraft();await beforeSend();transport=true;
       const sent=await sendTradeCustomerEmail(access.ownerUid,access.actorUid,{channel:"email",recipient:target,
-        ...draft,attachments,idempotencyKey:key,callbackUrl:"",messageType:"safety_check_completed_assessment"},{db,beforeSend});
+        ...content,attachments,idempotencyKey:key,callbackUrl:"",messageType:"safety_check_completed_assessment"},{db,beforeSend});
       await db.prepare("UPDATE trade_safety_check_deliveries SET status='accepted',provider=?,provider_message_id=?,accepted_at=?,lease_token='',lease_expires_at='',updated_at=? WHERE record_id=? AND owner_uid=? AND recipient_role=? AND lease_token=?")
         .bind(sent.provider,sent.providerMessageId,stamp(),stamp(),id,access.ownerUid,row.recipient_role,lease).run();
     } catch(error) {

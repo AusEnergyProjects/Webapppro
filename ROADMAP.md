@@ -2,7 +2,7 @@
 
 ## Official safety forms and phone completion, 13 October 2026
 
-Implemented: direct job access to PIESA and official Victorian electrical/gas forms, named touch signatures, immutable completed PDFs, canonical job progress and explicit recovery, separate photo/servicing-document email attachments, business/TLink report branding and readable delivery status. New legacy electrical/gas checklists are replaced by official selections; existing records and smoke/blinds services remain accessible. Migration 0262 preserves owner scope, record revisions and delivery/mutation receipts.
+Implemented: direct job access to PIESA and official Victorian electrical/gas forms, named touch signatures, immutable completed PDFs, canonical job progress and explicit recovery, separate photo/servicing-document email attachments, a private customer report page with business/TLink branding and readable delivery status. Government PDFs retain their original presentation without business/TLink branding. New legacy electrical/gas checklists are replaced by official selections; existing records and smoke/blinds services remain accessible. Migration 0262 preserves owner scope, record revisions, delivery/mutation receipts and expiring customer report capabilities.
 
 Release and verification evidence: `C:/Webproject/outputs/safety-phone-flow-20261013/release-report.json`. Physical iPhone drawing and actual inbox receipt remain a field verification limit, separate from executable native/server checks.
 

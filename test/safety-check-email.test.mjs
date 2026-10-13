@@ -44,3 +44,21 @@ test('invalid record identities and attachment counts are rejected rather than f
     assert.throws(() => safetyCheckEmailDraft({ ...input(), ...change }), /CONTENT_INVALID/);
   }
 });
+test('the customer email opens the branded report link while still attaching the official PDF and photos', () => {
+  const reportUrl = `https://ausenergyassessments.com/reports/safety/example-link.${'a'.repeat(43)}`;
+  const draft = safetyCheckEmailDraft({ ...input(), reportUrl });
+  assert.match(draft.html, /View your report<\/a>/);
+  assert.ok(draft.html.includes(`href="${reportUrl}"`));
+  assert.ok(draft.body.includes(`View your report: ${reportUrl}`));
+  assert.match(draft.body, /PDF is attached, with 2 evidence photos/);
+  assert.match(draft.body, /anyone you forward it to can view your report/);
+});
+test('the report email rejects destinations outside the private TLink report route', () => {
+  const token = `example.${'a'.repeat(43)}`;
+  for (const reportUrl of [`http://ausenergyassessments.com/reports/safety/${token}`, `https://example.com/reports/safety/${token}`,
+    `https://ausenergyassessments.com/compare/${token}`, `https://user:pass@ausenergyassessments.com/reports/safety/${token}`,
+    `https://ausenergyassessments.com/reports/safety/${token}?redirect=bad`, `https://ausenergyassessments.com/reports/safety/${token}#bad`,
+    'javascript:alert(1)', 'https://ausenergyassessments.com/reports/safety/short']) {
+    assert.throws(() => safetyCheckEmailDraft({ ...input(), reportUrl }), /REPORT_URL_INVALID/);
+  }
+});

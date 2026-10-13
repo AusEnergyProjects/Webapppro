@@ -24,7 +24,6 @@ export type SafetyCheckPresentation = Omit<SafetyCheckRecord, 'ownerUid' | 'evid
 };
 export type SafetyCheckBranding = {
   businessName: string; businessEmail: string; businessPhone: string;
-  logo?: { bytes: Uint8Array; contentType: string };
 };
 export class SafetyCheckError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {

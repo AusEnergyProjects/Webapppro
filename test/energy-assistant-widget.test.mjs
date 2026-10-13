@@ -228,7 +228,7 @@ test("the energy guide is deferred at the root and excluded from print or PDF ou
   const hiddenRouteSource = lazyWidget.match(/const hiddenRoute = [^;]+;/)?.[0];
   assert.ok(hiddenRouteSource);
   const hiddenRoute = new Function(`${ts.transpileModule(hiddenRouteSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText}; return hiddenRoute;`)();
-  for (const pathname of ["/job/print", "/job/print/1", "/quote/pdf/1", "/direct-trade/reset-password"]) {
+  for (const pathname of ["/job/print", "/job/print/1", "/quote/pdf/1", "/direct-trade/reset-password", "/reports/safety", "/reports/safety/private-example.token"]) {
     assert.equal(hiddenRoute(pathname), true, `${pathname} must not load the assistant`);
   }
   for (const pathname of ["/", "/direct-trade/team", "/wattzun", "/guides/printing"]) {
