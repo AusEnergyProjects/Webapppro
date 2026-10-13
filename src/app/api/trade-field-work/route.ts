@@ -1,4 +1,4 @@
-import { fieldCompletionGuard, photoFinishState, UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL, UNFINISHED_JOB_WORK_PACKS_SQL, type PhotoFinishGuard, reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { fieldCompletionGuard, photoFinishState, UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL, UNFINISHED_JOB_WORK_PACKS_SQL, COMPLETED_ELECTRICAL_ASSESSMENT_SQL, type PhotoFinishGuard, reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
@@ -205,9 +205,12 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'
     LEFT JOIN trade_crm_appointments a ON a.id = ? AND a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(selectedVisit?.id || "", workOrderId, firebaseUid).first<Record<string, unknown>>();
-  const [taskCount, formCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount, workPackCount] = await Promise.all([
+  const [taskCount, formCount, assessmentCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount, workPackCount] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_veu_electrical_assessments assessment
+      WHERE assessment.work_order_id = ? AND assessment.owner_uid = ?
+        AND NOT (${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_crm_job_plan_requirements r JOIN trade_crm_job_plans p ON p.id = r.job_plan_id AND p.firebase_uid = r.firebase_uid
       WHERE p.work_order_id = ? AND p.firebase_uid = ? AND r.status NOT IN ('installed', 'complete', 'completed', 'done', 'not_required', 'not_needed')`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
@@ -223,11 +226,12 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
   const customerContext = job?.source_type !== "opportunity"
     && (job?.customer_source === "trade_owned" || job?.customer_source === "public_lead_released");
   const address = customerContext ? [job?.address_line_1, job?.address_line_2, job?.suburb, job?.address_state, job?.postcode].filter(Boolean).join(", ") : "";
-  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0), rentalReports: Number(rentalReportCount?.count || 0) };
+  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), assessments: Number(assessmentCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0), rentalReports: Number(rentalReportCount?.count || 0) };
   const blockers = [
     ...(counts.tasks ? [{ key: "tasks", label: `${counts.tasks} assigned task${counts.tasks === 1 ? " is" : "s are"} not complete`, target: "tasks" }] : []),
     ...(Number(workPackCount?.count || 0) ? [{ key: "work-packs", label: "Complete and sign every required activity work pack", target: "forms" }] : []),
     ...(counts.forms ? [{ key: "forms", label: `${counts.forms} required form${counts.forms === 1 ? " is" : "s are"} not complete`, target: "forms" }] : []),
+    ...(counts.assessments ? [{ key: "piesa", label: "Sign and complete the PIESA assessment to save its final PDF.", target: "forms" }] : []),
     ...(request && request.status !== "revoked" && !proofReview?.proofReady ? [{ key: "proof", label: "Required photo proof is not ready", target: "evidence" }] : []),
     ...(counts.issues ? [{ key: "issues", label: `${counts.issues} open issue${counts.issues === 1 ? " needs" : "s need"} attention`, target: "notes" }] : []),
     ...(counts.plan ? [{ key: "scope", label: `${counts.plan} work-plan item${counts.plan === 1 ? " is" : "s are"} not complete`, target: "work-plan" }] : []),
@@ -253,7 +257,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     checklist: [
       { key: "scope", label: "Scope and instructions", complete: Boolean(job.description) && !counts.plan, count: counts.plan, target: "notes" },
       { key: "tasks", label: "Assigned tasks", complete: !counts.tasks, count: counts.tasks, target: "tasks" },
-      { key: "forms", label: "Required forms", complete: !counts.forms, count: counts.forms, target: "forms" },
+      { key: "forms", label: "Required forms", complete: !counts.forms && !counts.assessments, count: counts.forms + counts.assessments, target: "forms" },
       { key: "proof", label: "Required photo proof", complete: !request || request.status === "revoked" || Boolean(proofReview?.proofReady), count: request && request.status !== "revoked" && !proofReview?.proofReady ? 1 : 0, target: "evidence" },
       { key: "compliance", label: "Governed compliance evidence", complete: !counts.compliance, count: counts.compliance, target: "evidence" },
       { key: "rental-report", label: "Rental assessment report issued", complete: !counts.rentalReports, count: counts.rentalReports, target: "rental-assessment" },

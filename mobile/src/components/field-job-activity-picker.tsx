@@ -61,18 +61,17 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged, onOpenE
   }
 
   return <View style={styles.section}>
-    <Text style={styles.title}>Assessment and program forms</Text>
-    <Text style={styles.help}>Add an insulation electrical safety assessment, rental assessment or program activity to this job.</Text>
+    <FieldVeuElectricalAssessmentPicker key={workOrderId} workOrderId={workOrderId} online={online} onChanged={onChanged} onOpen={onOpenElectricalAssessment} />
+    <Text style={styles.title}>Rental and program forms</Text>
+    <Text style={styles.help}>Add a rental assessment or program activity to this job.</Text>
     {!online ? <Text style={styles.help}>Connect to add a new activity. Already attached forms remain available on the job.</Text> : null}
     {loading ? <Text style={styles.help}>Loading available activities...</Text> : null}
     {catalogue ? <>
       <FieldSelect label="Form or program" value={group} disabled={busy || !online} options={[
-        { value: 'veu_electrical', label: 'Pre-installation electrical safety assessment (Insulation) · PIESA' },
         ...(catalogue.rentalVisits?.length ? [{ value: 'rental_visit', label: 'Safety visit bundles, one report' }] : []),
         { value: 'rental', label: 'Rental inspections and safety checks' },
         ...catalogue.programs.map((program) => ({ value: program.id, label: program.label })),
       ]} onChange={(value) => { setGroup(value); setSelection(''); setPremises(''); setMessage(''); }} />
-      {group === 'veu_electrical' ? <FieldVeuElectricalAssessmentPicker key={workOrderId} workOrderId={workOrderId} online={online} onChanged={onChanged} onOpen={onOpenElectricalAssessment} /> : <>
       <FieldSelect label={group === 'rental_visit' ? 'Visit bundle' : group === 'rental' ? 'Assessment' : 'Activity'} placeholder="Choose the form to add" value={selection} disabled={busy || !online}
         options={choices.map((choice) => ({ value: choice.id, label: `${choice.title}${choice.added ? ' (already added)' : choice.unavailableReason ? ' (unavailable)' : ''}` }))}
         onChange={(value) => { setSelection(value); setMessage(''); }} />
@@ -84,7 +83,6 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged, onOpenE
       {selected && !selected.added ? <FieldButton disabled={busy || loading || !online || Boolean(selected.unavailableReason) || needsPremises} onPress={() => void add()}>
         {busy ? 'Adding form...' : 'Add to this job'}
       </FieldButton> : null}
-      </>}
     </> : null}
     {error ? <><Text style={styles.error}>{error}</Text><FieldButton variant="quiet" disabled={busy || loading || !online} onPress={() => setLoadAttempt((value) => value + 1)}>Refresh activity library</FieldButton></> : null}
     {message ? <Text accessibilityLiveRegion="polite" style={styles.success}>{message}</Text> : null}

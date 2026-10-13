@@ -142,12 +142,38 @@ test("Current council profile previews the real, safe customer journey", { skip:
         await enquiry.getByRole("textbox", { name: "Last name *", exact: true }).fill("Preview");
         await enquiry.getByRole("textbox", { name: "Phone *", exact: true }).fill("0400000000");
         await enquiry.getByRole("checkbox", { name: /I agree to send this request/ }).check();
+        if (width === 1280) {
+          await page.evaluate(() => {
+            window.fixtureOriginalRequestFrame = window.requestAnimationFrame;
+            window.fixtureOriginalCancelFrame = window.cancelAnimationFrame;
+            window.fixtureDeferredReceiptFrames = new Map();
+            let nextFrame = 1;
+            window.requestAnimationFrame = callback => {
+              const id = nextFrame++;
+              window.fixtureDeferredReceiptFrames.set(id, callback);
+              return id;
+            };
+            window.cancelAnimationFrame = id => window.fixtureDeferredReceiptFrames.delete(id);
+            window.fixtureReceiptFrameRan = false;
+            window.requestAnimationFrame(() => { window.fixtureReceiptFrameRan = true; });
+          });
+        }
         await enquiry.getByRole("button", { name: "Preview my request", exact: true }).click();
         const receipt = page.getByRole("dialog", { name: "Demonstration complete", exact: true });
         await receipt.getByRole("heading", { name: "Demonstration complete", exact: true }).waitFor();
+        if (width === 1280) {
+          assert.equal(await page.evaluate(() => window.fixtureReceiptFrameRan), false, "Receipt dismissal must work before any deferred animation frame");
+          assert.equal(await receipt.getByRole("button", { name: "Done", exact: true }).evaluate(button => button === document.activeElement), true, "The newly rendered receipt must own keyboard focus immediately");
+        }
         assert.deepEqual(await page.evaluate(() => window.fixtureRequests.filter(request => request.method === "POST" && new URL(request.url, location.origin).pathname === "/api/leads")), []);
         await page.keyboard.press("Escape");
         await receipt.waitFor({ state: "hidden" });
+        if (width === 1280) {
+          await page.evaluate(() => {
+            window.requestAnimationFrame = window.fixtureOriginalRequestFrame;
+            window.cancelAnimationFrame = window.fixtureOriginalCancelFrame;
+          });
+        }
         assert.equal(await preview.isVisible(), true, "Nested Escape leaves the page preview open");
         await page.keyboard.press("Escape");
         await preview.waitFor({ state: "hidden" });

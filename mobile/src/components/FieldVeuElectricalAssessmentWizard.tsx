@@ -41,9 +41,12 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   const loading = online && loadedFor !== loadKey;
   const [busy, setBusy] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [signatures, setSignatures] = useState<Record<string, FieldWorkPackSignatureDraft>>({});
+  const [signatureDrawing, setSignatureDrawing] = useState(false);
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [pending, setPending] = useState<PendingEvidence | null>(null);
   const current = useRef({ record, answers, busy: '', alive: true });
+  const signatureDrawingChanged = useCallback((drawing: boolean) => { if (current.current.alive) setSignatureDrawing(drawing); }, []);
+  const signatureDraftChanged = useCallback((draft: FieldWorkPackSignatureDraft) => setSignatures(previous => ({ ...previous, [draft.signerRoleKey]: draft })), []);
   const offeredPrefills = useRef(new Set<string>());
   const scroll = useRef<ScrollView>(null);
   const mutation = useRef({ identity: '', requestId: '' });
@@ -277,7 +280,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: accepted[declaration.key] || false }} disabled={disabled || !signatureReady} onPress={() => setAccepted(previous => ({ ...previous, [declaration.key]: !previous[declaration.key] }))}>
           <Text style={styles.label}>{accepted[declaration.key] ? '☑' : '☐'} I am the named signer and have read and agree to this declaration.</Text>
         </Pressable>
-        <SignatureCapture signerRole={role} declaration={boundActivityDeclaration(declaration, answers)} showDeclaration={false} value={draft} disabled={disabled || !signatureReady || !accepted[declaration.key] || !signerName} onChange={value => setSignatures(previous => ({ ...previous, [declaration.key]: value }))} />
+        <SignatureCapture signerRole={role} declaration={boundActivityDeclaration(declaration, answers)} showDeclaration={false} value={draft} disabled={disabled || !signatureReady || !accepted[declaration.key] || !signerName} onChange={signatureDraftChanged} onDrawingChange={signatureDrawingChanged} />
         <FieldButton disabled={disabled || !signatureReady || !accepted[declaration.key] || !signerName || !activitySignatureStrokesAreValid(draft.strokes)} onPress={() => void perform('sign', async () => {
           if (!activitySignatureStrokesAreValid(draft.strokes)) throw new Error('Draw your actual signature before saving.');
           await mutate('sign', { action: 'sign', declarationKey: declaration.key, signerName, accepted: true, scopeSha256: record.signingScopes[declaration.phase], strokes: draft.strokes.map(stroke => ({ points: stroke.points.map(point => ({ x: point.x, y: point.y })) })) });
@@ -286,7 +289,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     </View>;
   }
 
-  return <KeyboardAwareScrollView ref={scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+  return <KeyboardAwareScrollView ref={scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" scrollEnabled={!signatureDrawing || page !== 'signatures' || !writable || Boolean(busy)}>
     <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => confirmLeave(onReturnToJob)}>Back to job</FieldButton>
     <Text style={styles.title}>Pre-installation electrical safety assessment (Insulation)</Text>
     {record ? <Text style={styles.help}>{record.recordNumber} · {record.status === 'complete' ? 'Completed' : dirty ? 'Unsaved answers' : 'Saved'}</Text> : null}
@@ -296,7 +299,12 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     {!loading && online ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => void perform('refresh', () => refresh())}>Refresh saved assessment</FieldButton> : null}
     {record ? <>
       {!canManage && record.status === 'draft' ? <Text style={styles.help}>This assessment is view only for your current access.</Text> : null}
-      <FieldSelect label="Assessment section" value={page} disabled={Boolean(busy)} options={pages.map(section => ({ value: section, label: section === 'signatures' ? 'Signatures' : section === 'review' ? 'Review and completion' : section }))} onChange={next => void perform('section', () => moveTo(next))} />
+      <View style={styles.navigation}>
+        <FieldButton style={styles.shortcut} disabled={Boolean(busy)} onPress={() => void perform('section', () => moveTo('signatures'))}>Sign off</FieldButton>
+        <FieldButton style={styles.shortcut} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('section', () => moveTo('review'))}>Finish &amp; email PDF</FieldButton>
+      </View>
+      <Text style={styles.help}>Sign the declarations, then review and complete the PIESA to prepare and email its PDF. Any missing answers are shown before you can finish.</Text>
+      <FieldSelect label="Assessment section" value={page} disabled={Boolean(busy)} options={pages.map(section => ({ value: section, label: section === 'signatures' ? 'Sign off' : section === 'review' ? 'Review & finish' : section }))} onChange={next => void perform('section', () => moveTo(next))} />
       {sections.includes(page) ? <><Text style={styles.title}>{page}</Text>
         {record.businessContactSuggestion && fields.some(field => field.section === page && field.key === 'initial_rec_name') ? <>
           <Text style={styles.help}>Your business contact is {record.businessContactSuggestion.name}{record.businessContactSuggestion.phone ? ` · ${record.businessContactSuggestion.phone}` : ''}. Use these details only if they are the Registered Electrical Contractor for this assessment. Check and enter the REC registration number yourself.</Text>
@@ -322,7 +330,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
       {pending ? <View style={styles.question}><Text style={styles.error}>This evidence is retained on your phone and still needs uploading: {pending.name}</Text><FieldButton disabled={disabled} onPress={() => void perform('upload', () => upload(pending))}>Retry evidence upload</FieldButton></View> : null}
       {record.status === 'draft' ? <Text style={styles.help}>{busy === 'next' || busy === 'back' || busy === 'section' ? 'Saving and checking this section...' : 'Answers save automatically when you use Next or Back.'}</Text> : null}
       <View style={styles.navigation}><FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) <= 0 || !online && dirty} onPress={() => void perform('back', () => moveTo(pages[Math.max(0, pages.indexOf(page) - 1)]))}>Back</FieldButton>
-        <FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) >= pages.length - 1 || !online && dirty} onPress={() => void perform('next', () => moveTo(pages[Math.min(pages.length - 1, pages.indexOf(page) + 1)]))}>Next</FieldButton></View>
+        <FieldButton variant="secondary" disabled={Boolean(busy) || pages.indexOf(page) >= pages.length - 1 || !online && dirty} onPress={() => void perform('next', () => moveTo(pages[Math.min(pages.length - 1, pages.indexOf(page) + 1)]))}>{page === 'signatures' ? 'Review & finish' : page === sections.at(-1) ? 'Continue to sign off' : 'Next'}</FieldButton></View>
     </> : null}
   </KeyboardAwareScrollView>;
 }
@@ -332,5 +340,5 @@ const styles = StyleSheet.create({
   label: { color: colours.ink, fontWeight: '700', fontSize: 16 }, help: { color: colours.muted, lineHeight: 22 },
   question: { paddingVertical: spacing.md, gap: spacing.sm, borderTopColor: colours.line, borderTopWidth: 1 },
   input: { minHeight: 50, padding: spacing.md, color: colours.ink, backgroundColor: colours.surfaceRaised, borderColor: colours.line, borderWidth: 1, borderRadius: radius.sm },
-  error: { color: colours.red, lineHeight: 22 }, success: { color: colours.green, lineHeight: 22 }, navigation: { flexDirection: 'row', gap: spacing.md },
+  error: { color: colours.red, lineHeight: 22 }, success: { color: colours.green, lineHeight: 22 }, navigation: { flexDirection: 'row', gap: spacing.md }, shortcut: { flex: 1 },
 });

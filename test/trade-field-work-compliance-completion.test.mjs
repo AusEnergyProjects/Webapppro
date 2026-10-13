@@ -535,6 +535,58 @@ function electricalAssessment(database, { id = "piesa", workOrderId = "job-1", o
     .run(id, workOrderId, ownerUid, status, payload, "a".repeat(64), completedAt ? "piesa/completed.pdf" : "", completedAt ? "b".repeat(64) : "", completedAt ? 100 : 0, completedAt);
 }
 
+test("field overview identifies its own unfinished PIESA without clearing other required forms", async t => {
+  const { database, route } = progressFixture();
+  t.after(() => database.close());
+  electricalAssessment(database);
+  const overview = async () => {
+    const response = await route.GET(new Request("https://example.test/api/trade-field-work?workOrderId=job-1"));
+    assert.equal(response.status, 200);
+    return (await response.json()).fieldJob;
+  };
+  const draft = await overview();
+  assert.equal(draft.completion.ready, false);
+  assert.deepEqual(draft.blockers.find(blocker => blocker.key === "piesa"), {
+    key: "piesa", label: "Sign and complete the PIESA assessment to save its final PDF.", target: "forms",
+  });
+  assert.equal(draft.checklist.find(item => item.key === "forms").count, 3);
+  database.exec("UPDATE trade_job_forms SET status='complete'");
+  const piesaOnly = await overview();
+  assert.equal(piesaOnly.completion.ready, false);
+  assert.equal(piesaOnly.checklist.find(item => item.key === "forms").count, 1);
+  database.exec("UPDATE trade_job_forms SET status='draft'");
+  database.exec(`UPDATE trade_veu_electrical_assessments SET status='complete', completed_at='now',
+    payload=json_set(payload,'$.status','complete','$.completedAt','now'),
+    pdf_object_key='piesa/completed.pdf', pdf_sha256='${"b".repeat(64)}', pdf_size_bytes=100`);
+  const completed = await overview();
+  assert.equal(completed.blockers.some(blocker => blocker.key === "piesa"), false);
+  assert.equal(completed.blockers.some(blocker => blocker.key === "forms"), true);
+  assert.equal(completed.completion.ready, false);
+  assert.equal(completed.checklist.find(item => item.key === "forms").count, 2);
+  database.exec("UPDATE trade_job_forms SET status='complete'");
+  const ready = await overview();
+  assert.equal(ready.completion.ready, true);
+  assert.equal(ready.checklist.find(item => item.key === "forms").complete, true);
+});
+
+test("field overview never includes PIESA blockers from another job or business", async t => {
+  const { database, route } = progressFixture();
+  t.after(() => database.close());
+  database.exec("UPDATE trade_job_forms SET status='complete'");
+  database.exec(`INSERT INTO trade_work_orders
+    (id,firebase_uid,work_number,title,stage,site_area,scheduled_start,scheduled_end,source_type,record_status,revision,assignee_member_id,updated_at,partner_type)
+    SELECT 'job-2',firebase_uid,work_number,title,stage,site_area,scheduled_start,scheduled_end,source_type,record_status,revision,assignee_member_id,updated_at,partner_type
+    FROM trade_work_orders WHERE id='job-1'`);
+  electricalAssessment(database, { id: "foreign-owner", ownerUid: "owner-2" });
+  electricalAssessment(database, { id: "foreign-job", workOrderId: "job-2" });
+  const response = await route.GET(new Request("https://example.test/api/trade-field-work?workOrderId=job-1"));
+  assert.equal(response.status, 200);
+  const fieldJob = (await response.json()).fieldJob;
+  assert.equal(fieldJob.completion.ready, true);
+  assert.equal(fieldJob.blockers.some(blocker => blocker.key === "piesa"), false);
+  assert.equal(fieldJob.checklist.find(item => item.key === "forms").count, 0);
+});
+
 for (const scheduledVisit of [false, true]) test(`initial guided questions await canonical ${scheduledVisit ? "scheduled visit" : "unscheduled job"} start before delayed timing can invalidate its revision`, async () => {
   const { database, db, progress } = progressFixture();
   let releaseTiming;

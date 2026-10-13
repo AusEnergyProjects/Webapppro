@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -118,13 +119,10 @@ export function QuickUpgradeEnquiryDialog({
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (submitState.kind !== "success") return;
-    const frame = window.requestAnimationFrame(() => {
-      successCloseRef.current?.focus({ preventScroll: true });
-      if (dialogRef.current) dialogRef.current.scrollTop = 0;
-    });
-    return () => window.cancelAnimationFrame(frame);
+    successCloseRef.current?.focus({ preventScroll: true });
+    if (dialogRef.current) dialogRef.current.scrollTop = 0;
   }, [submitState.kind]);
 
   useEffect(() => {

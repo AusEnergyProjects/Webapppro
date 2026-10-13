@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   Pressable,
@@ -134,6 +134,7 @@ export function SignatureCapture({
   displayOnly = false,
   showDeclaration = true,
   onChange,
+  onDrawingChange,
 }: {
   signerRole: FieldWorkPackSignerRole;
   declaration: string;
@@ -142,6 +143,7 @@ export function SignatureCapture({
   displayOnly?: boolean;
   showDeclaration?: boolean;
   onChange: (value: FieldWorkPackSignatureDraft) => void;
+  onDrawingChange?: (drawing: boolean) => void;
 }) {
   const [size, setSize] = useState({ width: 1, height: PAD_HEIGHT });
   const [liveValue, setLiveValue] = useState(value);
@@ -149,14 +151,55 @@ export function SignatureCapture({
   const incomingFingerprint = useMemo(() => signatureDraftFingerprint(value), [value]);
   const appliedFingerprint = useRef(incomingFingerprint);
   const captureDisabled = disabled || displayOnly;
+  const captureIdentity = useMemo(() => JSON.stringify([
+    signerRole.roleKey,
+    signerRole.capacity,
+    signerRole.identityRequirements,
+    value.signerRoleKey,
+    value.signerName,
+    value.signerCapacity,
+    Object.entries(value.identity).sort(([left], [right]) => left.localeCompare(right)),
+  ]), [signerRole, value]);
+  const captureContext = useRef({ enabled: !captureDisabled, identity: captureIdentity });
+  const activeDrawing = useRef<{
+    identity: string;
+    previousValue: FieldWorkPackSignatureDraft;
+    notify: typeof onDrawingChange;
+  } | null>(null);
 
-  useEffect(() => {
+  const finishDrawing = useCallback(() => {
+    const active = activeDrawing.current;
+    if (!active) return null;
+    activeDrawing.current = null;
+    active.notify?.(false);
+    return active;
+  }, []);
+
+  const cancelDrawing = useCallback(() => {
+    const active = finishDrawing();
+    if (!active) return;
+    liveValueRef.current = active.previousValue;
+    setLiveValue(active.previousValue);
+  }, [finishDrawing]);
+
+  useLayoutEffect(() => {
+    captureContext.current = { enabled: !captureDisabled, identity: captureIdentity };
+    cancelDrawing();
+  }, [cancelDrawing, captureDisabled, captureIdentity]);
+
+  useEffect(() => () => {
+    captureContext.current.enabled = false;
+    finishDrawing();
+  }, [finishDrawing]);
+
+  useLayoutEffect(() => {
     if (appliedFingerprint.current === incomingFingerprint) return;
+    cancelDrawing();
     appliedFingerprint.current = incomingFingerprint;
     liveValueRef.current = value;
     // The parent can clear an invalidated signature while this component stays mounted.
     setLiveValue(value);
-  }, [incomingFingerprint, value]);
+  }, [cancelDrawing, incomingFingerprint, value]);
 
   const updateLiveValue = useCallback((update: (current: FieldWorkPackSignatureDraft) => FieldWorkPackSignatureDraft) => {
     const next = update(liveValueRef.current);
@@ -166,11 +209,32 @@ export function SignatureCapture({
   }, []);
 
   const commitSignature = useCallback(() => {
-    if (!captureDisabled) onChange(liveValueRef.current);
-  }, [captureDisabled, onChange]);
+    const active = finishDrawing();
+    if (
+      active && !captureDisabled && captureContext.current.enabled
+      && active.identity === captureContext.current.identity
+    ) onChange(liveValueRef.current);
+  }, [captureDisabled, finishDrawing, onChange]);
+
+  const canStartStroke = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const { locationX, locationY, touches } = event.nativeEvent;
+    const current = liveValueRef.current;
+    return !captureDisabled && captureContext.current.enabled
+      && captureContext.current.identity === captureIdentity
+      && !activeDrawing.current && touches.length === 1
+      && Number.isFinite(locationX) && Number.isFinite(locationY)
+      && current.strokes.length < MAX_SIGNATURE_STROKES
+      && current.strokes.reduce((count, stroke) => count + stroke.points.length, 0)
+        <= MAX_SIGNATURE_POINTS - 2;
+  }, [captureDisabled, captureIdentity]);
 
   const startStroke = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    if (captureDisabled || event.nativeEvent.touches.length > 1) return;
+    if (!canStartStroke(event)) return;
+    activeDrawing.current = {
+      identity: captureIdentity,
+      previousValue: liveValueRef.current,
+      notify: onDrawingChange,
+    };
     const firstPoint = touchPoint(event, size.width, size.height);
     updateLiveValue((current) => {
       const currentPointCount = current.strokes.reduce(
@@ -192,10 +256,21 @@ export function SignatureCapture({
         capturedAt: current.capturedAt || new Date(firstPoint.capturedAtMs).toISOString(),
       };
     });
-  }, [captureDisabled, size.height, size.width, updateLiveValue]);
+    onDrawingChange?.(true);
+  }, [canStartStroke, captureIdentity, onDrawingChange, size.height, size.width, updateLiveValue]);
 
   const moveStroke = useCallback((event: NativeSyntheticEvent<NativeTouchEvent>) => {
-    if (captureDisabled || event.nativeEvent.touches.length > 1) return;
+    if (!activeDrawing.current) return;
+    if (
+      captureDisabled || !captureContext.current.enabled
+      || activeDrawing.current.identity !== captureContext.current.identity
+      || event.nativeEvent.touches.length !== 1
+      || !Number.isFinite(event.nativeEvent.locationX)
+      || !Number.isFinite(event.nativeEvent.locationY)
+    ) {
+      cancelDrawing();
+      return;
+    }
     const point = touchPoint(event, size.width, size.height);
     updateLiveValue((current) => {
       if (!current.strokes.length) return current;
@@ -216,20 +291,24 @@ export function SignatureCapture({
       };
       return { ...current, strokes };
     });
-  }, [captureDisabled, size.height, size.width, updateLiveValue]);
+  }, [cancelDrawing, captureDisabled, size.height, size.width, updateLiveValue]);
 
   // PanResponder stores these callbacks and invokes them from native touch
   // events; none of the refs are read while this responder is created.
   // eslint-disable-next-line react-hooks/refs
   const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => !captureDisabled,
-    onMoveShouldSetPanResponder: () => !captureDisabled,
+    onStartShouldSetPanResponder: canStartStroke,
+    onStartShouldSetPanResponderCapture: canStartStroke,
+    onMoveShouldSetPanResponder: canStartStroke,
+    onMoveShouldSetPanResponderCapture: canStartStroke,
     onPanResponderGrant: startStroke,
     onPanResponderMove: moveStroke,
     onPanResponderRelease: commitSignature,
     onPanResponderTerminate: commitSignature,
-    onPanResponderTerminationRequest: () => false,
-  }), [captureDisabled, commitSignature, moveStroke, startStroke]);
+    onPanResponderReject: cancelDrawing,
+    onPanResponderTerminationRequest: () => !activeDrawing.current,
+    onShouldBlockNativeResponder: () => Boolean(activeDrawing.current),
+  }), [cancelDrawing, canStartStroke, commitSignature, moveStroke, startStroke]);
 
   function layout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
@@ -274,6 +353,7 @@ export function SignatureCapture({
       accessibilityHint={displayOnly ? 'Captured signature' : 'Draw the signature with a finger or stylus'}
       accessibilityRole={displayOnly ? 'image' : 'button'}
       onLayout={layout}
+      onTouchCancel={cancelDrawing}
       style={[styles.pad, captureDisabled && !displayOnly && styles.disabled]}
     >
       {liveValue.strokes.map((stroke) => (
@@ -297,6 +377,7 @@ export function SignatureCapture({
         accessibilityRole="button"
         disabled={captureDisabled || !liveValue.strokes.length}
         onPress={() => {
+          cancelDrawing();
           const next = { ...liveValueRef.current, strokes: [], capturedAt: '' };
           liveValueRef.current = next;
           setLiveValue(next);

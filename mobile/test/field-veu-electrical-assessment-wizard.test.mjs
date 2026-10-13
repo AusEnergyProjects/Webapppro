@@ -136,7 +136,7 @@ test('an empty native assessment can be answered through all sections, attach ev
       }
       h.answer(field, target.answers[field.key] ?? (field.type === 'boolean' ? false : field.type === 'date' ? '2026-10-08' : 'Synthetic optional observation'));
     }
-    await h.press('Next');
+    await h.press(section === target.form.fields.at(-1).section ? 'Continue to sign off' : 'Next');
     assert.notEqual(h.select('Assessment section').props.value, section, `Complete section advances: ${section}`);
   }
   assert.equal(h.state.record.evidence.length, 1); assert.ok(h.state.record.initialAttestation); assert.equal(h.state.record.answers['$repeat.appliances'], 2);
@@ -152,6 +152,31 @@ test('an empty native assessment can be answered through all sections, attach ev
   }
   await h.section('review'); await h.press('Complete assessment and email PDF'); assert.equal(h.state.record.status, 'complete');
   assert.equal(h.state.changed, 1); assert.ok(h.button('Save completed assessment PDF on phone')); h.cleanup();
+});
+
+test('visible sign-off and finish shortcuts save answers and route to the actual missing prerequisite', async () => {
+  const h = harness();await load(h);
+  assert.equal(h.button('Sign off').props.disabled, false);assert.equal(h.button('Finish & email PDF').props.disabled, false);
+  const field = h.state.record.form.fields.find(item => item.key === 'life_support');h.answer(field, false);
+  await h.press('Sign off');assert.equal(h.state.record.answers.life_support, false);
+  assert.equal(h.select('Assessment section').props.value, h.state.record.form.fields[0].section);assert.match(h.texts(), /Complete Job Reference ID/);
+  await h.press('Finish & email PDF');assert.equal(h.select('Assessment section').props.value, h.state.record.form.fields[0].section);
+  assert.equal(h.state.record.status, 'draft');assert.equal(h.state.changed, 0);
+  assert.equal(h.state.requests.some(request => ['sign', 'complete', 'retry_delivery'].includes(request.body?.action)), false);
+  h.cleanup();
+});
+
+test('finish shortcut reveals required ink and review but emails only after explicit completion', async () => {
+  const value = electricalFixture();value.status = 'draft';const h = harness({ record:value });await load(h);
+  const options = h.select('Assessment section').props.options;
+  assert.equal(options.find(item => item.value === 'signatures').label, 'Sign off');assert.equal(options.find(item => item.value === 'review').label, 'Review & finish');
+  await h.press('Finish & email PDF');assert.equal(h.select('Assessment section').props.value, 'signatures');
+  assert.equal(h.state.requests.some(request => request.body?.action === 'complete'), false);
+  const consent = h.nodes().find(node => node.type === 'Pressable');consent.props.onPress();h.render();
+  const pad = h.nodes().find(node => node.type === 'SignatureCapture');pad.props.onChange({ ...pad.props.value, strokes });h.render();await h.press('Save owner signature');
+  await h.press('Finish & email PDF');assert.equal(h.select('Assessment section').props.value, 'review');assert.equal(h.state.record.status, 'draft');
+  assert.equal(h.state.requests.some(request => request.body?.action === 'complete'), false);
+  await h.press('Complete assessment and email PDF');assert.equal(h.state.record.status, 'complete');assert.equal(h.state.changed, 1);h.cleanup();
 });
 
 test('every official section and conditional question is rendered from the canonical schema', async () => {
@@ -253,6 +278,34 @@ test('actual owner ink and consent complete the native form and expose real PDF 
   assert.ok([...h.state.files.keys()].some(uri => uri.startsWith('user-selected-folder/'))); assert.deepEqual(h.state.links, []); assert.match(h.texts(), /folder you selected/);
   await h.press('Retry email delivery'); assert.equal(h.state.requests.at(-1).body.action, 'retry_delivery'); assert.equal(h.state.requests.at(-1).body.baseRevision, undefined);
   assert.equal(h.button('Save answers'), undefined); h.cleanup();
+});
+
+test('signature gestures lock only the active signing page and restore normal scrolling after release or cancellation', async () => {
+  const value = electricalFixture();value.status = 'draft';const h = harness({ record:value });await load(h);await h.press('Sign off');
+  const scroll = () => h.nodes().find(node => node.type === 'Scroll');
+  assert.equal(scroll().props.scrollEnabled, true);
+  const consent = h.nodes().find(node => node.type === 'Pressable');consent.props.onPress();h.render();
+  let pad = h.nodes().find(node => node.type === 'SignatureCapture');assert.equal(pad.props.disabled, false);
+  const drawingChanged = pad.props.onDrawingChange, draftChanged = pad.props.onChange;
+  drawingChanged(true);h.render();assert.equal(scroll().props.scrollEnabled, false);
+  pad = h.nodes().find(node => node.type === 'SignatureCapture');assert.equal(pad.props.onDrawingChange, drawingChanged);assert.equal(pad.props.onChange, draftChanged);
+  pad.props.onChange({ ...pad.props.value, strokes });h.render();assert.equal(scroll().props.scrollEnabled, false);
+  drawingChanged(false);h.render();assert.equal(scroll().props.scrollEnabled, true);
+  assert.deepEqual(h.nodes().find(node => node.type === 'SignatureCapture').props.value.strokes, strokes);
+  drawingChanged(true);h.render();assert.equal(scroll().props.scrollEnabled, false);
+  drawingChanged(false);h.render();assert.equal(scroll().props.scrollEnabled, true);
+  assert.equal(h.state.requests.some(request => request.body?.action === 'sign'), false);assert.equal(h.state.record.signatures.length, 0);
+  h.cleanup();drawingChanged(false);
+});
+
+test('disabled signing guards remain intact and leaving the signing page restores scrolling', async () => {
+  const value = electricalFixture();value.status = 'draft';const h = harness({ record:value });await load(h);await h.press('Sign off');
+  let pad = h.nodes().find(node => node.type === 'SignatureCapture');assert.equal(pad.props.disabled, true, 'The named declaration must still be accepted first');
+  assert.equal(h.button('Save owner signature').props.disabled, true);
+  const consent = h.nodes().find(node => node.type === 'Pressable');consent.props.onPress();h.render();pad = h.nodes().find(node => node.type === 'SignatureCapture');
+  pad.props.onDrawingChange(true);h.render();assert.equal(h.nodes().find(node => node.type === 'Scroll').props.scrollEnabled, false);
+  await h.section(value.form.fields[0].section);assert.equal(h.nodes().find(node => node.type === 'Scroll').props.scrollEnabled, true);
+  pad.props.onDrawingChange(false);h.render();h.cleanup();
 });
 
 test('both conditional electrician and owner signatures are required for a rectified assessment', async () => {
@@ -357,14 +410,14 @@ test('a blank no-rectification form completes sequentially through required obse
       if (field.key === 'initial_correct') await h.press('Confirm initial assessment declaration');
       else h.answer(field, target.answers[field.key]);
     }
-    await h.press('Next'); assert.notEqual(h.select('Assessment section').props.value, section);
+    await h.press(section === target.form.fields.at(-1).section ? 'Continue to sign off' : 'Next'); assert.notEqual(h.select('Assessment section').props.value, section);
   }
   assert.equal(h.select('Assessment section').props.value, 'signatures'); assert.equal(h.state.record.signatures.length, 0);
   assert.equal(h.nodes().filter(node => node.type === 'SignatureCapture').length, 1); assert.ok(h.state.record.initialAttestation);
-  await h.press('Next'); assert.equal(h.select('Assessment section').props.value, 'signatures', 'Actual signature cannot be skipped');
+  await h.press('Review & finish'); assert.equal(h.select('Assessment section').props.value, 'signatures', 'Actual signature cannot be skipped');
   const checkbox = h.nodes().find(node => node.type === 'Pressable'); checkbox.props.onPress(); h.render();
   const pad = h.nodes().find(node => node.type === 'SignatureCapture'); assert.equal(pad.props.disabled, false);
-  pad.props.onChange({ ...pad.props.value, strokes }); h.render(); await h.press('Save owner signature'); await h.press('Next');
+  pad.props.onChange({ ...pad.props.value, strokes }); h.render(); await h.press('Save owner signature'); await h.press('Review & finish');
   assert.equal(h.select('Assessment section').props.value, 'review'); await h.press('Complete assessment and email PDF');
   assert.equal(h.state.record.status, 'complete'); assert.ok(h.button('Save completed assessment PDF on phone')); h.cleanup();
 });
@@ -402,7 +455,7 @@ test('read-only prefills do not create unsaved work or prevent viewing later sec
 test('a required true declaration and an unanswered repeated observation block forward navigation', async () => {
   const record = electricalFixture({ ceiling_appliances: true, '$repeat.appliances': 2 }); record.status = 'draft';
   const h = harness({ record }); await load(h); const declaration = record.form.fields.find(field => field.key === 'owner_access');
-  await h.section(declaration.section); h.answer(declaration, false); await h.press('Next');
+  await h.section(declaration.section); h.answer(declaration, false); await h.press('Continue to sign off');
   assert.equal(h.select('Assessment section').props.value, declaration.section); assert.ok(h.texts().includes(declaration.label));
   h.answer(declaration, true); await h.press('Back');
   // Reconfirm the genuine initial declaration if a changed before-phase answer invalidated it.

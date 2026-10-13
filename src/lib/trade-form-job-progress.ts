@@ -171,7 +171,7 @@ export async function photoFinishState(
   }
 }
 
-const COMPLETED_ELECTRICAL_ASSESSMENT_SQL = `assessment.status = 'complete'
+export const COMPLETED_ELECTRICAL_ASSESSMENT_SQL = `assessment.status = 'complete'
   AND assessment.pdf_object_key <> '' AND length(assessment.pdf_sha256) = 64
   AND assessment.pdf_size_bytes > 4 AND assessment.completed_at <> ''`;
 
