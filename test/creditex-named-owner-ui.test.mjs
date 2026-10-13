@@ -10,7 +10,7 @@ const ast = ts.createSourceFile("CreditexOperationsWorkspace.tsx", source, ts.Sc
 const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "AccessView");
 assert.ok(declaration);
 const trapDeclaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "trapTeamDialogKey");
-const helpers = ["personNameParts", "roleLabel"].map(name => ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(ast)).join("\n");
+const helpers = ["personNameParts", "roleLabel", "record", "invitationEmailDelivery", "invitationEmailLabel"].map(name => ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(ast)).join("\n");
 const compiled = ts.transpileModule(`${helpers}\n${trapDeclaration.getText(ast)}\nexport ${declaration.getText(ast)}`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
@@ -287,7 +287,7 @@ test("invitations stay in their roster view and revoke only the selected pending
   const h = harness({ invitations }); let tree = h.render();
   assert.equal(button(tree, "Revoke invitation"), undefined);
   button(tree, "Invitations").props.onClick(); tree = h.render();
-  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Revoke invitation").length, 1);
+  assert.equal(nodes(tree, node => node.type === "button" && text(node) === "Revoke invitation").length, 2); // Desktop table and mobile card share the same selected invitation.
   select(tree, "Status").props.onChange({ target: { value: "pending" } }); tree = h.render();
   assert.doesNotMatch(text(tree), /Joined Person/);
   button(tree, "Revoke invitation").props.onClick(); await flush();
@@ -300,4 +300,69 @@ test("app setup uses the real Creditex named-account sign-in and never exposes t
   assert.match(text(panel), /Creditex team sign-in/); assert.match(text(panel), /invited email, password and authenticator code/);
   assert.equal(nodes(panel, node => node.type === "a")[0].props.href, "/direct-trade/field-app");
   assert.doesNotMatch(text(panel), /PIN|username|Generate/);
+});
+
+const pendingEmailInvitation = () => ({ id: "email-pending", displayName: "Invited Person", email: "invited@example.test", role: "auditor", status: "pending", permissions: ["jobs"], expiresAt: new Date(Date.now() + 86_400_000).toISOString(), emailAvailable: true });
+
+test("existing invitations expose separate access and email states with a send action for the exact saved record", async () => {
+  let finish;
+  const h = harness({ invitations: [pendingEmailInvitation()], respond: () => new Promise(resolve => { finish = resolve; }) });
+  let tree = h.render(); button(tree, "Invitations").props.onClick(); tree = h.render();
+  assert.match(text(tree), /Email status/);
+  assert.match(text(tree), /Not sent/);
+  button(tree, "Send invitation email").props.onClick(); await flush(); tree = h.render();
+  assert.deepEqual(h.calls[0].body, { action: "send_invitation_email", invitationId: "email-pending" });
+  assert.equal(button(tree, "Sending...").props.disabled, true);
+  assert.equal(button(tree, "Revoke invitation").props.disabled, true);
+  finish({ ok: true, result: { delivery: { status: "submitted", message: "Invitation email submitted to the email service.", attemptedAt: "2026-10-13T00:00:00Z" } } });
+  await flush(); tree = h.render();
+  assert.match(text(tree), /Invitation email submitted to the email service/);
+  assert.equal(nodes(tree, node => node.props?.role === "alert").length, 0);
+  assert.doesNotMatch(text(tree), /email delivered|invitation email was sent/i);
+  assert.ok(h.events.includes("access refresh"));
+});
+
+test("invitation email failures and indeterminate sends retain honest notices and permit a guarded retry", async () => {
+  for (const status of ["failed", "unknown", "sending"]) {
+    const h = harness({ invitations: [pendingEmailInvitation()], respond: async () => ({ ok: true, result: { delivery: { status, message: `Provider outcome: ${status}` } } }) });
+    let tree = h.render(); button(tree, "Invitations").props.onClick(); tree = h.render();
+    button(tree, "Send invitation email").props.onClick(); await flush(); tree = h.render();
+    assert.match(text(tree), new RegExp(`Provider outcome: ${status}`));
+    assert.equal(button(tree, "Send invitation email").props.disabled, false);
+    assert.equal(nodes(tree, node => node.props?.role === "alert").length, status === "failed" ? 1 : 0);
+    assert.equal(h.calls.length, 1);
+  }
+});
+
+test("saved email outcomes render on desktop and mobile without treating access Pending as email delivery", () => {
+  const expectations = { submitted: "Email submitted", failed: "Email failed", unknown: "Unconfirmed", sending: "Sending" };
+  for (const [status, label] of Object.entries(expectations)) {
+    const h = harness({ invitations: [{ ...pendingEmailInvitation(), emailDelivery: { status, message: "Saved provider result", attemptedAt: "2026-10-13T00:00:00Z" } }] });
+    let tree = h.render(); button(tree, "Invitations").props.onClick(); tree = h.render();
+    assert.equal(nodes(tree, node => node.type === "span" && node.props?.["data-status"] === status && text(node) === label).length, 2);
+    assert.match(text(tree), /Last attempt/);
+    assert.ok(button(tree, "Send again"));
+  }
+});
+
+test("email sends are absent for claimed, expired or unauthorised invitation access", () => {
+  for (const invitation of [{ ...pendingEmailInvitation(), status: "claimed", emailAvailable: false }, { ...pendingEmailInvitation(), expiresAt: new Date(Date.now() - 1000).toISOString(), emailAvailable: false }]) {
+    const h = harness({ invitations: [invitation] }); let tree = h.render(); button(tree, "Invitations").props.onClick(); tree = h.render();
+    assert.equal(button(tree, "Send invitation email"), undefined);
+    assert.equal(button(tree, "Send again"), undefined);
+  }
+  const restricted = harness({ flags: { permissions: ["team_details"] }, invitations: [pendingEmailInvitation()] });
+  assert.equal(button(restricted.render(), "Invitations"), undefined);
+  assert.equal(button(restricted.render(), "Send invitation email"), undefined);
+});
+
+test("saving a new invitation closes its dialog but retains an email failure notice", async () => {
+  const h = harness({ respond: async () => ({ ok: true, result: { delivery: { status: "failed", message: "Invitation saved, but the email service rejected the message." } } }) });
+  let tree = h.render(); button(tree, "Add team member").props.onClick(); tree = h.render();
+  for (const [label, value] of [["First name", "Invited"], ["Last name", "Person"], ["Email for invitation", "invited@example.test"]]) labelled(tree, label).props.onChange({ target: { value } });
+  tree = h.render(); await nodes(tree, node => node.type === "form")[0].props.onSubmit({ preventDefault() {} }); tree = h.render();
+  assert.equal(nodes(tree, node => node.props?.role === "dialog").length, 0);
+  assert.match(text(tree), /Invitation saved, but the email service rejected/);
+  assert.equal(nodes(tree, node => node.props?.role === "alert").length, 1);
+  assert.equal(h.calls[0].body.action, "create_invitation");
 });

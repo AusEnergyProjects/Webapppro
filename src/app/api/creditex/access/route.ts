@@ -11,6 +11,7 @@ import {
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { confirmCreditexNamedOwner, CreditexNamedOwnerError } from "@/lib/creditex-named-owner-server";
+import { CreditexInvitationEmailError, sendCreditexInvitationEmail } from "@/lib/creditex-invitation-email-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,7 @@ function errorResponse(error: unknown) {
     || error instanceof CreditexOperationsError
     || error instanceof BoundedJsonRequestError
     || error instanceof CreditexNamedOwnerError
+    || error instanceof CreditexInvitationEmailError
   ) {
     return json({ ok: false, code: error.code, error: error.message }, error.status);
   }
@@ -136,9 +138,15 @@ export async function POST(request: Request) {
     const member = await requireComplianceIdentity(identity, {
       requiredPermission: body.action === "update_member_details" ? "team_details" : "team_access",
     }, database);
-    const result = body.action === "confirm_named_owner"
+    const result = body.action === "send_invitation_email"
+      ? { id: body.invitationId, delivery: await sendCreditexInvitationEmail(database, member,
+        typeof body.invitationId === "string" ? body.invitationId : "", { origin: new URL(request.url).origin }) }
+      : body.action === "confirm_named_owner"
       ? await confirmCreditexNamedOwner(database, member)
       : await executeCreditexAccessAction(database, member, body);
+    if (body.action === "create_invitation" && "reused" in result && !result.reused && "id" in result && typeof result.id === "string") {
+      return json({ ok: true, result: { ...result, delivery: await sendCreditexInvitationEmail(database, member, result.id, { origin: new URL(request.url).origin }) } }, 201);
+    }
     return json({ ok: true, result }, 201);
   } catch (error) {
     return errorResponse(error);

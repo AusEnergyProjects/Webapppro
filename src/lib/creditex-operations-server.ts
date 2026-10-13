@@ -3,6 +3,7 @@ import type {
   ComplianceRole,
 } from "./compliance-access-server";
 import { creditexPermissionSql, creditexAllowedPermissions, creditexRolePermissions, hasCreditexPermission, isCreditexPermission, resolveCreditexPermissions, type CreditexPermission } from "./creditex-permissions.ts";
+import { loadCreditexInvitationEmailDeliveries, loadCreditexInvitationEmailDelivery } from "./creditex-invitation-email-server.ts";
 
 type Input = Record<string, unknown>;
 type Row = Record<string, unknown>;
@@ -4705,6 +4706,7 @@ export async function loadCreditexAccess(
   database: D1Database,
   organisationId: string,
 ) {
+  const now = new Date().toISOString();
   const [memberRows, invitationRows, totals] = await Promise.all([
     rows(database, `SELECT id, email, display_name, phone, job_title, role, status,
         governance_identity_verified, permissions_json,
@@ -4714,15 +4716,18 @@ export async function loadCreditexAccess(
       ORDER BY status, display_name, email, id
       LIMIT 250`, [organisationId]),
     rows(database, `SELECT id, email, display_name, phone, job_title, role, status, permissions_json,
-        expires_at, claimed_at, created_at, updated_at
+        expires_at, claimed_at, created_at, updated_at,
+        CASE WHEN status = 'pending' AND expires_at > ? AND claimed_at = '' AND claimed_by_uid = ''
+          THEN 1 ELSE 0 END email_available
       FROM compliance_invitations
       WHERE organisation_id = ?
       ORDER BY created_at DESC, id DESC
-      LIMIT 250`, [organisationId]),
+      LIMIT 250`, [now, organisationId]),
     first(database, `SELECT
       (SELECT COUNT(*) FROM compliance_users WHERE organisation_id = ?) member_total,
       (SELECT COUNT(*) FROM compliance_invitations WHERE organisation_id = ?) invitation_total`, [organisationId, organisationId]),
   ]);
+  const emailDeliveries = await loadCreditexInvitationEmailDeliveries(database, organisationId, invitationRows.map(invitation => String(invitation.id)));
   return {
     memberTotal: Number(totals?.member_total || 0),
     invitationTotal: Number(totals?.invitation_total || 0),
@@ -4734,6 +4739,9 @@ export async function loadCreditexAccess(
     })),
     invitations: projectRows(invitationRows).map(invitation => ({ ...invitation,
       permissions: resolveCreditexPermissions(String(invitation.role), invitation.permissionsJson),
+      emailAvailable: Number(invitation.emailAvailable) === 1,
+      emailDelivery: emailDeliveries.get(String(invitation.id)),
+      lastAttemptAt: emailDeliveries.get(String(invitation.id))?.attemptedAt || "",
     })),
   };
 }
@@ -4788,7 +4796,7 @@ export async function executeCreditexAccessAction(
       && JSON.stringify(resolveCreditexPermissions(role, invitation.permissions_json)) === JSON.stringify(permissions);
     const existingInvitation = await findInvitation();
     if (existingInvitation && matchesPending(existingInvitation)) {
-      return { id: valueText(existingInvitation.id), delivery: "not_sent" as const,
+      return { id: valueText(existingInvitation.id), delivery: await loadCreditexInvitationEmailDelivery(database, identity.organisationId, valueText(existingInvitation.id)),
         reused: true, signInUrl: "/creditex/compliance" };
     }
     if (existingInvitation && (existingInvitation.status === "claimed"
@@ -4854,13 +4862,13 @@ export async function executeCreditexAccessAction(
       if (error instanceof Error && /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE|compliance_write_guards/.test(error.message)) {
         const invitation = await findInvitation();
         if (invitation && matchesPending(invitation)) {
-          return { id: valueText(invitation.id), delivery: "not_sent" as const,
+          return { id: valueText(invitation.id), delivery: await loadCreditexInvitationEmailDelivery(database, identity.organisationId, valueText(invitation.id)),
             reused: true, signInUrl: "/creditex/compliance" };
         }
       }
       throw error;
     }
-    return { id, delivery: "not_sent" as const, reused: false, signInUrl: "/creditex/compliance" };
+    return { id, delivery: { status: "not_sent" as const, message: "Invitation saved. No email has been submitted." }, reused: false, signInUrl: "/creditex/compliance" };
   }
   if (action === "revoke_invitation") {
     const invitationId = text(body.invitationId, "Invitation", 180);

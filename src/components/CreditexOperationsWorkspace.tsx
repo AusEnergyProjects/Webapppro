@@ -5,6 +5,7 @@ import Image from "next/image";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { CREDITEX_ACCESS_PRESETS, CREDITEX_PERMISSION_GROUPS, creditexAllowedPermissions, hasCreditexPermission, resolveCreditexPermissions, setCreditexPermission, type CreditexPermission } from "@/lib/creditex-permissions";
 import styles from "./CreditexOperationsWorkspace.module.css";
+import type { CreditexInvitationEmailDelivery } from "@/lib/creditex-invitation-email-server";
 
 type ComplianceRole = "admin" | "case_manager" | "reviewer" | "auditor";
 
@@ -45,6 +46,9 @@ type AccessInvitation = {
   expiresAt: string;
   createdAt: string;
   permissions: CreditexPermission[];
+  emailDelivery: CreditexInvitationEmailDelivery;
+  lastAttemptAt: string;
+  emailAvailable: boolean;
 };
 
 type AccessSnapshot = {
@@ -75,6 +79,20 @@ function record(value: unknown): JsonRecord {
 
 function records(value: unknown): JsonRecord[] {
   return Array.isArray(value) ? value.map(record) : [];
+}
+
+function invitationEmailDelivery(value: unknown, fallback: "not_sent" | "unknown" = "not_sent"): CreditexInvitationEmailDelivery {
+  const delivery = record(value);
+  const status = delivery.status;
+  if (status === "not_sent" || status === "submitted" || status === "failed" || status === "unknown" || status === "sending") {
+    return { status, message: typeof delivery.message === "string" ? delivery.message : "",
+      ...(typeof delivery.attemptedAt === "string" ? { attemptedAt: delivery.attemptedAt } : {}) };
+  }
+  return { status: fallback, message: fallback === "unknown" ? "Invitation saved. Refresh invitations to check its email status." : "" };
+}
+
+function invitationEmailLabel(status: CreditexInvitationEmailDelivery["status"]) {
+  return { not_sent: "Not sent", submitted: "Email submitted", failed: "Email failed", unknown: "Unconfirmed", sending: "Sending" }[status];
 }
 
 function first(source: JsonRecord, keys: string[]): unknown {
@@ -149,6 +167,9 @@ function parseAccess(value: unknown): AccessSnapshot {
       expiresAt: text(item, ["expiresAt", "expires_at"]),
       createdAt: text(item, ["createdAt", "created_at"]),
       permissions: resolveCreditexPermissions(text(item, ["role"]), item.permissions),
+      emailDelivery: invitationEmailDelivery(first(item, ["emailDelivery", "email_delivery"])),
+      lastAttemptAt: text(item, ["lastAttemptAt", "last_attempt_at"]),
+      emailAvailable: item.emailAvailable === true,
     })),
   };
 }
@@ -293,6 +314,7 @@ function AccessView({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [role, setRole] = useState("all");
+  const [noticeEmailStatus, setNoticeEmailStatus] = useState<CreditexInvitationEmailDelivery["status"] | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const canEditAccess = hasCreditexPermission(session, "team_access");
@@ -312,6 +334,7 @@ function AccessView({
     if (busy || loading || !canViewTeam || (member === "new" && !canEditAccess)) return;
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setActionError(""); setNotice("");
+    setNoticeEmailStatus(null);
     setForm(member === "new"
       ? { firstName: "", lastName: "", email: "", phone: "", jobTitle: "", role: "case_manager", status: "active", permissions: creditexAllowedPermissions("case_manager") }
       : { ...personNameParts(member.displayName), email: member.email, phone: member.phone || "", jobTitle: member.jobTitle || "", role: member.role, status: member.status, permissions: [...member.permissions] });
@@ -334,15 +357,20 @@ function AccessView({
     body: Record<string, unknown>,
     successMessage: string,
   ) {
-    setBusy(action);
+    setBusy(action === "send_invitation_email" ? `${action}:${body.invitationId}` : action);
     setActionError("");
     setNotice("");
+    setNoticeEmailStatus(null);
     try {
-      await authenticatedJson("/api/creditex/access", {
+      const response = await authenticatedJson("/api/creditex/access", {
         method: "POST",
         body: JSON.stringify({ action, ...body }),
       });
-      setNotice(successMessage);
+      if (action === "create_invitation" || action === "send_invitation_email") {
+        const delivery = invitationEmailDelivery(record(record(response).result).delivery, "unknown");
+        setNoticeEmailStatus(delivery.status);
+        setNotice(delivery.message || invitationEmailLabel(delivery.status));
+      } else setNotice(successMessage);
       onRefresh();
       return true;
     } catch (actionFailure) {
@@ -364,7 +392,7 @@ function AccessView({
     const saved = editing === "new"
       ? canEditAccess && await accessAction("create_invitation", {
         ...details, email: form.email, role: form.role, permissions: form.permissions,
-      }, `Invitation ready for ${details.displayName}. Give them the Creditex sign-in link and ask them to use ${form.email}. No invitation email was sent.`)
+      }, `Invitation saved for ${details.displayName}.`)
       : await accessAction(canEditAccess ? "update_member_access" : "update_member_details", {
         memberId: editing.id, ...details, ...(canEditAccess ? { role: form.role, status: form.status, permissions: form.permissions } : {}),
       }, `Details updated for ${details.displayName || editing.email}.`);
@@ -386,6 +414,25 @@ function AccessView({
       { invitationId: invitation.id },
       "The pending invitation was revoked.",
     );
+  }
+
+  function invitationStatus(invitation: AccessInvitation) {
+    const delivery = invitationEmailDelivery(invitation.emailDelivery);
+    return <><span className={styles.statusPill} data-status={delivery.status} title={delivery.message}>{invitationEmailLabel(delivery.status)}</span>
+      {(delivery.attemptedAt || invitation.lastAttemptAt) && <small>Last attempt {dateTime(delivery.attemptedAt || invitation.lastAttemptAt)}</small>}</>;
+  }
+
+  function invitationActions(invitation: AccessInvitation) {
+    if (!canEditAccess || invitation.status !== "pending") return null;
+    const delivery = invitationEmailDelivery(invitation.emailDelivery);
+    const label = delivery.status === "not_sent" ? "Send invitation email" : "Send again";
+    return <div className={styles.invitationActions}>
+      {invitation.emailAvailable && <button className={styles.primaryAction} type="button" disabled={Boolean(busy) || loading}
+        aria-label={`${label} to ${invitation.email}`} onClick={() => {
+          if (!busy && canEditAccess) void accessAction("send_invitation_email", { invitationId: invitation.id }, "Invitation email requested.");
+        }}>{busy === `send_invitation_email:${invitation.id}` ? "Sending..." : label}</button>}
+      <button className={styles.inlineAction} type="button" disabled={Boolean(busy)} onClick={() => void revokeInvitation(invitation)}>Revoke invitation</button>
+    </div>;
   }
 
   function changeView(next: "members" | "invitations") {
@@ -436,7 +483,8 @@ function AccessView({
         <p className={styles.error} role="alert">{error}</p>
       )}
       {canViewTeam && notice && (
-        <p className={styles.success} role="status">{notice}</p>
+        <p className={noticeEmailStatus === "failed" ? styles.error : noticeEmailStatus && noticeEmailStatus !== "submitted" ? styles.emailNotice : styles.success}
+          role={noticeEmailStatus === "failed" ? "alert" : "status"}>{notice}</p>
       )}
       {canViewTeam && actionError && !editing && (
         <p className={styles.error} role="alert">{actionError}</p>
@@ -474,19 +522,23 @@ function AccessView({
               <button className={styles.inlineAction} type="button" disabled={Boolean(busy) || loading} aria-label={`Open details for ${member.displayName || member.email}`} onClick={() => openMemberDialog(member)}>Open details</button>
             </article>)}</div>
           </> : <EmptyState>{access.members.length ? "No team members match these filters." : "No team members yet."}</EmptyState> : <>
-            {visibleInvitations.length ? <div className={styles.tableShell}><table className={styles.memberTable}>
+            {visibleInvitations.length ? <><div className={styles.tableShell}><table className={styles.memberTable}>
               <caption className={styles.srOnly}>Team invitations and access status</caption>
-              <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Expires</th><th scope="col">Actions</th></tr></thead>
+              <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Access</th><th scope="col">Email status</th><th scope="col">Expires</th><th scope="col">Actions</th></tr></thead>
               <tbody>{visibleInvitations.map(invitation => <tr key={invitation.id}>
-                <td><strong>{invitation.displayName}</strong>{invitation.jobTitle && <small>{invitation.jobTitle}</small>}</td><td>{invitation.email}</td><td>{roleLabel(invitation.role)}</td><td><StatusPill value={invitation.status} /></td><td>{dateTime(invitation.expiresAt)}</td>
-                <td>{invitation.status === "pending" && <button className={styles.inlineAction} type="button" disabled={Boolean(busy)} onClick={() => void revokeInvitation(invitation)}>Revoke invitation</button>}</td>
+                <td><strong>{invitation.displayName}</strong>{invitation.jobTitle && <small>{invitation.jobTitle}</small>}</td><td>{invitation.email}</td><td>{roleLabel(invitation.role)}</td><td><StatusPill value={invitation.status} /></td><td>{invitationStatus(invitation)}</td><td>{dateTime(invitation.expiresAt)}</td>
+                <td>{invitationActions(invitation)}</td>
               </tr>)}</tbody>
-            </table></div> : <EmptyState>{access.invitations.length ? "No invitations match these filters." : "No invitations yet. Add a team member to get started."}</EmptyState>}
+            </table></div><div className={styles.mobileCards}>{visibleInvitations.map(invitation => <article className={styles.memberCard} key={invitation.id}>
+              <header className={styles.memberHeader}><div><strong>{invitation.displayName || invitation.email}</strong><span>{invitation.email}</span></div><StatusPill value={invitation.status} /></header>
+              <p>{roleLabel(invitation.role)} · Expires {dateTime(invitation.expiresAt)}</p>
+              <div>{invitationStatus(invitation)}</div>{invitationActions(invitation)}
+            </article>)}</div></> : <EmptyState>{access.invitations.length ? "No invitations match these filters." : "No invitations yet. Add a team member to get started."}</EmptyState>}
           </>}
         </section>
         <details className={styles.accessPolicy}>
           <summary>Account and invitation help</summary>
-          <p>Give each invited person <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a> and ask them to use their invited email. No invitation email is sent automatically.</p>
+          <p>New invitations automatically email <a href="/creditex/compliance" target="_blank" rel="noreferrer">the Creditex sign-in link</a>. Use Email status to check the send or send an existing invitation again. Email submitted means the email service accepted it; it does not confirm inbox delivery.</p>
           {session.namedOwnerConfirmed && <><strong>James Morris · Creditex Administrator</strong><p>Your {session.email} login has named manager access.</p></>}
           <p>The initial owner invitation is {access.ownerEmail || "info@ausenergyassessments.com"}. It is not a shared Creditex login. Invite each team member with their own verified email. Keep at least
             two named administrators for continuity. A confirmed named owner can
@@ -507,7 +559,7 @@ function AccessView({
               <label>Phone, optional<input name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30} pattern="[+0-9() .-]*" disabled={Boolean(busy)} value={form.phone} onChange={event => setForm(current => ({ ...current, phone: event.target.value.replace(/[^+0-9() .-]/g, "") }))} /></label>
               <label>Job title, optional<input name="jobTitle" maxLength={100} autoComplete="organization-title" disabled={Boolean(busy)} value={form.jobTitle} onChange={event => setForm(current => ({ ...current, jobTitle: event.target.value }))} /></label>
             </div>
-            <p className={styles.formHint}>{editing === "new" ? "Use the person's own verified email. After saving, give them the Creditex sign-in link. No invitation email is sent automatically." : "The sign-in email stays linked to this person's account and audit history."}</p>
+            <p className={styles.formHint}>{editing === "new" ? "Use the person's own email. Saving sends their invitation email and shows its email status. They sign in with this invited email address." : "The sign-in email stays linked to this person's account and audit history."}</p>
             <section className={styles.portalAccessPanel} aria-label="TLink portal access"><div><strong>TLink portal access</strong><p>Open the Creditex workspace and sign in with the invited email.</p></div><a className={styles.inlineAction} href="/creditex/compliance" target="_blank" rel="noopener noreferrer">Portal login</a></section>
             <section className={styles.fieldAccessPanel} aria-label="TLink app access"><Image src="/tlink-icon-192.png" alt="" width={58} height={58} /><div><strong>TLink app access</strong><p>Install TLink, choose <strong>Creditex team sign-in</strong>, then use the invited email, password and authenticator code.</p><a className={styles.inlineAction} href="/direct-trade/field-app" target="_blank" rel="noopener noreferrer">Get the app</a><small>{editing !== "new" && editing.status !== "active" ? "This person's access is suspended. Reactivate access before they can sign in." : "Complete account security in the Creditex browser workspace first. Each person uses their own account."}</small></div></section>
             {canEditAccess ? <>

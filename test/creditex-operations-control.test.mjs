@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as permissions from "../src/lib/creditex-permissions.ts";
+import * as invitationEmail from "../src/lib/creditex-invitation-email-server.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as namedOwner from "../src/lib/creditex-named-owner-server.ts";
@@ -145,6 +146,7 @@ function loadTypescriptModule(path, mocks = {}) {
   const moduleRecord = { exports: {} };
   const require = (specifier) => {
     if (specifier === "./creditex-permissions" || specifier === "./creditex-permissions.ts") return permissions;
+    if (specifier === "./creditex-invitation-email-server.ts") return invitationEmail;
     if (specifier === "./firebase-mfa") return firebaseMfa;
     if (specifier === "./creditex-named-owner-server") return namedOwner;
     if (specifier === "./myob-security-audit") return myobSecurityAudit;
@@ -1406,7 +1408,7 @@ test("team invitations reuse identical pending requests without duplicate audit 
   assert.equal(repeated.id, first.id);
   assert.equal(first.reused, false);
   assert.equal(repeated.reused, true);
-  assert.equal(repeated.delivery, "not_sent");
+  assert.equal(repeated.delivery.status, "not_sent");
   assert.equal(repeated.signInUrl, "/creditex/compliance");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_users").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM compliance_audit_events WHERE event_type = 'membership.invitation_created'").get().count, 1);
