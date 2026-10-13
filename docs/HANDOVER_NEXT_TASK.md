@@ -11,7 +11,7 @@ Acceptance: current business, job and credential scope at each mutation; owner i
 
 Evidence and publication identity: `C:/Webproject/outputs/safety-phone-flow-20261013/release-report.json`. Native/server executable flow, visual PDF review, full migrations, typechecks, affected tests and matching committed build are required. Physical iPhone behaviour and actual inbox receipt remain unverified unless an independent real-device/inbox check is recorded. Do not sign, complete or email a real customer's safety paperwork merely as QA.
 
-## Current follow-up, 13 October 2026
+## Retained preceding delivery: Creditex readability and Leads access, 13 October 2026
 
 Outcome: Creditex reviewers can read and use their compliance forms in both visual modes, and authorised senior TLink staff can open and work with their business's Leads. Ownership is the shared form/portal theme boundary and trade team permissions, opportunity access and navigation. Preserve the existing design, business approval checks, customer sharing choices, staff actor attribution and the preceding performance improvements.
 

@@ -90,7 +90,11 @@ test("the dated audit is immutable evidence and current truth has one documented
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-71/);
   assert.match(roadmap, /## Previous released milestone: TLINK-FIELD-APP-70/);
   assert.match(roadmap, /## Previous released milestone: AEA-SURGE-CONTEXT-CONTINUITY-79/);
-  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: Creditex compliance readability and TLink team Leads access; matching GitHub\/Sites publication authorised\.\r?\nPrepared: 13 October 2026/);
+  assert.match(handover, /^# Next task handover\r?\n\r?\nStatus: official safety records and phone completion; matching GitHub\/Sites\/iOS publication authorised\.\r?\nPrepared: 13 October 2026/);
+  assert.match(currentHandover, /## Official safety phone flow, 13 October 2026/);
+  assert.match(currentHandover, /Do not sign, complete or email a real customer's safety paperwork merely as QA/);
+  assert.match(releaseTruth, /Migration 0262 stores business-scoped official safety records, versions and delivery\/mutation receipts/);
+  assert.match(roadmap, /## Official safety forms and phone completion, 13 October 2026/);
   assert.match(
     handover,
     /Status: system audit and polish[^\n]*Customer self-service accounts[^\n]*\r?\nPrepared: 9 September 2026/,
