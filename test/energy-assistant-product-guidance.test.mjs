@@ -7,15 +7,25 @@ import {
   currentReviewedCertificatePathwayCoverage,
   currentReviewedPracticalTips,
   isCurrentReviewedProductGuidanceCategory,
+  isCurrentOfficialProductGuidanceSource,
   resolveReviewedProductGuidanceIntent,
   reviewedCertificatePathwaysFor,
 } from "../src/data/energy-assistant-reviewed-product-guidance.ts";
 import { createSurgeGroundedProductGuidanceResolver } from "../src/lib/energy-assistant-product-guidance-server.ts";
+import { ENERGY_ASSISTANT_KNOWLEDGE } from "../src/data/energy-assistant-knowledge.ts";
 
-const NOW = new Date("2026-08-25T02:00:00.000Z");
-const REGISTRY_CHECKED_AT = "2026-08-24T20:00:00.000Z";
+const NOW = new Date("2026-10-13T02:00:00.000Z");
+const REGISTRY_CHECKED_AT = "2026-10-12T20:00:00.000Z";
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
+
+test("official product guidance rejects edits even when the approved review dates remain valid", () => {
+  const source = ENERGY_ASSISTANT_KNOWLEDGE.find((item) => item.id === "cer-small-scale-system-requirements");
+  assert.ok(source);
+  assert.equal(isCurrentOfficialProductGuidanceSource(source, NOW), true);
+  assert.equal(isCurrentOfficialProductGuidanceSource({ ...source, summary: "Changed unreviewed eligibility claim." }, NOW), false);
+  assert.equal(isCurrentOfficialProductGuidanceSource({ ...source, url: "https://example.gov.au/unreviewed" }, NOW), false);
+});
 
 function facet(values) {
   return [...new Set(values)].map((value) => ({ value, label: value, count: 1 }));
@@ -74,7 +84,7 @@ function registryResult(kind, products, allProducts = products, statusOverrides 
       ...statusOverrides,
     }),
     productKind: kind,
-    installationDate: "2026-08-25",
+    installationDate: "2026-10-13",
     facets: {
       brands: facet(allProducts.map((product) => product.brand)),
       models: facet(products.map((product) => product.model)),
@@ -143,17 +153,17 @@ function prices(status = "current") {
     points: [],
   };
   return {
-    asOf: "2026-08-25T02:00:00.000Z",
+    asOf: "2026-10-13T02:00:00.000Z",
     source: {
-      lastCheckedAt: "2026-08-24T19:00:00.000Z",
+      lastCheckedAt: "2026-10-12T19:00:00.000Z",
       status,
       note: "Test fixture",
     },
     certificates: [
-      { ...definition, code: "STC", latest: { priceCents: 3950, tradedOn: "2026-08-24" } },
-      { ...definition, code: "VEEC", latest: { priceCents: 10450, tradedOn: "2026-08-24" } },
-      { ...definition, code: "ESC", latest: { priceCents: 2275, tradedOn: "2026-08-24" } },
-      { ...definition, code: "PRC", latest: { priceCents: 185, tradedOn: "2026-08-24" } },
+      { ...definition, code: "STC", latest: { priceCents: 3950, tradedOn: "2026-10-12" } },
+      { ...definition, code: "VEEC", latest: { priceCents: 10450, tradedOn: "2026-10-12" } },
+      { ...definition, code: "ESC", latest: { priceCents: 2275, tradedOn: "2026-10-12" } },
+      { ...definition, code: "PRC", latest: { priceCents: 185, tradedOn: "2026-10-12" } },
     ],
   };
 }
@@ -195,7 +205,7 @@ test("publishes six approved, current categories with deterministic intent resol
   assert.equal(
     isCurrentReviewedProductGuidanceCategory(
       ENERGY_ASSISTANT_REVIEWED_PRODUCT_GUIDANCE[0],
-      "2026-09-21",
+      "2026-11-14",
     ),
     false,
   );
@@ -461,8 +471,8 @@ test("compares exact models only on the same reviewed unit and test condition", 
   assert.match(result.directAnswer, /Same published test condition: AS\/NZS sound power test/);
   assert.equal(result.status, "answered");
   const registryCitation = result.citations.find((citation) => citation.id.includes("product-registry"));
-  assert.equal(registryCitation.lastChecked, "2026-08-24");
-  assert.equal(registryCitation.reviewDue, "2026-08-26");
+  assert.equal(registryCitation.lastChecked, "2026-10-12");
+  assert.equal(registryCitation.reviewDue, "2026-10-14");
   noDash(result);
 });
 
@@ -566,8 +576,8 @@ test("uses the governed calculator for quantity without deriving a customer disc
 
   assert.ok(result);
   assert.match(result.directAnswer, /31 STCs/);
-  assert.match(result.directAnswer, /STC last reported at \$39\.50 on 2026-08-24/);
-  assert.match(result.directAnswer, /VEEC last reported at \$104\.50 on 2026-08-24/);
+  assert.match(result.directAnswer, /STC last reported at \$39\.50 on 2026-10-12/);
+  assert.match(result.directAnswer, /VEEC last reported at \$104\.50 on 2026-10-12/);
   assert.match(result.directAnswer, /will not multiply a certificate quantity by a trade price/i);
   assert.match(result.directAnswer, /will not guess fees/i);
   assert.doesNotMatch(result.directAnswer, /\$1,224\.50|Solar Victoria|up to \$1,000|up to \$1,400/i);

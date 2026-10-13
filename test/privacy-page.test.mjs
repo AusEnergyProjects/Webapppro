@@ -135,7 +135,11 @@ test("the public integration route explains the TLink OAuth application purpose"
   assert.match(integrations, /siteName: "TLink"/);
   assert.match(integrations, /canonical: "\/direct-trade\/integrations"/);
   assert.match(integrations, /calendar\.events permission/);
-  assert.match(integrations, /does not read Gmail, contacts or unrelated calendar events/);
+  assert.match(integrations, /calendar connection does not read Gmail or contacts/);
+  assert.match(integrations, /reading accepted external events in the displayed schedule\s+period/);
+  assert.match(integrations, /external calendar view is private to the business owner/);
+  assert.match(integrations, /Business email is a separate sending connection/);
+  assert.match(integrations, /does not\s+ask for your mailbox password or read your inbox through this connection/);
   assert.match(integrations, /provider&apos;s own website/);
   assert.match(sitemap, /"\/direct-trade\/integrations"/);
 });

@@ -11,7 +11,8 @@ import {
 } from "../src/lib/energy-assistant-conversation.ts";
 import { surgeAnswerPreservesPlanPriority } from "../src/lib/energy-assistant-plan-priority.ts";
 
-const NOW = new Date("2026-08-21T00:00:00.000Z");
+// Requests against the maintained official corpus use its current review day.
+const NOW = new Date("2026-10-13T00:00:00.000Z");
 
 function deterministicAnswer(directAnswer = "Use the supplied household facts to explain the decision.") {
   return {
@@ -1578,8 +1579,8 @@ test("mixed certificate recovery accepts exact paid dated-snapshot variants with
     jurisdiction: "Australia",
     effectiveFrom: "2026-08-28",
     effectiveTo: null,
-    lastChecked: "2026-09-01",
-    reviewDue: "2026-10-01",
+    lastChecked: "2026-10-13",
+    reviewDue: "2026-11-13",
     storagePolicy: "local_factual_summary",
     stale: false,
   };
@@ -1601,7 +1602,7 @@ test("mixed certificate recovery accepts exact paid dated-snapshot variants with
       const rejections = [];
       const result = await generateSurgeModelAnswer(request({
         message: "What are STCs and VEECs worth today?",
-        asOf: new Date("2026-09-01T02:00:00.000Z"),
+        asOf: new Date(NOW),
         deterministicAnswer: {
           ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
           citations: [maintainedCitation],
@@ -1650,7 +1651,7 @@ test("unrelated bare both wording cannot satisfy mixed certificate value recover
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What are STCs and VEECs worth today?",
-    asOf: new Date("2026-09-01T02:00:00.000Z"),
+    asOf: new Date(NOW),
     officialWebSearch: {
       kind: "certificate",
       jurisdiction: "Victoria",
@@ -1685,8 +1686,8 @@ test("maintained certificate recovery strips an unselected snapshot or any attem
     jurisdiction: "Australia",
     effectiveFrom: "2026-08-28",
     effectiveTo: null,
-    lastChecked: "2026-09-01",
-    reviewDue: "2026-10-01",
+    lastChecked: "2026-10-13",
+    reviewDue: "2026-11-13",
     storagePolicy: "local_factual_summary",
     stale: false,
   };
@@ -1714,7 +1715,7 @@ test("maintained certificate recovery strips an unselected snapshot or any attem
       const failures = [];
       const result = await generateSurgeModelAnswer(request({
         message: "What are STCs and VEECs worth today?",
-        asOf: new Date("2026-09-01T02:00:00.000Z"),
+        asOf: new Date(NOW),
         deterministicAnswer: {
           ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
           citations: [maintainedCitation],
@@ -1761,8 +1762,8 @@ test("a maintained evidence alias cannot restore an unapproved URL or title", as
     jurisdiction: "Australia",
     effectiveFrom: "2026-08-28",
     effectiveTo: null,
-    lastChecked: "2026-09-01",
-    reviewDue: "2026-10-01",
+    lastChecked: "2026-10-13",
+    reviewDue: "2026-11-13",
     storagePolicy: "local_factual_summary",
     stale: false,
   };
@@ -1771,7 +1772,7 @@ test("a maintained evidence alias cannot restore an unapproved URL or title", as
   const failures = [];
   const result = await generateSurgeModelAnswer(request({
     message: "What are STCs and VEECs worth today?",
-    asOf: new Date("2026-09-01T02:00:00.000Z"),
+    asOf: new Date(NOW),
     deterministicAnswer: {
       ...deterministicAnswer("Use dated official STC and VEEC market references, then reconcile gross values against the net quote credit."),
       citations: [unsafeCitation],

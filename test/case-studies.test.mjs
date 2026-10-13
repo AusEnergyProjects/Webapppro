@@ -15,18 +15,22 @@ test("worked examples are connected to the shared journey", () => {
   assert.match(chrome, /"case-studies"/);
   assert.match(page, /SiteHeader active="case-studies"/);
   assert.match(guides, /href="\/case-studies"/);
-  assert.match(start, /Browse all guides, rebates and examples/);
+  for (const path of ["/guides", "/case-studies", "/rebates"]) {
+    assert.match(start, new RegExp(`href="${path}"`));
+  }
 });
 
 test("worked examples expose evidence, method, lessons and limitations", () => {
-  assert.match(page, /Illustrative scenarios, not customer case studies/);
-  assert.match(page, /Evidence used/);
-  assert.match(page, /Method/);
-  assert.match(page, /Decision lesson/);
-  assert.match(page, /Important limitation/);
-  assert.match(page, /same annual usage can produce a different plan ranking/);
+  assert.match(page, /Worked examples, not customer case studies/);
+  assert.match(page, /prices and usage below are deliberately assumed/);
+  assert.match(page, /not current offers, installation quotes, measured customer outcomes or guaranteed savings/);
+  assert.match(page, /Check the first row/);
+  assert.match(page, /Your next decision/);
+  assert.match(page, /same yearly usage can favour a different plan/);
   assert.match(page, /Exports do not show how much solar the home used directly/);
   assert.match(page, /winter gas bill should not be multiplied as if usage were flat/);
+  assert.match(page, /excludes finance, maintenance, degradation, replacement, price changes and VPP payments/);
+  assert.match(page, /assumed figures above are our educational examples, not figures quoted from these sources/);
 });
 
 test("future customer publication boundaries protect privacy and credibility", () => {

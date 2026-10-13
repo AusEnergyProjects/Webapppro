@@ -5,7 +5,8 @@ import ts from 'typescript';
 
 function load(file, dependencies, expose = '') {
   const source = readFileSync(new URL(file, import.meta.url), 'utf8');
-  const compiled = ts.transpileModule(`${source}\n${expose}`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  // Match Expo's default-import interop so CommonJS icon mocks render real nodes.
+  const compiled = ts.transpileModule(`${source}\n${expose}`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
   new Function('require', 'exports', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', compiled)(name => {
     assert.ok(name in dependencies, `Unexpected dependency ${name}`); return dependencies[name];

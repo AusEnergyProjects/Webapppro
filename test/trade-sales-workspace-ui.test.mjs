@@ -50,6 +50,7 @@ function harness(responder, props = {}, fakeClock = false) {
 const defaultResponder = async (url, init) => init.method === 'PATCH' ? response({ ok: true }) : response(new URL(url, 'https://tlink.test').searchParams.get('mode') === 'config' ? config() : page(new URL(url, 'https://tlink.test').searchParams.get('stage') === 'quoting' ? [] : [item('one')]));
 
 test('sales shows existing jobs, exact value basis and missing contact without inventing contact history', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T00:00:00Z') });
   const h = harness(defaultResponder, { suppliedLeads: [{ id: 'teaser', title: 'Air conditioning enquiry', detail: 'Geelong VIC' }] }); t.after(() => h.cleanup());
   const tree = await h.settle();
   assert.match(text(tree), /JOB-one/); assert.match(text(tree), /Owner Sam/); assert.match(text(tree), /Estimated value excl GST \$125\.00/);
@@ -61,6 +62,14 @@ test('sales shows existing jobs, exact value basis and missing contact without i
   button(tree, 'Open job').props.onClick(); button(tree, 'Open quote').props.onClick(); button(tree, 'New quote').props.onClick(); button(tree, 'Review supplied leads').props.onClick(); await flush();
   assert.deepEqual(h.opened, [{ id: 'one', tab: 'summary' }, { id: 'one', tab: 'quote' }]); assert.equal(h.created, 1); assert.equal(h.reviewed, 1);
   assert.match(text(tree), /Air conditioning enquiry Geelong VIC/);
+});
+
+test('sales marks the same follow-up overdue only after its recorded due day', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-13T00:00:00Z') });
+  const h = harness(defaultResponder); t.after(() => h.cleanup());
+  const tree = await h.settle();
+  assert.match(text(tree), /Call about the site visit.*Overdue: 10 Oct 2026/);
+  assert.doesNotMatch(text(tree), /Due 10 Oct 2026/);
 });
 
 test('each board stage reaches records beyond 25 using its own continuation cursor', async t => {

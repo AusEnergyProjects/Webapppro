@@ -46,7 +46,7 @@ const integrationPurposes = [
   },
   {
     title: "Payment boundary",
-    body: "TLink records invoice amounts, due dates and payment status. The trade business collects customer payments using its own payment arrangements. Paying for optional SMS credit is separate from collecting payment for a job.",
+    body: "TLink records invoice amounts, due dates and payment status. It does not initiate or process customer payments. The trade business collects customer payments using its own payment arrangements outside TLink. Paying for optional SMS credit is separate from collecting payment for a job.",
   },
   {
     title: "Business-owned access",
@@ -82,8 +82,8 @@ export default function DirectTradeIntegrationsPage() {
           <p>
             A connection starts only when an authorised installer presses
             Connect and approves access on the provider&apos;s own website.
-            Calendar, accounting and business email options show their current
-            availability and connection status inside the workspace.
+            Calendar, accounting and business email connections are offered when
+            available. Each shows its current connection status inside the workspace.
           </p>
           <span>Disconnect at any time</span>
         </aside>
@@ -119,6 +119,12 @@ export default function DirectTradeIntegrationsPage() {
             period. That external calendar view is private to the business owner.
             Protected marketplace customer identity and exact locations remain
             withheld from mirrored appointment details.
+          </p>
+          <p>
+            Google&apos;s calendar.events permission covers this event access.
+            The calendar connection does not read Gmail or contacts. External
+            calendar reading is limited to the displayed schedule period, with
+            access controlled by the business owner.
           </p>
           <p>
             Business email is a separate sending connection. Google or Microsoft

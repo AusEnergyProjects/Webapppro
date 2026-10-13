@@ -34,6 +34,8 @@ import {
 } from "../data/surge-assessor-education.ts";
 import { EMERALD_SELECT_PRO_270_COMPARISON } from "../data/energy-assistant-reviewed-product-comparisons.ts";
 import { isSurgeContextDependentMessage } from "./energy-assistant-conversation.ts";
+import { ENERGY_ASSISTANT_OFFICIAL_SOURCE_APPROVALS } from "../data/energy-assistant-official-source-approvals.ts";
+import { sourceMayAnswerCurrentFact } from "./energy-assistant-source-review.ts";
 
 export type EnergyAssistantCitation = {
   id: string;
@@ -1024,10 +1026,15 @@ function isoDay(date: Date | string) {
   return parsed.toISOString().slice(0, 10);
 }
 
+const OFFICIAL_SOURCE_APPROVAL_BY_ID = new Map<string, (typeof ENERGY_ASSISTANT_OFFICIAL_SOURCE_APPROVALS)[number]>(
+  ENERGY_ASSISTANT_OFFICIAL_SOURCE_APPROVALS.map((approval) => [approval.sourceId, approval]),
+);
+
 function sourceState(source: EnergyAssistantKnowledgeSource, day: string) {
   const active = (!source.effectiveFrom || source.effectiveFrom <= day)
     && (!source.effectiveTo || source.effectiveTo >= day);
-  return { active, stale: source.reviewDue < day || !active };
+  const approval = OFFICIAL_SOURCE_APPROVAL_BY_ID.get(source.id);
+  return { active, stale: !sourceMayAnswerCurrentFact(source, day, false, approval, approval?.evidenceRecordSha256) };
 }
 
 export function energyAssistantKnowledgeHealth(
@@ -8602,28 +8609,12 @@ export function composeEnergyAssistantAnswer(
   }
 
   const programmeAnswer = catalogueProgramAnswer(userConversation);
-  if (programmeAnswer && !governmentCatalogueCurrent) {
-    return structured("rebates_certificates", {
-      directAnswer:
-        `The maintained government programme catalogue passed its scheduled review date on ${GOVERNMENT_CATALOGUE_REVIEW_DUE}. I will not name a programme or describe its availability as current until the official entries are refreshed. Use the official government assistance directory for the property jurisdiction, then return with the exact programme or current source for a governed check.`,
-      status: "source_review_required",
-      citations: officialCitationsById(["energy-gov-rebates"]),
-      confidence: "low",
-      assumptions: ["No programme name, availability, eligibility or amount has been treated as current after the catalogue review deadline."],
-      practicalSteps: [
-        "Confirm the property postcode, applicant type, exact upgrade and proposed application date.",
-        "Open the current administering-government directory and identify the exact programme.",
-        "Refresh the governed catalogue entry before relying on availability or eligibility details.",
-      ],
-      toolActions: [{ id: "open-rebates", label: "Check official assistance sources", href: "/rebates" }],
-      suggestedQuestions: ["Which current official programme page should be checked for the property postcode and upgrade?"],
-    });
-  }
   if (programmeAnswer) {
     const asksAboutVictorianAirConditioningSupport = programmeAnswer.jurisdictionCode === "VIC"
       && /\b(?:air conditioner|aircon|reverse[ -]cycle|heating|cooling|RCAC)\b/i.test(userConversation)
       && /\b(?:rebates?|grants?|assistance|incentives?|discounts?|how much|support)\b/i.test(userConversation)
-      && programmeAnswer.programs.some((program) => program.templateId === "vic-veu");
+      && programmeAnswer.programs.some((program) => program.templateId === "vic-veu")
+      && Boolean(governedSummaryById("veu-heating-cooling-discounts"));
     if (asksAboutVictorianAirConditioningSupport) {
       const postcode = queryAustralianPostcode(userConversation);
       const applicantMatch = userConversation.match(/\b(owner-occupier|homeowner|owner|renter|tenant|landlord|strata|owners corporation|business|i own the home)\b/i)?.[0] || null;
@@ -8665,6 +8656,23 @@ export function composeEnergyAssistantAnswer(
         practicalSteps: [],
         toolActions: [{ id: "open-rebates", label: "Check Victorian support", href: "/rebates" }],
         suggestedQuestions: [question],
+      });
+    }
+    if (!governmentCatalogueCurrent) {
+      return structured("rebates_certificates", {
+        directAnswer:
+          `The maintained government programme catalogue passed its scheduled review date on ${GOVERNMENT_CATALOGUE_REVIEW_DUE}. I will not name a programme or describe its availability as current until the official entries are refreshed. Use the official government assistance directory for the property jurisdiction, then return with the exact programme or current source for a governed check.`,
+        status: "source_review_required",
+        citations: officialCitationsById(["energy-gov-rebates"]),
+        confidence: "low",
+        assumptions: ["No programme name, availability, eligibility or amount has been treated as current after the catalogue review deadline."],
+        practicalSteps: [
+          "Confirm the property postcode, applicant type, exact upgrade and proposed application date.",
+          "Open the current administering-government directory and identify the exact programme.",
+          "Refresh the governed catalogue entry before relying on availability or eligibility details.",
+        ],
+        toolActions: [{ id: "open-rebates", label: "Check official assistance sources", href: "/rebates" }],
+        suggestedQuestions: ["Which current official programme page should be checked for the property postcode and upgrade?"],
       });
     }
     const programmeEffects: Readonly<Record<GovernmentProgramTemplate["outcomeClass"], string>> = {

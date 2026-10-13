@@ -2453,7 +2453,13 @@ test("Retained calculators, audit views and server priorities preserve their saf
   assert.doesNotMatch(portalStyles, /html\[data-tlink-colour-mode/);
   const headerStyles = fs.readFileSync(new URL("../src/components/PortalWorkspaceHeader.module.css", import.meta.url), "utf8");
   assert.match(sourceSection(headerStyles, ".bar {", "}"), /background:\s*var\(--portal-gradient\)/);
-  assert.match(sourceSection(headerStyles, ".businessBar {", "}"), /background:\s*var\(--portal-surface\)/);
+  // The organisation/dashboard strip now belongs to the shared workspace bar.
+  const header = read("../src/components/PortalWorkspaceHeader.tsx");
+  const workspaceBar = sourceSection(read("../src/components/TLinkWorkspaceBar.module.css"), ".bar {", "}");
+  assert.match(header, /<TLinkWorkspaceBar/);
+  assert.match(workspaceBar, /--bar-surface:\s*var\(--portal-surface/);
+  assert.match(workspaceBar, /background:\s*var\(--bar-surface\)/);
+  assert.match(workspaceBar, /color:\s*var\(--bar-ink\)/);
   assert.match(
     workspaceStyles,
     /\.jobTable\s*\{[\s\S]*font-size:\s*0\.75rem/,

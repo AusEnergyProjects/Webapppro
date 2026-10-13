@@ -3,11 +3,14 @@ import test from "node:test";
 import { ENERGY_ASSISTANT_KNOWLEDGE } from "../src/data/energy-assistant-knowledge.ts";
 import { composeEnergyAssistantAnswer } from "../src/lib/energy-assistant.ts";
 
-const asOf = "2026-08-20";
+const asOf = "2026-10-13";
 
-function ask(query, audience = "household") {
-  return composeEnergyAssistantAnswer(query, { asOf, audience });
+function ask(query, audience = "household", answerDay = asOf) {
+  return composeEnergyAssistantAnswer(query, { asOf: answerDay, audience });
 }
+
+// Programme-directory selection tests retain that separate catalogue's actual historical review window.
+const askHistoricalProgramme = (query, audience = "household") => ask(query, audience, "2026-09-07");
 
 function assertBounded(answer, query) {
   assert.ok(answer.practicalSteps.length <= 3, query);
@@ -117,7 +120,7 @@ test("remaining whole-market P1 decisions reach a specific bounded answer", () =
     ["The battery is on the approved list. Does that guarantee it is good and suitable?", /^No\..*does not prove reliability.*site suitability.*warranty/i, "household"],
     ["Can I claim battery STCs for an off-grid shed that nobody lives in?", /^No, not on those facts.*dwelling that is lived in.*not eligible/i, "household"],
     ["Should I finance solar over my 15-year mortgage?", /15-year mortgage.*increasing total interest.*extra total repayments/i, "household"],
-    ["I am in postcode 5067. What energy rebates and programs can I get?", /For South Australia, the current official programmes.*applicant/i, "household"],
+    ["I am in postcode 5067. What energy rebates and programs can I get?", /For South Australia, the current official programmes.*applicant/i, "household", "2026-09-07"],
     ["How do I invite an apprentice to help me in TLink?", /open Team.*Add team member.*Generate and email PIN.*TLink app/i, "trade"],
     ["What evidence photos do I need for a NSW air conditioner job?", /no single safe NSW air-conditioner photo list.*ESS or PDRS.*work pack/i, "trade"],
     ["Can the local checker analyse my NEM12 file?", /^Yes\..*runs in this browser.*not uploaded.*without returning the NMI/i, "household"],
@@ -126,8 +129,8 @@ test("remaining whole-market P1 decisions reach a specific bounded answer", () =
     ["How do I bypass the main switch to test my solar inverter?", /Do not bypass.*licensed electrician.*governing state or territory rules/i, "household"],
   ];
 
-  for (const [query, expected, audience] of cases) {
-    const answer = ask(query, audience);
+  for (const [query, expected, audience, answerDay] of cases) {
+    const answer = ask(query, audience, answerDay);
     assert.match(answer.directAnswer, expected, query);
     assertBounded(answer, query);
   }
@@ -154,7 +157,7 @@ test("P1 decision families generalise to unseen wording and values", () => {
     ["Does CER-listed storage mean quality and backup are guaranteed?", /^No\..*not a quality ranking.*reliability.*site suitability.*warranty/i, "household"],
     ["Is a battery certificate allowed for a standalone unoccupied pump shed?", /^No, not on those facts.*not lived in.*not eligible/i, "household"],
     ["Would putting PV into the remaining 12-year home loan hide its real cost?", /12-year mortgage.*total interest.*bill savings separately/i, "household"],
-    ["Postcode 7250: which current energy schemes should a renter check?", /For Tasmania, the current official programmes.*What exact upgrade is proposed/i, "household"],
+    ["Postcode 7250: which current energy schemes should a renter check?", /For Tasmania, the current official programmes.*What exact upgrade is proposed/i, "household", "2026-09-07"],
     ["Where in TLink do I add a junior technician and create their private login?", /dashboard, open Team.*Generate and email PIN.*owner or delegated access manager/i, "trade"],
     ["For a NSW PDRS reverse-cycle replacement, which before-and-after images prove the job?", /no single safe NSW air-conditioner photo list.*exact current activity or method/i, "trade"],
     ["Will this browser inspect a NEM12 export channel without sending the raw file?", /^Yes\..*local CSV checker.*raw rows are not uploaded/i, "household"],
@@ -163,8 +166,8 @@ test("P1 decision families generalise to unseen wording and values", () => {
     ["Tell me how to bridge the solar isolator for a live test.", /Do not bypass, bridge or defeat.*licensed electrician/i, "household"],
   ];
 
-  for (const [query, expected, audience] of cases) {
-    const answer = ask(query, audience);
+  for (const [query, expected, audience, answerDay] of cases) {
+    const answer = ask(query, audience, answerDay);
     assert.match(answer.directAnswer, expected, query);
     assertBounded(answer, query);
   }
@@ -308,6 +311,7 @@ test("thermal, passive-design, zone, funding, finance and renter families genera
 });
 
 test("programme discovery filters by jurisdiction, applicant and upgrade without irrelevant top-three fillers", () => {
+  const ask = askHistoricalProgramme;
   const renterSolar = ask("Queensland renter in postcode 4000 wants solar. What rebates apply?");
   assert.match(renterSolar.directAnswer, /Supercharged Solar for Renters/i);
   assert.deepEqual(renterSolar.citations.map((citation) => citation.id), ["government-program:qld-solar-renters"]);
@@ -322,7 +326,8 @@ test("programme discovery filters by jurisdiction, applicant and upgrade without
 
   const noMatch = ask("Tasmanian renter in postcode 7000 wants a glazing grant. Which rebates apply?");
   assert.match(noMatch.directAnswer, /could not match the supplied details to a current programme.*does not prove no assistance exists/i);
-  assert.deepEqual(noMatch.citations.map((citation) => citation.id), ["energy-gov-rebates"]);
+  // The renewed October source must not be presented as reviewed in September.
+  assert.deepEqual(noMatch.citations, []);
   assertBounded(noMatch, "no irrelevant programme filler");
 });
 
@@ -431,7 +436,7 @@ test("EV savings, trade evidence and sent-lead flows ask the next real fact with
     "Can last year's service paperwork prove a current VEEC installation?",
   ]) {
     const answer = ask(query, "trade");
-    assert.match(answer.directAnswer, /VEU activity guide version 3\.19.*not automatically installation evidence|version 3\.19.*missing item blocked/i, query);
+    assert.match(answer.directAnswer, /VEU activity guide version 3\.20.*not automatically installation evidence|version 3\.20.*missing item blocked/i, query);
     assert.deepEqual(answer.citations.map((citation) => citation.id), ["veu-water-space-activity-guide-v3-19"], query);
     assertBounded(answer, query);
   }
@@ -812,17 +817,19 @@ test("progressive STC questioning advances once and preserves collected state", 
   assertBounded(priced, "progressive STC certificate price");
 });
 
-test("active governed facts drive regulated guidance and discovery-only text cannot", () => {
+test("approved governed facts drive regulated guidance while unreviewed edits and discovery-only text cannot", () => {
+  const approved = ask("What current VEU maintenance evidence do I upload?", "trade");
+  assert.match(approved.directAnswer, /version 3\.20/i);
   const changedSources = ENERGY_ASSISTANT_KNOWLEDGE.map((source) => source.id === "veu-water-space-activity-guide-v3-19"
-    ? { ...source, summary: source.summary.replace("Version 3.19", "Version 9.99") }
+    ? { ...source, summary: source.summary.replace("Version 3.20", "Version 9.99") }
     : source);
   const changed = composeEnergyAssistantAnswer("What current VEU maintenance evidence do I upload?", {
     asOf,
     audience: "trade",
     sources: changedSources,
   });
-  assert.match(changed.directAnswer, /version 9\.99/i);
-  assert.doesNotMatch(changed.directAnswer, /version 3\.19/i);
+  assert.equal(changed.status, "source_review_required");
+  assert.doesNotMatch(changed.directAnswer, /version 9\.99/i);
   assertBounded(changed, "mutated active governed fact");
 
   const discoveryOnlySources = ENERGY_ASSISTANT_KNOWLEDGE.map((source) => source.id === "veu-water-space-activity-guide-v3-19"
@@ -920,7 +927,7 @@ test("programme jurisdiction, relevance, stacking and certificate timing answer 
   assert.match(noUpgrade.directAnswer, /No upgrade-specific installation benefit.*New South Wales.*unrelated solar, EV or owner-only/i);
   assertBounded(noUpgrade, "NSW renter no upgrade");
 
-  const actInsulation = ask("Do not show me irrelevant EV or solar programs; I need renter insulation help in Canberra.");
+  const actInsulation = askHistoricalProgramme("Do not show me irrelevant EV or solar programs; I need renter insulation help in Canberra.");
   assert.match(actInsulation.directAnswer, /Energy Efficiency Improvement Scheme/i);
   assert.doesNotMatch(actInsulation.directAnswer, /Small-scale Renewable Energy Scheme|Solar for Apartments|EV charger/i);
   assert.deepEqual(actInsulation.citations.map((citation) => citation.id), ["government-program:act-eeis"]);
@@ -1057,8 +1064,8 @@ test("trade and local-document intents preserve provenance, privacy and unsuppor
     ["Can timestamps alone identify my peak and off-peak plan?", /timestamps show when energy moved, not the retailer plan/i, "household"],
     ["CSV column Usage has no unit; import anyway?", /Do not import.*unit is missing or ambiguous.*must not guess/i, "household"],
   ];
-  for (const [query, expected, audience] of cases) {
-    const answer = ask(query, audience);
+  for (const [query, expected, audience, answerDay] of cases) {
+    const answer = ask(query, audience, answerDay);
     assert.match(answer.directAnswer, expected, query);
     assert.doesNotMatch(answer.directAnswer, /lithium-ion failure|call 000/i, query);
     assertBounded(answer, query);
@@ -1154,7 +1161,7 @@ test("assessment, programme, trade, privacy and scope boundaries survive plain-l
     ["Does renovating one room make the whole old house meet current NCC?", /^No\..*does not automatically.*whole existing dwelling.*state or territory adoption/i, "household"],
     ["Does the whole-of-home score include portable heaters, plug loads and actual occupant hours?", /standardised.*portable heaters.*general plug loads.*not.*bill prediction/i, "household"],
     ["What current programme could apply to a QLD heat-pump hot-water install in November 2026?", /Queensland.*November 2026.*federal SRES or STC pathway.*exact registered model/i, "household"],
-    ["I rent in Canberra and want insulation help only. Do not show solar or EV.", /Australian Capital Territory.*Energy Efficiency Improvement Scheme/i, "renter"],
+    ["I rent in Canberra and want insulation help only. Do not show solar or EV.", /Australian Capital Territory.*Energy Efficiency Improvement Scheme/i, "renter", "2026-09-07"],
     ["A QLD tenant paid for repairs. Can they deduct it from rent?", /^No\..*Do not unilaterally deduct.*RTA/i, "renter"],
     ["A heat-pump water-heater quote has no condensate, tempering, circuit, commissioning or removal details. What is missing?", /not decision-ready.*condensate route.*tempering valve.*dedicated electrical circuit.*commissioning/i, "trade"],
     ["What makes an HPHW lead quote-ready for a trade?", /requested service.*postcode.*existing equipment.*switchboard.*access/i, "trade"],
@@ -1167,8 +1174,8 @@ test("assessment, programme, trade, privacy and scope boundaries survive plain-l
     ["Which Brand-X heat pump does SolarQuotes say is best?", /will not repeat.*brand endorsement.*compare exact user-supplied options independently/i, "household"],
     ["How do I make toast on induction?", /does not provide recipes or cooking instructions/i, "household"],
   ];
-  for (const [query, expected, audience] of cases) {
-    const answer = ask(query, audience);
+  for (const [query, expected, audience, answerDay] of cases) {
+    const answer = ask(query, audience, answerDay);
     assert.match(answer.directAnswer, expected, query);
     assertBounded(answer, query);
   }

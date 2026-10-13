@@ -6,7 +6,7 @@ import styles from "./page.module.css";
 
 export const metadata = buildPlatformMetadata({
   path: "/case-studies",
-  title: "Home Energy Savings Examples: Solar, Batteries and Gas | AEA",
+  title: "Home Energy Savings Examples | Australian Energy Assessments",
   description: "Follow four worked examples of electricity plan costs, solar savings, extra battery value and leaving gas. See the numbers, assumptions and your next step.",
 });
 
@@ -23,7 +23,7 @@ const structuredData = {
     {
       "@type": "CollectionPage", "@id": `${canonical}#webpage`, url: canonical,
       name: "Home energy savings worked examples", description: metadata.description,
-      dateModified: "2026-10-09", inLanguage: "en-AU",
+      dateModified: "2026-10-13", inLanguage: "en-AU",
       isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId }, publisher: { "@id": PUBLIC_SITE.organizationId },
       mainEntity: { "@id": `${canonical}#examples` }, breadcrumb: { "@id": `${canonical}#breadcrumb` },
     },
@@ -62,7 +62,7 @@ export default function CaseStudiesPage() {
       <div className={styles.assumptions}><strong>Our assumed prices</strong><p>Panels generate 5,000 kWh in a year. Buying electricity costs 30c/kWh; exports earn 5c/kWh. The daily connection charge stays the same. There is no battery in this example.</p></div>
       <div className={styles.tableWrap}><table><caption>Same generation, different use at home</caption><thead><tr><th scope="col">Solar energy</th><th scope="col">Less daytime use</th><th scope="col">More daytime use</th></tr></thead><tbody><tr><th scope="row">Used directly at home</th><td>2,000 kWh</td><td>3,500 kWh</td></tr><tr><th scope="row">Sent to the grid</th><td>3,000 kWh</td><td>1,500 kWh</td></tr><tr><th scope="row">Avoided purchases + export payments</th><td>$600 + $150</td><td>$1,050 + $75</td></tr><tr className={styles.total}><th scope="row">Yearly bill reduction</th><td>$750</td><td>$1,125</td></tr></tbody></table></div>
       <div className={styles.takeaway}><strong>$375 more value from the same solar generation</strong><p>The second pattern shifts 1,500 kWh of existing demand into sunny hours. Each shifted kWh saves 30c but gives up a 5c export payment: 1,500 × 25c = $375. It assumes that much demand can actually move into those hours; adding unnecessary use would not create the same saving.</p></div>
-      <p className={styles.limitation}>A postcode gives a useful local climate starting point. Roof direction, shade, panel layout and export limits still need an installer&apos;s assessment. Annual sunshine alone does not tell us when the home can use the generation.</p>
+      <p className={styles.limitation}>Exports do not show how much solar the home used directly. Use inverter generation readings alongside meter imports and exports to understand both. A postcode gives a useful local climate starting point. Roof direction, shade, panel layout and export limits still need an installer&apos;s assessment. Annual sunshine alone does not tell us when the home can use the generation.</p>
       <div className={styles.actions}><Link className={styles.action} href="/compare">Explore my solar savings <span aria-hidden="true">↗</span></Link><Link href="/guides/solar">Check what a solar quote should include</Link></div>
     </article>
 
@@ -80,11 +80,12 @@ export default function CaseStudiesPage() {
       <div className={styles.assumptions}><strong>Our assumed year</strong><p>The gas appliances use $1,200 of gas, plus a $300 connection charge. Efficient electric replacements providing the same heating, hot water and cooking add $900 to the electricity bill. These are teaching figures, not an appliance performance forecast.</p></div>
       <div className={styles.tableWrap}><table><caption>Ongoing energy costs before and after replacing all gas appliances</caption><thead><tr><th scope="col">Yearly cost</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody><tr><th scope="row">Gas used by appliances</th><td>$1,200</td><td>$0</td></tr><tr><th scope="row">Gas connection</th><td>$300</td><td>$0 after disconnection</td></tr><tr><th scope="row">Extra electricity for replacements</th><td>$0</td><td>$900</td></tr><tr className={styles.total}><th scope="row">Costs being compared</th><td>$1,500/year</td><td>$900/year</td></tr></tbody></table></div>
       <div className={styles.takeaway}><strong>$600 a year saved in this example</strong><p>$1,200 gas + $300 connection − $900 extra electricity = $600. If the gas connection stays active, the $300 charge remains and this assumed saving falls to $300. Your other electricity use is unchanged and excluded from both columns.</p></div>
-      <p className={styles.limitation}>Ask about installation, circuits, switchboard work and gas disconnection or abolishment fees before deciding. Change appliances in a practical order; the supply-charge saving comes only when the connection is ended. Actual use depends on the building, weather, equipment and habits.</p>
+      <p className={styles.limitation}>A winter gas bill should not be multiplied as if usage were flat throughout the year. Use a full year of bills where possible, especially when gas heats the home. Ask about installation, circuits, switchboard work and gas disconnection or abolishment fees before deciding. Change appliances in a practical order; the supply-charge saving comes only when the connection is ended. Actual use depends on the building, weather, equipment and habits.</p>
       <div className={styles.actions}><Link className={styles.action} href="/gas-compare">Estimate my move away from gas <span aria-hidden="true">↗</span></Link><Link href="/guides/home-energy-upgrades">Plan which appliance to replace first</Link></div>
     </article>
 
     <section className="guide-section" aria-labelledby="example-sources"><div className="guide-section-heading"><span>Keep learning</span><h2 id="example-sources">Official guidance behind the decisions</h2></div><p>These sources explain bill comparisons, solar, storage and electrification. The assumed figures above are our educational examples, not figures quoted from these sources.</p><div className="guide-source-links"><a href="https://www.energymadeeasy.gov.au/" target="_blank" rel="noreferrer">Australian Energy Regulator: Energy Made Easy</a><a href="https://www.energy.gov.au/households/solar-pv-and-batteries" target="_blank" rel="noreferrer">Australian Government: solar and batteries</a><a href="https://www.energy.gov.au/households/electrification" target="_blank" rel="noreferrer">Australian Government: electrification</a></div></section>
+    <section className="guide-section" aria-labelledby="customer-story-boundary"><div className="guide-section-heading"><span>Real stories need real evidence</span><h2 id="customer-story-boundary">Before we publish a customer case study</h2></div><p>The examples above use assumed figures. A real customer story must meet these checks before publication:</p><ul><li>The customer has explicitly consented to publication. NMI details, filenames and contact data are removed, along with identifying addresses and images.</li><li>Before and after periods are long enough and genuinely comparable. Changes in weather, tariffs, household use and equipment are explained.</li><li>Bills, meter readings and installation records support the stated result. Assumed figures are kept separate from measured outcomes.</li><li>Costs, savings and payback remain indicative. A result for one home does not promise the same outcome for another.</li></ul></section>
     <section className="guide-callout"><div><h2>Not sure which decision comes first?</h2><p>Build a home energy plan around your comfort, equipment, budget and timing. Start with the evidence you have and work out what to confirm next.</p></div><Link href="/plan">Build my home energy plan</Link></section>
     <SiteFooter>All worked-example prices and savings are illustrative. Use your own bills and written quotes, and confirm eligibility and site suitability before switching plans or buying equipment.</SiteFooter>
   </main>;

@@ -450,7 +450,9 @@ test("protected installer plan and evidence state is cleared before an auth iden
 test("profile and lead-list responses check identity before updating MFA state", () => {
   const profileLoader = sourceBetween(dashboard, "async function loadDashboard", "void loadDashboard()");
   const listLoader = sourceBetween(dashboard, "const refreshOpportunities", "void refreshOpportunities()");
-  assert.match(profileLoader, /const result = await response\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*if \(cancelled \|\| !identityIsCurrent\(\)\) return;\s*if \(isMfaRequiredResponse\(result\)\) setMfaRequired\(true\);/);
+  assert.match(profileLoader, /const result = await response\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*if \(!identityIsCurrent\(\)\) return;\s*if \(isMfaRequiredResponse\(result\)\) setMfaRequired\(true\);/);
+  const profileSetup = dashboard.slice(dashboard.lastIndexOf('useEffect(() => {', dashboard.indexOf('async function loadDashboard')), dashboard.indexOf('async function loadDashboard'));
+  assert.match(profileSetup, /const identityIsCurrent = \(\) => \(\s*!cancelled\s*&& protectedIdentityRevision\.current === identityRevision\s*&& protectedIdentityUid\.current === user\.uid/);
   assert.match(listLoader, /const result = await response\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*if \(!identityIsCurrent\(\)\) return;\s*if \(isMfaRequiredResponse\(result\)\) setMfaRequired\(true\);/);
 });
 

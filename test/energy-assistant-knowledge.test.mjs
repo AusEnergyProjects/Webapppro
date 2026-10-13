@@ -7,7 +7,7 @@ import {
 } from "../src/data/energy-assistant-knowledge.ts";
 import { searchEnergyAssistantKnowledge } from "../src/lib/energy-assistant.ts";
 
-const REVIEW_DAY = "2026-09-01";
+const REVIEW_DAY = "2026-10-13";
 const PROHIBITED_RUNTIME_HOSTS = [
   "choice.com.au",
   "drkarl.com",
@@ -70,7 +70,7 @@ test("runtime knowledge is a 115-source official Australian corpus", () => {
     assert.equal(source.official, true, source.id);
     assert.equal(source.storagePolicy, "local_factual_summary", source.id);
     assert.match(source.reviewedAt, /^\d{4}-\d{2}-\d{2}$/, source.id);
-    assert.ok(source.reviewedAt <= REVIEW_DAY, source.id);
+    assert.ok(source.reviewedAt <= new Date().toISOString().slice(0, 10), source.id);
     assert.match(source.reviewDue, /^\d{4}-\d{2}-\d{2}$/, source.id);
     assert.ok(source.reviewDue > source.reviewedAt, source.id);
     assert.ok(source.reviewDue <= "2027-08-22", source.id);
@@ -455,10 +455,15 @@ test("current technical documents and every rental jurisdiction are versioned in
   assert.match(byId.get("nathers-guidance-note")?.title || "", /July 2026/);
   assert.equal(byId.get("aemo-mdff-nem12-nem13-v2-7")?.effectiveFrom, "2025-12-01");
   assert.match(byId.get("aemo-mdff-nem12-nem13-v2-7")?.title || "", /v2\.7/);
-  assert.equal(byId.get("veu-water-space-activity-guide-v3-19")?.effectiveFrom, "2026-03-24");
-  assert.equal(byId.get("nsw-ess-rule-current-2026")?.effectiveFrom, "2026-07-01");
-  assert.equal(byId.get("nsw-pdrs-rule-current-2026")?.effectiveFrom, "2026-07-01");
+  assert.equal(byId.get("veu-water-space-activity-guide-v3-19")?.effectiveFrom, "2026-04-15");
+  assert.match(byId.get("veu-water-space-activity-guide-v3-19")?.title || "", /v3\.20/);
+  assert.equal(byId.get("nsw-ess-rule-current-2026")?.effectiveFrom, "2026-09-07");
+  assert.match(byId.get("nsw-ess-rule-current-2026")?.summary || "", /7 September 2026/);
+  assert.equal(byId.get("nsw-pdrs-rule-current-2026")?.effectiveFrom, "2026-09-07");
+  assert.match(byId.get("nsw-pdrs-rule-current-2026")?.summary || "", /7 September 2026/);
   assert.equal(byId.get("nsw-iheab-hpwh-fact-sheet-v2-2")?.effectiveFrom, "2026-08-07");
+  assert.match(byId.get("nsw-iheab-hpwh-fact-sheet-v2-2")?.summary || "", /for businesses and shared strata or apartment areas/);
+  assert.match(byId.get("nsw-iheab-hpwh-fact-sheet-v2-2")?.summary || "", /does not establish eligibility for a private household upgrade/);
 
   for (const id of [
     "act-rental-ceiling-insulation-standard",

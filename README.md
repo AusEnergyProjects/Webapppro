@@ -117,6 +117,14 @@ See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for configuration, alert be
 
 ## Release validation
 
+For a fresh checkout, install both locked dependency sets before validation. The full repository suite includes the mobile tests and their Expo configuration dependencies:
+
+```text
+npm ci
+npm ci --prefix mobile
+npm run validate
+```
+
 Run `npm run validate` before publishing. It performs the active web and worker typecheck, lint, runtime integration suite, full test suite, fresh Cloudflare D1 migration check and production build. `npm run test:coverage` is available for coverage analysis. Isolated local scale benchmarking is never part of the normal identity, application or production migration path.
 
 The active deployment target is OpenAI Sites with Cloudflare D1 and R2 bindings. GitHub is the source record. Netlify and Vercel are not deployment targets for this repository.

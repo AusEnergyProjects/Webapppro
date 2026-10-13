@@ -19,6 +19,9 @@ export type OfficialSourceReviewItem = {
 export type OfficialSourceApproval = {
   sourceId: string;
   evidenceRecordSha256: string;
+  // The reviewed snapshot makes synchronous browser and Worker checks reject edited evidence.
+  // Its SHA256 is independently verified by the release audit.
+  canonicalEvidence?: string;
   approvedBy: string;
   approvedOn: string;
   reviewDue: string;
@@ -106,12 +109,19 @@ export function sourceMayAnswerCurrentFact(
   if (!source.official || changeDetected) return false;
   if (source.effectiveFrom && source.effectiveFrom > day) return false;
   if (source.effectiveTo && source.effectiveTo < day) return false;
+  if (source.reviewedAt > day) return false;
   if (source.reviewDue < day) return false;
   if (source.volatilityClass !== "volatile_program") return true;
   return approval?.status === "approved"
     && approval.sourceId === source.id
     && approval.reviewDue >= day
     && approval.reviewDue === source.reviewDue
+    && Boolean(approval.approvedBy.trim())
+    && approval.approvedBy !== "pending"
+    && approval.approvedOn >= source.reviewedAt
+    && approval.approvedOn <= day
+    && isSha256(approval.evidenceRecordSha256)
+    && approval.canonicalEvidence === canonicalOfficialSourceEvidence(source)
     && approval.evidenceRecordSha256 === evidenceRecordSha256;
 }
 

@@ -396,7 +396,9 @@ test('contact editing updates primary contact and job revision, and stale custom
 });
 
 
-test('reschedule rechecks rental credentials for the new date before calling scheduling', async () => {
+test('reschedule rechecks rental credentials for the new date before calling scheduling', async t => {
+ // Keep current credentials valid while testing an appointment past their expiry.
+ t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-10T00:00:00Z') });
  const f=fixture();f.database.exec(`
  UPDATE trade_work_orders SET service_category='rental-inspection';
  CREATE TABLE IF NOT EXISTS trade_rental_inspections(id text,firebase_uid text,work_order_id text);

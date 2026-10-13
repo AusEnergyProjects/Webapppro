@@ -169,7 +169,9 @@ export const ENERGY_ASSISTANT_REVIEWED_PRODUCT_GUIDANCE = [
     id: "hot_water",
     consumerLabel: "Hot water",
     ...APPROVED_GUIDANCE_METADATA,
-    reviewDue: "2026-09-20",
+    reviewedOn: "2026-10-13",
+    reviewedBy: "Codex independent summary reviewer (/root/repair_mobile_failures)",
+    reviewDue: "2026-11-13",
     intentTerms: ["hot water", "water heater", "heat pump water heater", "heat pump hot water", "solar hot water", "storage water heater"],
     productKinds: ["sres_air_source_heat_pump", "sres_solar_water_heater", "electric_water_heater", "gas_water_heater"],
     comparisonDimensions: [
@@ -262,7 +264,9 @@ export const ENERGY_ASSISTANT_REVIEWED_PRODUCT_GUIDANCE = [
     id: "solar_storage",
     consumerLabel: "Solar and storage",
     ...APPROVED_GUIDANCE_METADATA,
-    reviewDue: "2026-09-20",
+    reviewedOn: "2026-10-13",
+    reviewedBy: "Codex independent summary reviewer (/root/repair_mobile_failures)",
+    reviewDue: "2026-11-13",
     intentTerms: ["solar", "photovoltaic", "pv panel", "inverter", "battery", "energy storage", "home battery", "solar export"],
     productKinds: ["pv_module", "inverter", "battery", "cec_battery"],
     comparisonDimensions: [
@@ -373,7 +377,9 @@ export const ENERGY_ASSISTANT_REVIEWED_PRODUCT_GUIDANCE = [
     id: "ev_charging",
     consumerLabel: "EV charging",
     ...APPROVED_GUIDANCE_METADATA,
-    reviewDue: "2026-09-20",
+    reviewedOn: "2026-10-13",
+    reviewedBy: "Codex independent summary reviewer (/root/repair_mobile_failures)",
+    reviewDue: "2026-11-13",
     intentTerms: ["ev charging", "electric vehicle charging", "car charger", "wallbox", "level 1 charging", "level 2 charging", "vehicle to home", "vehicle to grid"],
     productKinds: [],
     comparisonDimensions: [

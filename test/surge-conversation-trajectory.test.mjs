@@ -16,7 +16,7 @@ import { handleEnergyAssistantRequest } from "../src/lib/energy-assistant-server
 import { buildSurgePlanContextFromStoredAssessment } from "../src/lib/energy-assistant-plan-context.ts";
 
 const ORIGIN = "https://compare.example.test";
-const NOW = new Date("2026-08-29T00:00:00.000Z");
+const NOW = new Date("2026-10-13T00:00:00.000Z");
 const PLAN = buildSurgePlanContextFromStoredAssessment(JSON.stringify({
   version: 1,
   stage: 4,

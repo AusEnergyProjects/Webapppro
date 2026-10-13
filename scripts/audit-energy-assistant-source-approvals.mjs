@@ -26,6 +26,10 @@ for (const source of volatileSources) {
   if (approval.approvedOn < source.reviewedAt) {
     failures.push(`${source.id}: approval predates the reviewed evidence`);
   }
+  if (!approval.canonicalEvidence
+    || createHash("sha256").update(approval.canonicalEvidence).digest("hex") !== approval.evidenceRecordSha256) {
+    failures.push(`${source.id}: reviewed snapshot does not match the approved hash`);
+  }
   if (!sourceMayAnswerCurrentFact(source, asOf, false, approval, hash)) {
     failures.push(`${source.id}: hash, approval or review window is not current`);
   }

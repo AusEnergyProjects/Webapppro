@@ -5,6 +5,7 @@ import { certificateTestDependency } from "./helpers/creditex-training-fixture.m
 import * as activityCompletion from "../src/lib/trade-activity-forms-completion.ts";
 import * as fieldCompletionPolicy from "../src/lib/trade-field-completion-policy.ts";
 import * as tradeJobLifecycle from "../src/lib/trade-job-lifecycle.ts";
+import * as messageMediaAccess from "../src/lib/trade-message-media-access.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
@@ -26,6 +27,7 @@ function compile(source, fileName, mocks) {
     if (specifier === "@/lib/trade-field-completion-policy") return fieldCompletionPolicy;
     if (specifier === "@/lib/trade-activity-forms-completion") return activityCompletion;
     if (specifier === "@/lib/trade-job-lifecycle") return tradeJobLifecycle;
+    if (specifier === "@/lib/trade-message-media-access") return messageMediaAccess;
     if (certificateTestDependency(specifier)) return certificateTestDependency(specifier);
     throw new Error(`Unexpected module dependency: ${specifier}`);
   };

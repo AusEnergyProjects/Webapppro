@@ -18,11 +18,12 @@ const reviewed = (
   sourceIds: readonly string[],
   safetyNotes: readonly string[] = [],
   reviewDue = "2027-02-20",
+  reviewedOn = "2026-08-20",
 ): ReviewedSurgeGuidance => Object.freeze({
   id,
   title,
   detail,
-  reviewedOn: "2026-08-20",
+  reviewedOn,
   reviewDue,
   effectiveFrom: "2026-08-20",
   effectiveTo: null,
@@ -48,7 +49,8 @@ export const SURGE_REVIEWED_GUIDANCE = Object.freeze([
   reviewed("windows-basic-measures", "Improve windows without replacing them", "Start with seals, close-fitting honeycomb or thermal coverings and external summer shade. Removable low-emissivity or reflective film may help where it suits the glass and sunlight.", ["yourhome-glazing", "yourhome-shading"], ["Confirm film compatibility with the glass and any glazing warranty before installation."]),
   reviewed("windows-seals-film", "Improve windows without replacing them", "Check seals and room-by-room comfort first. Removable low-emissivity or reflective film may help where it suits the glass and sunlight.", ["yourhome-glazing", "yourhome-shading"], ["Confirm film compatibility with the glass and any glazing warranty before installation."]),
   reviewed("shade-hot-windows", "Shade hot windows before upgrading cooling", "Use external shade where practical. A well-placed deciduous tree can block summer sun and allow winter sun.", ["yourhome-shading", "yourhome-landscaping-garden-design"], ["Check services, fire risk, mature size, roots and local rules before planting."]),
-  reviewed("solar-load-shift", "Use more of your solar directly", "Run flexible loads such as dishwashers, washers or heat-pump dryers during strong solar hours when safe.", ["energy-gov-solar-batteries", "energy-gov-reduce-energy-bills", "yourhome-appliances-technology"], ["Do not run appliances unattended where their instructions or conditions make that unsafe."], "2026-09-20"),
+  // Independently rechecked against these official sources by /root/repair_mobile_failures on 13 October.
+  reviewed("solar-load-shift", "Use more of your solar directly", "Run flexible loads such as dishwashers, washers or heat-pump dryers during strong solar hours when safe.", ["energy-gov-solar-batteries", "energy-gov-reduce-energy-bills", "yourhome-appliances-technology"], ["Do not run appliances unattended where their instructions or conditions make that unsafe."], "2026-11-13", "2026-10-13"),
   reviewed("tariff-load-shift", "Shift flexible loads to cheaper hours", "Check the complete tariff before moving flexible loads to cheaper or free-use windows. Make sure the rest of the plan suits the home.", ["energy-gov-reduce-energy-bills"], [], "2026-11-20"),
   reviewed("mains-gas-sequence", "Sequence mains gas replacement carefully", "Reduce demand first, then confirm electrical capacity before replacing major mains gas appliances.", ["energy-gov-electrification-sequence"], ["Gas disconnection and fixed electrical work require appropriately licensed trades."], "2026-10-20"),
   reviewed("lpg-sequence", "Plan around bottled gas use", "Identify which appliances use LPG, then compare staged electric replacements after checking switchboard capacity.", ["energy-gov-electrification-sequence"], ["Gas and fixed electrical work require appropriately licensed trades."], "2026-10-20"),

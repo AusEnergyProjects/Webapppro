@@ -12,10 +12,20 @@ import { canonicalOfficialSourceEvidence } from "../src/lib/energy-assistant-sou
 
 const AS_OF = "2026-08-25";
 const CAPTURED_AT = "2026-08-24T00:00:00.000Z";
-const source = ENERGY_ASSISTANT_KNOWLEDGE.find(
+const registrySource = ENERGY_ASSISTANT_KNOWLEDGE.find(
   (candidate) => candidate.id === "nathers-existing-homes",
 );
-assert.ok(source, "The reviewed registry fixture source must exist.");
+assert.ok(registrySource, "The reviewed registry fixture source must exist.");
+// These synthetic bytes and approvals are dated August. Keep their review
+// timeline independent of later substantive reviews of the maintained corpus.
+const source = {
+  ...registrySource,
+  reviewedAt: "2026-08-20",
+  reviewDue: "2026-09-20",
+};
+const fixtureRegistry = ENERGY_ASSISTANT_KNOWLEDGE.map((candidate) => (
+  candidate.id === source.id ? source : candidate
+));
 
 function sha256(value) {
   return createHash("sha256").update(Buffer.from(value, "utf8")).digest("hex");
@@ -27,7 +37,7 @@ function approvedFixtureInput(overrides = {}) {
   const evidenceRecordSha256 = sha256(canonicalOfficialSourceEvidence(source));
   const finalUrl = new URL(source.url).href;
   return {
-    registry: ENERGY_ASSISTANT_KNOWLEDGE,
+    registry: fixtureRegistry,
     baselines: [{
       contractVersion: "official-source-capture-v1",
       status: "baseline",

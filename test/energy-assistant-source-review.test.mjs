@@ -49,6 +49,7 @@ test("volatile current facts fail closed after a detected change or missed revie
   const approval = {
     sourceId: current.id,
     evidenceRecordSha256: hash,
+    canonicalEvidence: canonicalOfficialSourceEvidence(current),
     approvedBy: "Independent reviewer",
     approvedOn: "2026-08-22",
     reviewDue: current.reviewDue,
@@ -59,4 +60,9 @@ test("volatile current facts fail closed after a detected change or missed revie
   assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", true, approval, hash), false);
   assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", false, approval, "changed"), false);
   assert.equal(sourceMayAnswerCurrentFact(current, "2026-09-01", false, approval, hash), false);
+  // A caller supplying the approval's own hash cannot approve a changed summary.
+  assert.equal(sourceMayAnswerCurrentFact({ ...current, summary: "Unreviewed replacement claim." }, "2026-08-22", false, approval, hash), false);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", false, { ...approval, canonicalEvidence: undefined }, hash), false);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", false, { ...approval, approvedOn: "2026-08-23" }, hash), false);
+  assert.equal(sourceMayAnswerCurrentFact(current, "2026-08-22", false, { ...approval, approvedBy: "" }, hash), false);
 });

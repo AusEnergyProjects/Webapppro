@@ -87,7 +87,7 @@ const NAVIGATION_CATEGORIES: readonly NavigationCategory[] = [
       ["/faq", "Frequently asked questions"],
       ["/trusted-suppliers", "Trusted resources"],
       ["/case-studies", "Energy savings examples"],
-      ["/platform", "How AEA helps"],
+      ["/platform", "How we help"],
       ["/direct-trade/for-trades", "TLink for trades"],
       ["/direct-trade/for-councils", "TLink for councils"],
       ["/communities-schools", "Community education"],
@@ -154,7 +154,7 @@ export function ResponsiveSiteNav({ active }: { active: SiteActive }) {
             <div className="site-nav-mobile-heading"><strong>Choose a page</strong></div>
             <div className="site-nav-mobile-groups">
               <section><h2>Compare products</h2><div>{PRODUCT_NAVIGATION_LINKS.map(([href, label]) => <Link href={href} key={href}>{label}</Link>)}</div></section>
-              <section><h2>Start here</h2><div><Link href="/guides">Find a guide</Link><Link href="/case-studies">Energy savings examples</Link><Link href="/platform">How AEA helps</Link><Link href="/direct-trade/for-trades">TLink for trades</Link><Link href="/direct-trade/for-councils">TLink for councils</Link></div></section>
+              <section><h2>Start here</h2><div><Link href="/guides">Find a guide</Link><Link href="/case-studies">Energy savings examples</Link><Link href="/platform">How we help</Link><Link href="/direct-trade/for-trades">TLink for trades</Link><Link href="/direct-trade/for-councils">TLink for councils</Link></div></section>
               {NAVIGATION_CATEGORIES.map((category) => (
                 <section key={category.label}>
                   <h2>{category.label}</h2>

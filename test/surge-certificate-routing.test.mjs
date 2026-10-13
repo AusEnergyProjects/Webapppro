@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { composeEnergyAssistantAnswer } from "../src/lib/energy-assistant.ts";
 
-const AS_OF = "2026-08-27T00:00:00.000Z";
+const AS_OF = "2026-10-13T00:00:00.000Z";
 
 function answer(query) {
   return composeEnergyAssistantAnswer(query, { asOf: AS_OF });

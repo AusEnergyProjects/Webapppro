@@ -14,7 +14,8 @@ import { generateSurgeModelAnswer } from "../src/lib/energy-assistant-model.ts";
 import { buildSurgePlanContextFromStoredAssessment } from "../src/lib/energy-assistant-plan-context.ts";
 import { parseSurgeConversationState } from "../src/lib/energy-assistant-conversation.ts";
 
-const NOW = new Date("2026-08-20T02:00:00.000Z");
+// Requests against the maintained official corpus use its current review day.
+const NOW = new Date("2026-10-13T02:00:00.000Z");
 const ORIGIN = "https://compare.example.test";
 const serverSource = readFileSync(
   new URL("../src/lib/energy-assistant-server.ts", import.meta.url),
@@ -566,7 +567,7 @@ test("production composition carries a matching maintained official link into pa
     pageContext: "/surge",
     audience: "public",
   }, { qualityRehearsal: true }), {
-    now: () => new Date("2026-09-01T00:00:00.000Z"),
+    now: () => new Date(NOW),
     reserveModelCall: allowModelCall,
     generateAnswer: async (modelRequest) => {
       observedRequest = modelRequest;
@@ -700,7 +701,7 @@ test("the maintained STC and VEEC source directory avoids a redundant live looku
     payload.reply.citations.map((citation) => citation.url),
     [
       "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements",
-      "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.19%20-%2020260324.pdf",
+      "https://www.esc.vic.gov.au/sites/default/files/documents/C%2021%2028378%20%20FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.20%20-%2020260415.pdf",
     ],
   );
   assert.doesNotMatch(JSON.stringify(payload), /cer-stc-entitlement-calculation|veu-water-space-activity-guide-v3-19/i);
@@ -716,7 +717,7 @@ test("a mixed current STC and VEEC lookup keeps exact certificate references for
     pageContext: "/surge",
     audience: "public",
   }, { qualityRehearsal: true }), {
-    now: () => new Date("2026-09-01T02:00:00.000Z"),
+    now: () => new Date(NOW),
     reserveModelCall: allowModelCall,
     requireValidatedModelForOrdinaryAdvice: true,
     generateAnswer: async (modelRequest) => {
@@ -1258,7 +1259,7 @@ test("a plain STC and VEEC definition does not inherit an old eligibility follow
     payload.reply.citations.map((citation) => citation.url),
     [
       "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-technology-certificates/calculate-small-scale-technology-certificate-entitlements",
-      "https://www.esc.vic.gov.au/sites/default/files/documents/FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.19%20-%2020260324.pdf",
+      "https://www.esc.vic.gov.au/sites/default/files/documents/C%2021%2028378%20%20FINAL%20-%20Water%20Heating%20and%20Space%20Heating%20Cooling%20Activity%20Guide%20-%20V.%203.20%20-%2020260415.pdf",
     ],
   );
   assert.doesNotMatch(JSON.stringify(payload), /cer-stc-entitlement-calculation|veu-water-space-activity-guide-v3-19/i);

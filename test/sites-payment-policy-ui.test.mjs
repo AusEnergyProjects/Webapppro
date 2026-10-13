@@ -27,7 +27,8 @@ test("retired payment providers are absent from the integration centre", () => {
 
 test("the public integrations page states the external payment boundary", () => {
   assert.match(integrationsPage, /does not initiate or process customer payments/);
-  assert.match(integrationsPage, /Only calendar and accounting connections are offered/);
+  assert.match(integrationsPage, /Calendar, accounting and business email connections are offered when\s+available/);
+  assert.match(integrationsPage, /own payment arrangements outside TLink/);
   assert.doesNotMatch(integrationsPage, /Stripe|Square|historical payment/i);
   assert.doesNotMatch(integrationsPage, /connect Stripe or Square to create a secure customer checkout link/i);
   assert.doesNotMatch(integrationsPage, /payment requests/);

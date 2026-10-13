@@ -6,6 +6,7 @@ import {
   parseSurgeStarterProfile,
 } from "../src/lib/surge-assessor-profile.ts";
 import { homeContextTips } from "../src/lib/surge-home-context-tips.ts";
+import { SURGE_REVIEWED_GUIDANCE } from "../src/data/surge-reviewed-guidance.ts";
 
 const reviewedProfile = (overrides = {}) => parseSurgeStarterProfile({
   ...EMPTY_SURGE_STARTER_PROFILE,
@@ -14,7 +15,7 @@ const reviewedProfile = (overrides = {}) => parseSurgeStarterProfile({
   ...overrides,
 });
 
-const reviewedTips = (profile) => homeContextTips(profile, { asOf: "2026-09-01" });
+const reviewedTips = (profile) => homeContextTips(profile, { asOf: "2026-10-13" });
 
 const text = (profile) => reviewedTips(profile)
   .map((tip) => `${tip.title} ${tip.detail}`)
@@ -104,8 +105,12 @@ test("solar and tariff tips explain load shifting without promoting a plan", () 
 
 test("solar guidance is shown through its review date and suppressed afterwards", () => {
   const profile = reviewedProfile({ features: ["solar"], billPressure: "hard-to-manage" });
-  const ids = (asOf) => homeContextTips(profile, { asOf }).map((tip) => tip.id);
-  assert.deepEqual(ids("2026-09-20"), ["solar-load-shift", "tariff-load-shift"]);
-  assert.deepEqual(ids("2026-09-21"), ["tariff-load-shift"]);
-  assert.deepEqual(ids("2026-09-28"), ["tariff-load-shift"]);
+  const guidance = SURGE_REVIEWED_GUIDANCE.map((item) => item.id === "solar-load-shift"
+    ? { ...item, reviewedOn: "2026-10-13", reviewDue: "2026-11-13" }
+    : item);
+  const ids = (asOf) => homeContextTips(profile, { asOf, guidance }).map((tip) => tip.id);
+  assert.deepEqual(ids("2026-11-13"), ["solar-load-shift", "tariff-load-shift"]);
+  assert.deepEqual(ids("2026-11-14"), ["tariff-load-shift"]);
+  assert.deepEqual(ids("2026-11-20"), ["tariff-load-shift"]);
+  assert.deepEqual(ids("2026-10-12"), ["tariff-load-shift"]);
 });
