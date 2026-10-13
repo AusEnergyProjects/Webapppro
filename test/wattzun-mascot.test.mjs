@@ -75,7 +75,7 @@ async function geometry(page, outer, id, control) {
 }
 
 test('all production costumes retain original face/feet anchors without warping or clipping in actual Tools and launcher', { skip: !browserPath && 'No installed browser for visual checks' }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const width of [1366, 390]) await t.test(width < 500 ? 'mobile' : 'desktop', async () => {
       const page = await browser.newPage({ viewport: { width, height: 900 } });

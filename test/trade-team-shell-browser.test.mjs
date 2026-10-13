@@ -55,7 +55,7 @@ const browserPath = [process.env.TEST_BROWSER_PATH, 'C:/Program Files/Google/Chr
 const fieldPermissions = { jobScope: 'own', scheduleScope: 'own', canViewCustomers: false, canSearchCustomers: false, canViewPriceBook: false, canManageTeam: false, canViewQuotes: false, canManageQuotes: false, canRunReports: false };
 
 test('staff inherit the shared branded shell with scoped desktop and mobile navigation', { skip: !browserPath, timeout: 90000 }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const width of [1280, 390]) await t.test(`${width}px branded shell and navigation`, async () => {
       const page = await browser.newPage({ viewport: { width, height: 900 } });

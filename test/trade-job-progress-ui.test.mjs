@@ -65,6 +65,7 @@ function panelHarness(name, initialProps, request) {
     "./TradeVeuElectricalAssessmentPanel": { TradeVeuElectricalAssessmentPanel: "TradeVeuElectricalAssessmentPanel" },
     "./TradeSwmsPanel": { TradeSwmsPanel: "TradeSwmsPanel" },
     "./TradeJobFormLibrary": { TradeJobFormLibrary: "TradeJobFormLibrary" },
+    "./TradeSafetyChecksPanel": { TradeSafetyChecksPanel: "TradeSafetyChecksPanel" },
     '@/lib/trade-business-form-design': businessFormDesign,
     '@/lib/trade-form-library.mjs': tradeFormLibrary,
     "./TradeWorkTimeTracking": { WorkTimeStatus: "WorkTimeStatus", useFormTimeTracking: () => ({ bind: {}, markCompleted() {} }) },

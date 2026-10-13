@@ -80,7 +80,7 @@ async function openFixture(browser, width, blockedStorage=false, loadFailure=fal
 }
 
 test('personal profile saves own contact details with read-only identity and usable desktop/mobile presentation', {skip:!browserPath,timeout:90000},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--disable-gpu']});
   try {for(const width of [1280,390]) {
     const page=await openFixture(browser,width),errors=[];page.on('pageerror',error=>errors.push(error.message));
     try {
@@ -116,7 +116,7 @@ test('personal profile saves own contact details with read-only identity and usa
 });
 
 test('profile save failure retains edits, prevents duplicate requests and never reports a false save', {skip:!browserPath,timeout:60000},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});const page=await openFixture(browser,390);
+  const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--disable-gpu']});const page=await openFixture(browser,390);
   try {
     await page.getByLabel('My name',{exact:true}).fill('Unsaved Joshua');
     await page.evaluate(()=>{window.fixtureSaveFailure=true;window.fixtureDelay=true;document.querySelector('form').requestSubmit();document.querySelector('form').requestSubmit()});
@@ -133,7 +133,7 @@ test('profile save failure retains edits, prevents duplicate requests and never 
 });
 
 test('actual staff preference lifecycle inherits, persists, resets and isolates identity plus selected business', {skip:!browserPath,timeout:60000},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});const page=await openFixture(browser,1280);
+  const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--disable-gpu']});const page=await openFixture(browser,1280);
   try {
     assert.equal(await page.locator('main').getAttribute('data-trade-theme'),'violet_sunset');
     await page.getByLabel('Dashboard colours',{exact:true}).selectOption('forest_jade');await page.getByLabel('Display mode',{exact:true}).selectOption('night');
@@ -157,7 +157,7 @@ test('actual staff preference lifecycle inherits, persists, resets and isolates 
 });
 
 test('profile load failures expose a working retry without empty contact details being saved', {skip:!browserPath,timeout:60000},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});const page=await openFixture(browser,390,false,true);
+  const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--disable-gpu']});const page=await openFixture(browser,390,false,true);
   try {
     await page.getByRole('alert').getByText('Profile temporarily unavailable.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'Save my profile',exact:true}).count(),0);
@@ -170,7 +170,7 @@ test('profile load failures expose a working retry without empty contact details
 });
 
 test('a stalled profile save times out visibly and ignores a late response after cancellation', {skip:!browserPath,timeout:60000},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});const page=await openFixture(browser,390);
+  const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--disable-gpu']});const page=await openFixture(browser,390);
   try {
     await page.evaluate(()=>{const original=window.setTimeout.bind(window);window.setTimeout=(callback,delay,...args)=>original(callback,delay===15000?40:delay,...args);window.fixtureDelay=true});
     await page.getByLabel('My name',{exact:true}).fill('Pending Joshua');
@@ -185,7 +185,7 @@ test('a stalled profile save times out visibly and ignores a late response after
 });
 
 test('blocked device storage keeps working choices and explains that they are not remembered', {skip:!browserPath,timeout:60000},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});const page=await openFixture(browser,390,true);
+  const browser=await chromium.launch({executablePath:browserPath,headless:true,args:['--disable-gpu']});const page=await openFixture(browser,390,true);
   try {
     await page.getByText('Your choices apply in this tab. Your browser is not allowing them to be remembered.',{exact:true}).waitFor();
     await page.getByLabel('Dashboard colours',{exact:true}).selectOption('rose_plum');

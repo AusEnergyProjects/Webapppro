@@ -32,11 +32,13 @@ const template = (extras = {}) => ({ key: 'business-electrical-check', version: 
   jurisdiction: 'AU', categories: ['electrical'], description: 'Published by this business', guidance: '', fields: [], governed: false, ...extras });
 const input = (extras = {}) => ({ serviceCategory: 'electrical', addressState: 'VIC', buildingType: 'house_townhouse', businessTemplates: [], ...extras });
 
-test('one library lists every actual Creditex activity, four canonical rental forms and PIESA without invented supporting forms', () => {
+test('new library offers rental assessment and smoke checks alongside PIESA without duplicate electrical or gas checklists', () => {
   const options = builder().buildTradeJobFormLibrary(input());
   assert.equal(options.filter(option => option.selection.kind === 'creditex').length, activityForms.activityFieldCatalogue().length);
-  assert.equal(options.filter(option => option.selection.kind === 'rental').length, 4);
+  assert.equal(options.filter(option => option.selection.kind === 'rental').length, 2);
   assert.ok(options.some(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'minimum_standards'));
+  assert.ok(options.some(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'smoke_alarm_check'));
+  assert.ok(!options.some(option => option.selection.kind === 'rental' && ['electrical_safety_check', 'gas_safety_check'].includes(option.selection.moduleKey)));
   const electrical = options.find(option => option.selection.kind === 'piesa');
   assert.equal(electrical.name, piesa.createVeuElectricalForm().title);
   assert.equal(electrical.id, 'piesa:veu-pre-installation-electrical-safety-assessment');
@@ -74,7 +76,7 @@ test('published business forms across categories remain searchable with precise 
 
 test('saved job library preserves actual worker eligibility and already attached IDs, without job answers', () => {
   const saved = { revision: 7, canAdd: true, unavailableReason: '', activities: [{ id: 'veu-1', programTemplateId: 'vic-veu', added: true, unavailableReason: 'Assigned worker must complete training.' }],
-    rentalModules: [{ id: 'minimum_standards', added: true, unavailableReason: '' }, { id: 'electrical_safety_check', added: false, unavailableReason: 'A current electrician credential is required.' }] };
+    rentalModules: [{ id: 'minimum_standards', added: true, unavailableReason: '' }, { id: 'electrical_safety_check', added: true, unavailableReason: 'A current electrician credential is required.' }] };
   // Use the canonical programme identity rather than assuming its ID.
   saved.activities[0].programTemplateId = catalogue.GOVERNMENT_PROGRAM_TEMPLATES.find(program => program.programCode === 'VEU').templateId;
   const options = builder().buildTradeJobFormLibrary(input({ saved, businessTemplates: [template()], attachedBusinessIds: ['business:business-electrical-check:3'], piesaAdded: true }));
@@ -82,6 +84,8 @@ test('saved job library preserves actual worker eligibility and already attached
   assert.equal(options.find(option => option.selection.kind === 'creditex' && option.selection.activityTemplateId === 'veu-1').unavailableReason, 'Assigned worker must complete training.');
   assert.equal(options.find(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'minimum_standards').added, true);
   assert.match(options.find(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'electrical_safety_check').unavailableReason, /electrician credential/);
+  assert.equal(options.find(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'electrical_safety_check').added, true);
+  assert.ok(!options.some(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'gas_safety_check'));
   assert.equal(options.find(option => option.selection.kind === 'business').added, true);
   assert.equal(options.find(option => option.selection.kind === 'piesa').added, true);
   assert.match(options.find(option => option.selection.kind === 'creditex' && option.selection.activityTemplateId !== 'veu-1' && option.jurisdiction === 'VIC').unavailableReason, /cannot be added|closed|commenced|specialist/);

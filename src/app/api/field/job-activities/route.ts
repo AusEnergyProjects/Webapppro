@@ -20,6 +20,8 @@ export const runtime = "edge";
 type Row = Record<string, unknown>;
 const text = (value: unknown) => String(value || "");
 const editableInspection = new Set(["draft", "scheduled", "in_progress"]);
+const officialSafetyModules = new Set(["electrical_safety_check", "gas_safety_check"]);
+const officialSafetyInstruction = "Add the official electrical or gas safety check from this job's Forms section. Existing rental records remain available on the job.";
 
 function serviceCapabilityIds(serviceCategory: string) {
   const canonical = LEGACY_ENERGY_SERVICE_ALIASES[serviceCategory] || serviceCategory;
@@ -113,7 +115,10 @@ async function options(context: Context) {
           actorMemberId: context.access.memberId, assignedMemberId: text(context.job.assignee_member_id),
           activityTemplateId: activity.templateId }),
     })));
-  const rentalModules = await Promise.all(RENTAL_ASSESSMENT_MODULES.map(async (module) => ({
+  const attachedModuleKeys = new Set(context.attachedModules.map(module => text(module.module_key)));
+  const rentalModules = await Promise.all(RENTAL_ASSESSMENT_MODULES
+    .filter(module => !officialSafetyModules.has(module.key) || attachedModuleKeys.has(module.key))
+    .map(async (module) => ({
     id: module.key, title: text(context.attachedModules.find((entry) => entry.module_key === module.key)?.template_name)
       || (module.key === "minimum_standards" ? "Rental assessment + 2027 standards" : module.key === "smoke_alarm_check" ? "Smoke alarm and blind cord safety check" : module.label),
     added: selectedModules.includes(module.key),
@@ -121,7 +126,8 @@ async function options(context: Context) {
       || (context.inspection && !editableInspection.has(text(context.inspection.status)) ? "The rental report is already being issued or has been issued." : "")
       || await workerReason(context, "rental-inspection", module.key),
   })));
-  const rentalVisits = RENTAL_VISIT_PRESETS.map((preset) => {
+  const rentalVisits = RENTAL_VISIT_PRESETS.filter(preset => !preset.moduleKeys.some(key => officialSafetyModules.has(key))
+    || preset.moduleKeys.every(key => attachedModuleKeys.has(key))).map((preset) => {
     const entries = preset.moduleKeys.map((key) => rentalModules.find((entry) => entry.id === key)!);
     const oldSmoke = context.attachedModules.some((entry) => entry.module_key === "smoke_alarm_check"
       && Number(entry.template_version) < RENTAL_SAFETY_TEMPLATE_VERSION);
@@ -174,6 +180,12 @@ export async function POST(request: Request) {
     const catalogue = await options(current);
     const kind = body.kind;
     const visit = kind === "rental_visit" ? rentalVisitPreset(body.presetKey) : null;
+    const requestedSafetyKeys = kind === "rental" && typeof body.moduleKey === "string"
+      ? [body.moduleKey] : visit?.moduleKeys || [];
+    if (requestedSafetyKeys.some(key => officialSafetyModules.has(key)
+      && !current.attachedModules.some(module => module.module_key === key))) {
+      return adminJson({ ok: false, error: officialSafetyInstruction }, 409);
+    }
     const selected = kind === "rental_visit" ? catalogue.rentalVisits.find((item) => item.id === visit?.key)
       : kind === "rental" ? catalogue.rentalModules.find((item) => item.id === body.moduleKey)
       : kind === "program" ? catalogue.activities.find((item) => item.id === body.activityTemplateId && item.programTemplateId === body.programTemplateId) : null;

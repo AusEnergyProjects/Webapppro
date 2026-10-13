@@ -30,7 +30,7 @@ test("verified dashboard footer remains inside the shell containing the sticky h
 });
 
 test("both top bars remain visible and the independently scrolling rail fills the viewport through the footer", { skip: !browserPath && "No installed browser is available for layout checks" }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const scenario of [
       { name: "live desktop with business context bar", width: 2276, height: 1030, headerHeight: 72 },

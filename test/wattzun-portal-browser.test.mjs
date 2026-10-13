@@ -203,7 +203,7 @@ const css = bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
 const modes = fs.readFileSync(path.join(root, 'src/app/tlink-colour-mode.css'), 'utf8');
 
 test('Wattzun speed settings, clarifications and connected recovery remain usable in desktop and mobile day/night layouts', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const scenario of [{name:'desktop-day',width:1366,height:900,mode:'day'}, {name:'desktop-night',width:1366,height:900,mode:'night'}, {name:'mobile-day',width:390,height:844,mode:'day'}, {name:'mobile-night',width:390,height:844,mode:'night'}]) await t.test(scenario.name, async () => {
       const page = await browser.newPage({ viewport: { width: scenario.width, height: scenario.height } });
@@ -297,7 +297,7 @@ test('Wattzun speed settings, clarifications and connected recovery remain usabl
 });
 
 test('starting a call wires the literal greeting to the current authenticated portal without adding a question or conversation turn', { skip: !browserPath && 'No installed browser for greeting wiring checks' }, async t => {
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const layout of [{name:'desktop',width:1366,height:900,speed:0.85},{name:'mobile',width:390,height:844,speed:1.15}]) {
       for(const named of [true,false]) for(const [portal,pathname] of [['trade','/direct-trade/dashboard'],['council','/council'],['creditex','/creditex/compliance']]) await t.test(`${layout.name}-${portal}-${named?'named':'unnamed'}`,async()=>{
@@ -356,7 +356,7 @@ async function screenshot(page, scenario, state) {
 }
 
 test('voice-only conversations retain heard facts through a failed reply without displaying dictation or inventing delivered speech',{skip:!browserPath&&'No installed browser for voice continuity'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -403,7 +403,7 @@ test('voice-only conversations retain heard facts through a failed reply without
 });
 
 test('late spoken name address and corrections persist once in current call history without displaying dictation',{skip:!browserPath&&'No installed browser for native input memory'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390),dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
     await dialog.getByRole('button',{name:'Call Wattzun',exact:true}).click();
@@ -437,7 +437,7 @@ test('late spoken name address and corrections persist once in current call hist
 });
 
 test('delivered native history contains the exact single question spoken while its workflow retains all requirements',{skip:!browserPath&&'No installed browser for native narration history'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390),dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
     const questions=['Which job is this for?','Which invoice should the reminder use?','When should payment be requested?'];
@@ -458,7 +458,7 @@ test('delivered native history contains the exact single question spoken while i
 });
 
 test('failure-summary continuity rejects mismatched request IDs malformed text and context changes',{skip:!browserPath&&'No installed browser for failure memory gates'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const variant of ['wrong-id','unsafe-summary','context-change'])await t.test(variant,async()=>{
       const page=await contextPage(browser,390),dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -483,7 +483,7 @@ test('failure-summary continuity rejects mismatched request IDs malformed text a
 });
 
 test('actual greeting and voice callbacks distinguish terminal auth failures from recoverable provider failures', {skip:!browserPath&&'No installed browser for call error wiring'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const layout of [{name:'desktop',width:1366,height:900},{name:'mobile',width:390,height:844}]) {
       for(const failure of [
@@ -555,7 +555,7 @@ test('actual greeting and voice callbacks distinguish terminal auth failures fro
 });
 
 test('authentication, scope selection and pagehide still dispose a recovering call', {skip:!browserPath&&'No installed browser for call boundary wiring'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const boundary of ['authentication','scope','pagehide']) await t.test(boundary,async()=>{
       const page=await browser.newPage({viewport:{width:390,height:844}});
@@ -586,7 +586,7 @@ test('authentication, scope selection and pagehide still dispose a recovering ca
 });
 
 test('a call and its conversation survive guarded workspace links, client route changes and minimising until an explicit boundary', { skip: !browserPath && 'No installed browser for call navigation checks' }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const [portal, pathname] of [['trade','/direct-trade/dashboard'],['trade','/direct-trade/team'],['council','/council'],['creditex','/creditex/compliance']]) await t.test(portal+(pathname.endsWith('/team')?'-staff':''), async () => {
       const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -667,7 +667,7 @@ test('a call and its conversation survive guarded workspace links, client route 
 });
 
 test('a voice action opens its review, preserves the call through receipt confirmation and opens the saved quote on the staff route', { skip: !browserPath && 'No installed browser for action integration checks' }, async () => {
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await browser.newPage({viewport:{width:1366,height:900}});
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -744,7 +744,7 @@ function guidedReply(index,state='question',options={}) {
 }
 
 test('guided call saves successive spoken answers and completes the actual selected form without per-answer review clicks',{skip:!browserPath&&'No installed browser for hands-free form checks'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try { for(const width of [1366,390]) await t.test(String(width),async()=>{
     const first={...guidedReference,recordId:'pack-guide-1'};
     const page=await contextPage(browser,width,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(2,'question',{saved:true}),guidedReply(3,'ready_to_complete',{saved:true}),guidedReply(4,'complete')]});
@@ -779,7 +779,7 @@ test('guided call saves successive spoken answers and completes the actual selec
 });
 
 test('guided saves refresh a remounted editor at its current revision and keep the original in-flight cue',{skip:!browserPath&&'No installed browser for guided remount'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(2,'question',{saved:true}),guidedReply(3,'capture',{saved:true})]});
     await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
@@ -812,7 +812,7 @@ test('guided saves refresh a remounted editor at its current revision and keep t
 });
 
 test('a lost guided answer retains the exact pending request for read-only recovery and keeps the same call',{skip:!browserPath&&'No installed browser for guided recovery'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1)]});
     await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
@@ -833,7 +833,7 @@ test('a lost guided answer retains the exact pending request for read-only recov
 });
 
 test('transport timeout reconciliation reads the exact guided receipt without replaying the answer',{skip:!browserPath&&'No installed browser for guided recovery'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1)]});
     await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
@@ -861,7 +861,7 @@ test('transport timeout reconciliation reads the exact guided receipt without re
 });
 
 test('receipt reconciliation cannot retry an unestablished guide start',{skip:!browserPath&&'No installed browser for guided recovery'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureFailures:{'/api/wattzun/form-guide':{network:true,message:'Synthetic start response lost'}}});
     await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
@@ -873,7 +873,7 @@ test('receipt reconciliation cannot retry an unestablished guide start',{skip:!b
 });
 
 test('guided photo handoff advances only after the exact canonical capture notification and preserves the call',{skip:!browserPath&&'No installed browser for guided camera handoff'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1,'capture'),guidedReply(2)]});
     await page.evaluate(()=>{
@@ -897,7 +897,7 @@ test('guided photo handoff advances only after the exact canonical capture notif
 });
 
 test('guided repeat pause and resume reuse the same microphone and preserve explicit paused intent',{skip:!browserPath&&'No installed browser for guided controls'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(1),guidedReply(1,'paused'),guidedReply(1)]});
     await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
@@ -916,7 +916,7 @@ test('guided repeat pause and resume reuse the same microphone and preserve expl
 });
 
 test('typing after hanging up uses normal chat while a subsequent call resumes its guided form',{skip:!browserPath&&'No installed browser for guided chat handoff'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390,'trade',{wattzunFixtureGreetingEnabled:true,wattzunFixtureGuideReplies:[guidedReply(1),guidedReply(1)]});
     await page.evaluate(reference=>void window.wattzunFixtureOpen({userUid:'synthetic-user',portal:'trade',scopeId:'synthetic-business',mode:'call',guidedForm:true,workReference:reference}),{...guidedReference,recordId:'pack-guide-1'});
@@ -938,7 +938,7 @@ test('typing after hanging up uses normal chat while a subsequent call resumes i
 });
 
 test('guided official product search persists the exact source query and refreshes a confirmed native step',{skip:!browserPath&&'No installed browser for product guide'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const product=guidedReply(1);
     product.action={kind:'search_form_products',dependencyKey:'product',search:'Example model'};
@@ -958,7 +958,7 @@ test('guided official product search persists the exact source query and refresh
 });
 
 test('a short signing handoff opens the native question and continues only after a matching saved control',{skip:!browserPath&&'No installed browser for signature handoff'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const signature=guidedReply(1,'manual');
     signature.formGuide.next={kind:'manual',fieldKey:'customer_signature',label:'Customer signature',type:'signature',options:[],reason:'Please review and sign this declaration on screen.'};
@@ -990,7 +990,7 @@ function quoteEditorResult(descriptions) {
 }
 
 test('saved Wattzun quotes refresh the mounted canonical editor and same-URL receipts preserve the active call',{skip:!browserPath&&'No installed browser for canonical quote refresh'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const confirmation of ['button','voice'])await t.test(confirmation,async()=>{
       const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line','Second existing line']),wattzunFixtureQuoteSaved:quoteEditorResult(['Existing line','Second existing line','Wattzun supplied line'])});
@@ -1023,7 +1023,7 @@ test('saved Wattzun quotes refresh the mounted canonical editor and same-URL rec
 });
 
 test('canonical quote refresh ignores other actors businesses and jobs and retains manual edits until explicit load',{skip:!browserPath&&'No installed browser for manual quote refresh'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line'])}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
@@ -1042,7 +1042,7 @@ test('canonical quote refresh ignores other actors businesses and jobs and retai
 });
 
 test('a newer quote save during canonical refresh cannot be lost behind an older response',{skip:!browserPath&&'No installed browser for quote refresh races'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line'])}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
@@ -1056,7 +1056,7 @@ test('a newer quote save during canonical refresh cannot be lost behind an older
 });
 
 test('quote refresh callback changes keep its request alive and availability cancellation releases only refresh-owned busy state',{skip:!browserPath&&'No installed browser for quote refresh lifecycle'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,1366,'trade',{wattzunFixtureQuoteEditor:true,wattzunFixtureQuoteServer:quoteEditorResult(['Existing line'])}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));await page.getByLabel('Line 1 description',{exact:true}).waitFor();await page.keyboard.press('Escape');
@@ -1082,7 +1082,7 @@ test('quote refresh callback changes keep its request alive and availability can
 });
 
 test('an open quote send review retains its reviewed lines and consent until the saved draft is explicitly loaded',{skip:!browserPath&&'No installed browser for protected quote send review'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const before=quoteEditorResult(['Existing line']),after=quoteEditorResult(['Existing line','Saved addition']);
     for(const result of [before,after]){result.authorisedEmails=['john@example.test'];result.quote.versions[0].customerEmail='john@example.test';result.quote.versions[0].terms='Agreed supplied scope and completion terms.';}
@@ -1105,7 +1105,7 @@ test('an open quote send review retains its reviewed lines and consent until the
 });
 
 test('work selection discards stale text, isolates history and keeps drafts and sources usable on desktop/mobile',{skip:!browserPath&&'No installed browser for selected work checks'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const width of [1366,390])await t.test(String(width),async()=>{
       const page=await contextPage(browser,width);const errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -1148,7 +1148,7 @@ test('work selection discards stale text, isolates history and keeps drafts and 
 });
 
 test('changing work during a pending voice reply cancels old audio and retains the same connected call',{skip:!browserPath&&'No installed browser for selected voice work checks'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const width of [1366,390])await t.test(String(width),async()=>{
       const page=await contextPage(browser,width);const errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -1182,7 +1182,7 @@ test('changing work during a pending voice reply cancels old audio and retains t
 });
 
 test('Council and Creditex selections use their exact portal reference in text and the same ongoing call',{skip:!browserPath&&'No installed browser for role-specific context checks'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     for(const [portal,reference] of [['council',{kind:'council_report',period:'year'}],['creditex',{kind:'creditex_audit',recordId:'audit-one'}]])await t.test(portal,async()=>{
       const page=await contextPage(browser,390,portal);const errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -1209,7 +1209,7 @@ test('Council and Creditex selections use their exact portal reference in text a
 });
 
 test('different-record or unsafe response context never reaches chat or voice playback',{skip:!browserPath&&'No installed browser for response context validation'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try {
     const page=await contextPage(browser,390);const errors=[];page.on('pageerror',error=>errors.push(error.message));const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
     await selectFixtureWork(page,'job-a','Question for A');
@@ -1226,7 +1226,7 @@ test('different-record or unsafe response context never reaches chat or voice pl
 });
 
 test('a server-prepared operational review appears without another prepare request and its actual receipt opens on the staff route',{skip:!browserPath&&'No installed browser for workflow integration checks'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1262,7 +1262,7 @@ test('a server-prepared operational review appears without another prepare reque
 });
 
 test('a spoken exact approval executes once and speaks the server-verified receipt on the same call',{skip:!browserPath&&'No installed browser for spoken workflow confirmation'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1296,7 +1296,7 @@ test('a spoken exact approval executes once and speaks the server-verified recei
 });
 
 test('changing selected work revokes a pending workflow and an old voice approval never targets the new job',{skip:!browserPath&&'No installed browser for workflow selection boundaries'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1318,7 +1318,7 @@ test('changing selected work revokes a pending workflow and an old voice approva
 });
 
 test('a different review approval cannot execute the current workflow and a correct retry preserves the same call',{skip:!browserPath&&'No installed browser for exact workflow approval boundaries'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1342,7 +1342,7 @@ test('a different review approval cannot execute the current workflow and a corr
 });
 
 test('a failed receipt narration retains the actual saved outcome in follow-up history and never repeats the send',{skip:!browserPath&&'No installed browser for completed workflow speech failures'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1374,7 +1374,7 @@ test('a failed receipt narration retains the actual saved outcome in follow-up h
 });
 
 test('form voice UI wiring preserves selected context through two reviewed saves and emits exact editor refresh receipts',{skip:!browserPath&&'No installed browser for form voice UI wiring'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1447,7 +1447,7 @@ test('form voice UI wiring preserves selected context through two reviewed saves
 });
 
 test('a lost form-save acknowledgement recovers through the next voice reply and clears the old review',{skip:!browserPath&&'No installed browser for form receipt recovery'},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     const page=await contextPage(browser,390),errors=[];page.on('pageerror',error=>errors.push(error.message));
     const dialog=page.getByRole('dialog',{name:'Wattzun',exact:true});
@@ -1485,7 +1485,7 @@ test('a lost form-save acknowledgement recovers through the next voice reply and
 });
 
 test('structured spoken workspace navigation opens the destination and docks the same call in each portal',{skip:!browserPath&&'No installed browser for voice navigation UI wiring'},async t=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     for(const [portal,destinationId,expectedPath,expectedWorkspace] of [
       ['trade','trade_schedule','/direct-trade/team','schedule'],

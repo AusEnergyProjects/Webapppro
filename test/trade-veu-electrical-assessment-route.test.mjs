@@ -14,7 +14,8 @@ function fixture(){
   const record={id:'assessment',workOrderId:'job',revision:2,status:'draft'};
   const service={};
   for(const name of ['attestPiesaInitial','completePiesaRecord','readPiesaRecord','savePiesaAnswers','signPiesaDeclaration','startPiesaRecord','uploadPiesaEvidence'])service[name]=async(...args)=>{calls.push({name,args});return record;};
-  service.piesaPresentation=async(actor,value)=>{assert.equal(actor,access);return {...value,delivery:[]};};
+  service.piesaPresentation=async(actor,value,jobProgress)=>{assert.equal(actor,access);return {...value,delivery:[],...(jobProgress?{jobProgress}:{})};};
+  for(const name of ['completePiesaRecordWithProgress','recoverPiesaJobProgress'])service[name]=async(...args)=>{calls.push({name,args});return{record:{...record,status:'complete'},jobProgress:{changed:false,stage:'in_progress',pending:true,blockers:[{key:'job_progress_pending',label:'The form is saved. Job status is waiting to sync.',target:'sync'}]}};};
   service.listPiesaRecords=async(...args)=>{calls.push({name:'listPiesaRecords',args});return[record];};
   service.retryPiesaDelivery=async(...args)=>{calls.push({name:'retryPiesaDelivery',args});return{...record,status:'complete',delivery:[{role:'customer',status:'blocked'}]};};
   service.readPiesaPdf=async(...args)=>{calls.push({name:'readPiesaPdf',args});return{bytes:new TextEncoder().encode('%PDF-private'),contentType:'application/pdf',fileName:'PIESA-1.pdf'};};
@@ -69,6 +70,25 @@ test('canonical signature rejection is a correctable validation result and recip
   assert.equal((await h.route.POST(json({action:'sign',recordId:'assessment',baseRevision:2,declarationKey:'property_owner',signerName:'Sam',scopeSha256:'a'.repeat(64),strokes:[],accepted:true}))).status,400);
   const response=await h.route.POST(json({action:'retry_delivery',recordId:'assessment'})),data=await response.json();
   assert.equal(response.status,200);assert.equal(data.record.status,'complete');assert.equal(data.record.delivery[0].status,'blocked');
+});
+
+test('explicit PIESA completion and recovery return authoritative progress without making GET mutate',async()=>{
+  const h=fixture();
+  const completed=await h.route.POST(json({action:'complete',recordId:'assessment',baseRevision:2,requestId:'complete-1'}));
+  assert.equal(completed.status,200);const completeData=await completed.json();
+  assert.equal(completeData.record.status,'complete');assert.equal(completeData.record.jobProgress.pending,true);
+  assert.equal(h.calls[0].name,'completePiesaRecordWithProgress');assert.deepEqual(h.calls[0].args.slice(1),['assessment',2,'complete-1']);
+  const recovered=await h.route.POST(json({action:'recover_progress',recordId:'assessment',baseRevision:2}));
+  assert.equal(recovered.status,200);assert.equal((await recovered.json()).record.jobProgress.blockers[0].key,'job_progress_pending');
+  assert.equal(h.calls[1].name,'recoverPiesaJobProgress');assert.deepEqual(h.calls[1].args.slice(1),['assessment',2]);
+  const read=await h.route.GET(new Request('https://test.example/api?recordId=assessment'));
+  assert.equal(read.status,200);assert.equal('jobProgress' in (await read.json()).record,false);
+  assert.deepEqual(h.calls.map(call=>call.name),['completePiesaRecordWithProgress','recoverPiesaJobProgress','readPiesaRecord']);
+  assert.equal((await h.route.POST(json({action:'recover_progress',recordId:'assessment',baseRevision:'2'}))).status,400);
+  h.origin(false);assert.equal((await h.route.POST(json({action:'recover_progress',recordId:'assessment',baseRevision:2}))).status,403);
+  h.origin(true);h.access({canViewFieldEvidence:true,canManageFieldEvidence:false});
+  assert.equal((await h.route.POST(json({action:'recover_progress',recordId:'assessment',baseRevision:2}))).status,403);
+  assert.equal(h.calls.length,3);
 });
 test('multipart evidence binds the selected native field and rejects excess bytes before parsing',async()=>{
   const h=fixture(),data=new FormData();data.set('action','upload');data.set('recordId','assessment');data.set('baseRevision','2');data.set('fieldKey','life_support_record');data.set('file',new File(['%PDF-test'],'consent.pdf',{type:'application/pdf'}));data.set('requestId','upload-1');

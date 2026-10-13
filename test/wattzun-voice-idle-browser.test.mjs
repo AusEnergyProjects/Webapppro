@@ -51,7 +51,7 @@ test("native Chrome captures the complete ten-second sentence after 43 seconds i
   });
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));let browser;
   try {
-    browser=await chromium.launch({executablePath:browserPath,headless:true,args:["--mute-audio"]});const page=await browser.newPage();const errors=[];page.on("pageerror",error=>errors.push(error.message));
+    browser=await chromium.launch({executablePath:browserPath,headless:true,args:["--mute-audio", '--disable-gpu']});const page=await browser.newPage();const errors=[];page.on("pageerror",error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.getByRole("button",{name:"Start idle call"}).click();
     await page.waitForFunction(()=>window.idleVoice.started||window.idleVoice.error);assert.equal(await page.evaluate(()=>window.idleVoice.error),null);
     await page.waitForFunction(()=>window.idleVoice.inputTime()>=window.idleVoice.speechStartsAt-.1,{},{timeout:65000});

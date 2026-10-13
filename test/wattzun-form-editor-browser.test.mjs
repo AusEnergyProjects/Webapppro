@@ -53,7 +53,7 @@ async function fixture(browser, readOnly = false) {
 async function rendered(page) { await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); }
 
 test("actual trade form editor safely hands saved context to Wattzun and refreshes confirmed answers", { skip: !browserPath, timeout: 30000 }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     await t.test("unsaved manual answers are committed before opening the exact selected form", async () => {
       const { page, errors } = await fixture(browser);

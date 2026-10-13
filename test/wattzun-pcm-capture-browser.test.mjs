@@ -51,7 +51,7 @@ test("native Chrome loads same-origin worklet modules and captures resampled WAV
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: browserPath, headless: true });
+    browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/`); await page.getByRole("button", { name: "Start synthetic capture" }).click();
     await page.waitForFunction(() => window.fixture.started || window.fixture.error);

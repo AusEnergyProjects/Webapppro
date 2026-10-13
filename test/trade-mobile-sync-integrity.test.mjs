@@ -531,6 +531,7 @@ function syncDatabase(stage = "in_progress", revision = 5) {
     "utf8",
   ));
   database.exec(fs.readFileSync(new URL("../drizzle/0256_trade_veu_electrical_assessments.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0262_trade_official_safety_checks.sql", import.meta.url), "utf8"));
   database.prepare(`INSERT INTO trade_work_orders
     (id, firebase_uid, partner_type, record_status, stage, revision, updated_at)
     VALUES ('job-1', 'owner-1', 'installer', 'active', ?, ?, 'initial')`)

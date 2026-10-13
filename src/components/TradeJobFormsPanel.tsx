@@ -2,6 +2,7 @@
 
 import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
 import { TradeJobFormLibrary } from "./TradeJobFormLibrary";
+import { TradeSafetyChecksPanel } from "./TradeSafetyChecksPanel";
 import type { TradeJobFormLibraryOption } from "@/lib/trade-job-form-library";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -18,7 +19,7 @@ type Template = { key: string; version: number; name: string; jurisdiction: stri
 type FormRecord = { id: string; templateKey: string; templateVersion: number; templateName: string; jurisdiction: string; template: { guidance: string; fields: Field[] }; answers: Record<string, string | boolean>; status: string; revision: number; ready: boolean; missing: string[]; completedAt: string };
 type Result = { ok?: boolean; jobProgress?: { pending?: boolean }; protectedJob?: boolean; serviceCategory?: string; templates?: Template[]; forms?: FormRecord[]; error?: string };
 
-export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, libraryOpen: controlledLibraryOpen, onLibraryOpenChange, onChanged }: { user: User; workOrderId: string; readOnly?: boolean; libraryOpen?: boolean; onLibraryOpenChange?: (open: boolean) => void; onChanged?: () => Promise<void> }) {
+export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, canManageSafetyDelivery = false, libraryOpen: controlledLibraryOpen, onLibraryOpenChange, onChanged }: { user: User; workOrderId: string; readOnly?: boolean; canManageSafetyDelivery?: boolean; libraryOpen?: boolean; onLibraryOpenChange?: (open: boolean) => void; onChanged?: () => Promise<void> }) {
   const fetch = useTradeBusinessFetch();
   const [result, setResult] = useState<Result>({ templates: [], forms: [] });
   const [loading, setLoading] = useState(true);
@@ -115,6 +116,7 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, librar
   const showLibrary = controlledLibraryOpen ?? libraryOpen ?? !(result.forms || []).length;
 
   return <div className="crm-job-forms">
+    <TradeSafetyChecksPanel user={user} workOrderId={workOrderId} readOnly={readOnly} canManageDelivery={canManageSafetyDelivery} refreshKey={libraryRevision} onChanged={onChanged} />
     <header><div><span>Forms</span><h4>{readOnly ? "Saved job forms" : "Forms for this job"}</h4></div><small>Rental assessments and Creditex records open in their own sections on this job.</small></header>
     <section className="crm-active-forms"><header><strong>Business forms</strong><span>{(result.forms || []).filter((form) => form.status === "complete").length}/{(result.forms || []).length} complete</span></header>
       {(result.forms || []).length ? (result.forms || []).map((form) => <JobForm key={form.id} userUid={user.uid} onReload={reloadForm} form={form} workOrderId={workOrderId} disabled={readOnly || busy === `save:${form.id}`} readOnly={readOnly} onSave={save} />) : <div className="crm-empty"><strong>No business forms added yet</strong><span>{readOnly ? "There are no field forms to review." : "Search the form library to add a rental assessment, Creditex form or published business form."}</span></div>}

@@ -12,8 +12,9 @@ import { PiesaError, type PiesaRecord, type PiesaPresentation, type PiesaDeliver
 import { ensurePiesaSchemaGuards } from "./trade-veu-electrical-schema-guards";
 import { createPiesaDraft } from "./trade-veu-electrical-draft";
 import { sendTradeCustomerEmail } from "./trade-email-server";
+import { safetyCheckEmailDraft } from "./safety-check-email";
 import { reminderProviderFailureOutcome } from "./service-reminder-delivery";
-import { reconcileTradeFormJobProgress } from "./trade-form-job-progress";
+import { reconcileTradeFormJobProgress, type FormJobProgress } from "./trade-form-job-progress";
 
 type Row = { id:string;work_order_id:string;owner_uid:string;revision:number;status:string;payload:string;payload_sha256:string;
   pdf_object_key:string;pdf_sha256:string;pdf_size_bytes:number;actor_uid:string;created_at:string;updated_at:string;completed_at:string };
@@ -327,9 +328,10 @@ export async function uploadPiesaEvidence(access:TeamAccess,id:string,baseRevisi
   await scope(access,previous.workOrderId,true);await bucket().put(objectKey,bytes,{httpMetadata:{contentType},customMetadata:{sha256:item.sha256,assessmentId:id}});
   return commit(access,previous,next,"upload",key,hash);
 }
-export async function completePiesaRecord(access:TeamAccess,id:string,baseRevision:number,keyInput?:string):Promise<PiesaRecord> {
+export type PiesaCompletionResult = { record:PiesaRecord; jobProgress:FormJobProgress };
+export async function completePiesaRecordWithProgress(access:TeamAccess,id:string,baseRevision:number,keyInput?:string):Promise<PiesaCompletionResult> {
   const key=requestKey(keyInput),hash=activityHash({operation:"complete",baseRevision}),duplicate=await replay(access,id,key,"complete",baseRevision,hash);
-  if(duplicate){await reconcileTradeFormJobProgress(access,duplicate.workOrderId,{afterSave:true});await retryPiesaDelivery(access,id);return duplicate;}
+  if(duplicate){const jobProgress=await reconcileTradeFormJobProgress(access,duplicate.workOrderId,{afterSave:true});await retryPiesaDelivery(access,id);return {record:duplicate,jobProgress};}
   const previous=await readPiesaRecord(access,id);expected(previous,baseRevision);
   const completion=veuElectricalCompletion(previous);if(!completion.ready)fail("PIESA_INCOMPLETE",`Complete the required assessment items: ${completion.missing.map(item=>item.label).join("; ")}`);
   await scope(access,previous.workOrderId,true);
@@ -342,8 +344,22 @@ export async function completePiesaRecord(access:TeamAccess,id:string,baseRevisi
   await bucket().put(pdfKey,bytes,{httpMetadata:{contentType:"application/pdf"},customMetadata:{sha256:pdfHash,assessmentId:id,revision:String(next.revision),retention:"immutable-completed-assessment"}});
   const contacts=await recipients(access.ownerUid,previous.workOrderId);
   const saved=await commit(access,previous,next,"complete",key,hash,{key:pdfKey,hash:pdfHash,size:bytes.length},contacts);
-  await reconcileTradeFormJobProgress(access,saved.workOrderId,{afterSave:true});
-  await retryPiesaDelivery(access,id);return saved;
+  const jobProgress=await reconcileTradeFormJobProgress(access,saved.workOrderId,{afterSave:true});
+  await retryPiesaDelivery(access,id);return {record:saved,jobProgress};
+}
+/** Existing guided-form callers consume the same authoritative completion path. */
+export async function completePiesaRecord(access:TeamAccess,id:string,baseRevision:number,keyInput?:string):Promise<PiesaRecord> {
+  return (await completePiesaRecordWithProgress(access,id,baseRevision,keyInput)).record;
+}
+/** Reconcile an already completed assessment without rendering or delivering it again. */
+export async function recoverPiesaJobProgress(access:TeamAccess,id:string,baseRevision:number):Promise<PiesaCompletionResult> {
+  const {record}=await stored(access,id);
+  await scope(access,record.workOrderId,true,true);
+  if(record.status!=="complete")fail("PIESA_PDF_NOT_READY","Complete the assessment before updating job progress.");
+  if(!Number.isSafeInteger(baseRevision)||record.revision!==baseRevision)fail("PIESA_REVISION_CONFLICT","This assessment changed. Refresh it before updating job progress.");
+  await readPiesaPdf(access,id);
+  const jobProgress=await reconcileTradeFormJobProgress(access,record.workOrderId);
+  return {record,jobProgress};
 }
 export async function readPiesaPdf(access:TeamAccess,id:string) {
   const {row,record}=await stored(access,id);
@@ -362,7 +378,7 @@ function deliveryMessage(row:DeliveryRow) {
   if(row.status==="failed")return "The completed PDF is saved. Email delivery failed and can be retried.";
   return row.status==="sending"?"The email is being sent.":"The completed PDF is queued for email.";
 }
-export async function piesaPresentation(access:TeamAccess,record:PiesaRecord):Promise<PiesaPresentation> {
+export async function piesaPresentation(access:TeamAccess,record:PiesaRecord,jobProgress?:FormJobProgress):Promise<PiesaPresentation> {
   await scope(access,record.workOrderId);const {ownerUid,evidence,...publicRecord}=record;void ownerUid;
   const completion=veuElectricalCompletion(record);
   const editable=access.canManageFieldEvidence&&record.status==="draft"&&!record.signatures.length&&!record.initialAttestation;
@@ -374,17 +390,27 @@ export async function piesaPresentation(access:TeamAccess,record:PiesaRecord):Pr
     ...(defaults?{businessContactSuggestion:defaults.businessContactSuggestion,
       signerDefaults:{customer:String(record.answers.owner_name||prefillAnswers.owner_name||""),technician:String(record.answers.initial_electrician_name||prefillAnswers.initial_electrician_name||"")}}:{}),
     signingScopes:{before:activitySigningScope(record,"before"),after:activitySigningScope(record,"after")},signerFields:VEU_ELECTRICAL_SIGNER_FIELDS,reportUrl:record.status==="complete"?`${API}?recordId=${encodeURIComponent(record.id)}&view=pdf`:"",
-    delivery:(await deliveryRows(access,record.id)).map(row=>({role:row.recipient_role,status:row.status,message:deliveryMessage(row),acceptedAt:row.accepted_at}))};
+    delivery:(await deliveryRows(access,record.id)).map(row=>({role:row.recipient_role,status:row.status,message:deliveryMessage(row),acceptedAt:row.accepted_at})),
+    ...(jobProgress?{jobProgress}:{})};
 }
 export async function retryPiesaDelivery(access:TeamAccess,id:string) {
   const {record}=await stored(access,id);await scope(access,record.workOrderId,true,true);
   if(record.status!=="complete")fail("PIESA_PDF_NOT_READY","Complete the assessment first.");
   const db=getD1();const pdf=await readPiesaPdf(access,id);
+  const business=await db.prepare(`SELECT business_name,email,COALESCE(NULLIF(document_phone,''),phone) phone
+    FROM trade_accounts a WHERE firebase_uid=? AND partner_type='installer' AND ${verifiedTradeAccountPredicate("a")}`)
+    .bind(access.ownerUid).first<{business_name:string;email:string;phone:string}>();
+  if(!business)fail("PIESA_ACCESS_REQUIRED","Active authorised business access is required.",403);
+  const draft=safetyCheckEmailDraft({businessName:business.business_name,recordNumber:record.recordNumber,
+    title:"Pre-installation electrical safety assessment",propertyAddress:String(record.answers.property_address||""),
+    inspectionDate:String(record.answers.inspection_date||""),inspectorName:String(record.answers.initial_electrician_name||""),
+    photoCount:0,businessEmail:email(business.email),businessPhone:business.phone,
+    actionRequired:"Read the recorded outcome, conditions and required controls before arranging insulation work. Provide this assessment to the insulation installer and property owner or representative at least 24 hours before installation."});
   let binary="";for(let i=0;i<pdf.bytes.length;i+=8192)binary+=String.fromCharCode(...pdf.bytes.subarray(i,i+8192));
   for(const row of await deliveryRows(access,id)) {
     if(row.status==="accepted"||row.status==="reconciliation_required")continue;
     const now=stamp(),key=deliveryKey(id,row.recipient_role);
-    const proof=await db.prepare("SELECT status,provider,provider_message_id FROM trade_email_submissions WHERE owner_uid=? AND request_key=?").bind(access.ownerUid,key).first<{status:string;provider:string;provider_message_id:string}>();
+    const proof=await db.prepare("SELECT status,provider,provider_message_id,subject FROM trade_email_submissions WHERE owner_uid=? AND request_key=?").bind(access.ownerUid,key).first<{status:string;provider:string;provider_message_id:string;subject:string}>();
     if(proof?.status==="accepted") {await db.prepare("UPDATE trade_veu_electrical_deliveries SET status='accepted',provider=?,provider_message_id=?,accepted_at=?,lease_token='',lease_expires_at='',updated_at=? WHERE record_id=? AND owner_uid=? AND recipient_role=?")
       .bind(proof.provider,proof.provider_message_id,now,now,id,access.ownerUid,row.recipient_role).run();continue;}
     if(proof && ["sending","uncertain"].includes(proof.status)) {await db.prepare("UPDATE trade_veu_electrical_deliveries SET status='reconciliation_required',error_code='EMAIL_SEND_UNCERTAIN',updated_at=? WHERE record_id=? AND owner_uid=? AND recipient_role=?")
@@ -406,9 +432,13 @@ export async function retryPiesaDelivery(access:TeamAccess,id:string) {
           .bind(id,access.ownerUid,row.recipient_role,lease,stamp()).first();if(!held)fail("PIESA_DELIVERY_CHANGED","This delivery changed elsewhere.");
       };
       await beforeSend();transport=true;
+      // A pending delivery from the preceding release must replay its original
+      // journalled payload. New deliveries use the branded email.
+      const oldSubject=`${record.recordNumber} | Pre-installation electrical safety assessment`;
+      const content=proof?.subject===oldSubject?{subject:oldSubject,
+        body:`The completed pre-installation electrical safety assessment ${record.recordNumber} is attached. Read the recorded outcome, conditions and required controls in the assessment before arranging insulation work. Keep this document with the job records.`}:draft;
       const sent=await sendTradeCustomerEmail(access.ownerUid,access.actorUid,{channel:"email",recipient:target,
-        subject:`${record.recordNumber} | Pre-installation electrical safety assessment`,
-        body:`The completed pre-installation electrical safety assessment ${record.recordNumber} is attached. Read the recorded outcome, conditions and required controls in the assessment before arranging insulation work. Keep this document with the job records.`,
+        ...content,
         attachments:[{filename:pdf.fileName,content:btoa(binary),contentType:"application/pdf"}],idempotencyKey:key,callbackUrl:"",messageType:"piesa_completed_assessment"},{db,beforeSend});
       await db.prepare("UPDATE trade_veu_electrical_deliveries SET status='accepted',provider=?,provider_message_id=?,accepted_at=?,lease_token='',lease_expires_at='',updated_at=? WHERE record_id=? AND owner_uid=? AND recipient_role=? AND lease_token=?")
         .bind(sent.provider,sent.providerMessageId,stamp(),stamp(),id,access.ownerUid,row.recipient_role,lease).run();

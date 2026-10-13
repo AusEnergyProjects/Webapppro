@@ -87,3 +87,17 @@ test('streamed private evidence stays bounded with no advertised length and canc
   const valid = harness(new Response(new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]), { headers: { 'content-type': 'image/jpeg' } }));
   assert.equal((await valid.downloadElectricalAssessmentFile('assessment-one', 'evidence', 'business-one', 'evidence-one')).contentType, 'image/jpeg');
 });
+
+test('official safety PDF and appliance photos use the same scoped private transport and their own endpoint', async () => {
+  const h = harness(); await h.downloadSafetyCheckFile('safety-check-one', 'pdf', 'business-one');
+  assert.equal(h.state.requests[0].url, 'https://tlink.example/api/trade-safety-checks?recordId=safety-check-one&view=pdf');
+  assert.equal(h.state.requests[0].init.headers.get('authorization'), 'TLinkField fixture-token');
+  assert.equal(h.state.requests[0].init.redirect, 'error');
+  const invalid = harness(new Response('<html>outage</html>', { headers: { 'content-type': 'application/pdf' } }));
+  await assert.rejects(() => invalid.downloadSafetyCheckFile('safety-check-one', 'pdf', 'business-one'), error => error.code === 'SAFETY_CHECK_FILE_INVALID');
+  const switched = harness(); switched.state.switchDuringResponse = true;
+  await assert.rejects(() => switched.downloadSafetyCheckFile('safety-check-one', 'pdf', 'business-one'), error => error.code === 'BUSINESS_CHANGED');
+  const photo = harness(new Response(new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]), { headers: { 'content-type': 'image/jpeg' } }));
+  await photo.downloadSafetyCheckFile('safety-check-one', 'evidence', 'business-one', 'appliance-photo');
+  assert.equal(photo.state.requests[0].url, 'https://tlink.example/api/trade-safety-checks?recordId=safety-check-one&view=evidence&evidenceId=appliance-photo');
+});

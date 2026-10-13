@@ -61,7 +61,7 @@ async function fixture(browser, width = 1280) {
 }
 
 test("Council Connect works in a real browser with synthetic API boundaries", { skip: !browserPath, timeout: 60000 }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const width of [1280, 390]) await t.test(`desktop/mobile conversation, compose and draft preservation at ${width}px`, async () => {
       const { page, errors } = await fixture(browser, width);

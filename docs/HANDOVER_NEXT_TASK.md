@@ -1,7 +1,15 @@
 # Next task handover
 
-Status: Creditex compliance readability and TLink team Leads access; matching GitHub/Sites publication authorised.
+Status: official safety records and phone completion; matching GitHub/Sites/iOS publication authorised.
 Prepared: 13 October 2026
+
+## Official safety phone flow, 13 October 2026
+
+Outcome: add PIESA or the official Victorian electrical/gas form directly from a job, record actual evidence and named signatures, complete the immutable PDF and reconcile job progress, then automatically deliver the PDF and required evidence. Original government wording/layout and source hashes are retained. The existing smoke/blinds service remains available; no separate government smoke form is invented.
+
+Acceptance: current business, job and credential scope at each mutation; owner isolation; actual saved signatures; all required supporting photos and the full AS 4575 gas servicing PDF; one completed job event; no duplicate ambiguous email; readable completed-job delivery recovery; native photos and signature gestures usable without moving the page. Keep historical rental records intact while blocking new duplicate electrical/gas checklist selections. Other outstanding forms, tasks or visits must still block job completion.
+
+Evidence and publication identity: `C:/Webproject/outputs/safety-phone-flow-20261013/release-report.json`. Native/server executable flow, visual PDF review, full migrations, typechecks, affected tests and matching committed build are required. Physical iPhone behaviour and actual inbox receipt remain unverified unless an independent real-device/inbox check is recorded. Do not sign, complete or email a real customer's safety paperwork merely as QA.
 
 ## Current follow-up, 13 October 2026
 

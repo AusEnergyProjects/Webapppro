@@ -59,7 +59,7 @@ async function setup(browser, width, overrides = {}) {
 }
 
 test("new approval requires genuine evidence beside Save and then reloads the approved server record", { skip: !executablePath && "Native browser unavailable", timeout: 30000 }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try { for (const width of [1280, 390]) {
     const f = await setup(browser, width), { page } = f;
     await page.getByLabel("Verification", { exact: true }).selectOption("approved");
@@ -85,7 +85,7 @@ test("new approval requires genuine evidence beside Save and then reloads the ap
 });
 
 test("backend rejection stays visible at Save with entered evidence preserved and duplicate saves blocked", { skip: !executablePath && "Native browser unavailable", timeout: 20000 }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const f = await setup(browser, 390), { page } = f;
     await page.getByLabel("Verification", { exact: true }).selectOption("approved");
@@ -103,7 +103,7 @@ test("backend rejection stays visible at Save with entered evidence preserved an
 });
 
 test("an existing valid approval remains note optional even when its account is suspended", { skip: !executablePath && "Native browser unavailable", timeout: 20000 }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const f = await setup(browser, 1280, { accountStatus: "suspended", verificationStatus: "approved", verifiedAbn: "51824753556", verificationReviewId: "synthetic-existing", verificationReviewedAt: "2026-10-07T01:00:00Z", verificationReviewedByUid: "synthetic-admin", approvalReviewExists: true });
     assert.equal(await f.page.getByLabel(/^Internal moderation note/).getAttribute("required"), null);
@@ -114,7 +114,7 @@ test("an existing valid approval remains note optional even when its account is 
 });
 
 test("a successful save followed by a failed detail refresh is reported as saved and needing refresh", { skip: !executablePath && "Native browser unavailable", timeout: 20000 }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const f = await setup(browser, 390); f.state.failRefresh = true;
     await f.page.getByLabel("Verification", { exact: true }).selectOption("approved");

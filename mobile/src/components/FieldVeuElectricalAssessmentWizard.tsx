@@ -1,9 +1,11 @@
 import { useBusinessApi } from '@/lib/use-business-api';
-import { ApiError, downloadElectricalAssessmentFile } from '@/lib/api';
+import { ApiError, downloadElectricalAssessmentFile, downloadSafetyCheckFile } from '@/lib/api';
 import { useApp } from '@/providers/app-provider';
 import { activitySignatureStrokesAreValid } from '@/lib/activity-form-completion';
+import { prepareSafetyCheckPhoto } from '@/lib/safety-check-photo';
 import type { FieldWorkPackSignatureDraft, FieldWorkPackSignerRole } from '@/lib/types';
 import type { PiesaPresentation } from '../../../src/lib/veu-electrical-assessment';
+import type { SafetyCheckPresentation } from '../../../src/lib/job-safety-check';
 import type { ActivityAnswers, ActivityDeclaration } from '../../../src/lib/trade-activity-form-types';
 import { activityOptionLabel, activityRepeatCount, activityRepeatItemLabel, boundActivityDeclaration,
   expandedActivityFields, fieldConditionMet, mergeActivityAnswers, removeLastActivityRepeat, type ExpandedActivityField } from '../../../src/lib/trade-activity-form-flow';
@@ -22,8 +24,11 @@ import { FieldSelect } from './field-select';
 import { SignatureCapture } from './SignatureCapture';
 import { colours, radius, spacing } from '@/lib/theme';
 
-const endpoint = '/api/trade-veu-electrical-assessments';
-type Result = { record: PiesaPresentation; canManage?: boolean };
+type OfficialAssessmentPresentation = PiesaPresentation | SafetyCheckPresentation;
+type Result = { record: OfficialAssessmentPresentation; canManage?: boolean };
+type WizardProps = {
+  workOrderId: string; recordId: string; online: boolean; onReturnToJob: () => void; onChanged: () => Promise<void>;
+};
 type PendingEvidence = { fieldKey: string; uri: string; name: string };
 const sameAnswers = (left: ActivityAnswers, right: ActivityAnswers) => JSON.stringify(Object.entries(left).sort()) === JSON.stringify(Object.entries(right).sort());
 const freshSignature = (declaration: ActivityDeclaration, signerName: string): FieldWorkPackSignatureDraft => ({
@@ -31,11 +36,16 @@ const freshSignature = (declaration: ActivityDeclaration, signerName: string): F
 });
 
 /** The official schema and completion rules are owned by the assessment service. */
-export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, online, onReturnToJob, onChanged }: {
-  workOrderId: string; recordId: string; online: boolean; onReturnToJob: () => void; onChanged: () => Promise<void>;
+export function FieldVeuElectricalAssessmentWizard(props: WizardProps) {
+  return <FieldOfficialAssessmentWizard {...props} service="piesa" />;
+}
+
+export function FieldOfficialAssessmentWizard({ workOrderId, recordId, online, onReturnToJob, onChanged, service }: WizardProps & {
+  service: 'piesa' | 'safety';
 }) {
+  const endpoint = service === 'piesa' ? '/api/trade-veu-electrical-assessments' : '/api/trade-safety-checks';
   const apiRequest = useBusinessApi(), { user } = useApp(), navigation = useNavigation();
-  const [record, setRecord] = useState<PiesaPresentation | null>(null), [answers, setAnswers] = useState<ActivityAnswers>({});
+  const [record, setRecord] = useState<OfficialAssessmentPresentation | null>(null), [answers, setAnswers] = useState<ActivityAnswers>({});
   const [canManage, setCanManage] = useState(false), [loadedFor, setLoadedFor] = useState(''), [page, setPage] = useState('');
   const loadKey = JSON.stringify([recordId, workOrderId, online]);
   const loading = online && loadedFor !== loadKey;
@@ -53,10 +63,12 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   const dirty = Boolean(record && !sameAnswers(record.answers, answers));
   const ink = Object.values(signatures).some(signature => signature.strokes.length > 0);
   const writable = online && canManage && record?.status === 'draft';
+  const answersWritable = writable && (service === 'piesa' || !record?.signatures.length);
 
   function confirmLeave(leave: () => void) {
     if (current.current.busy) { Alert.alert('Please wait', 'Wait for the assessment request to finish.'); return; }
-    if (dirty || ink || pending) Alert.alert('Unsaved assessment', 'Continue the assessment to save your answers, signature or evidence. Discard only if you do not need these unsaved changes.', [
+    const unsavedAnswers = current.current.record && !sameAnswers(current.current.record.answers, current.current.answers);
+    if (unsavedAnswers || ink || pending) Alert.alert('Unsaved assessment', 'Continue the assessment to save your answers, signature or evidence. Discard only if you do not need these unsaved changes.', [
       { text: 'Keep working', style: 'cancel' }, { text: 'Discard unsaved changes', style: 'destructive', onPress: () => {
         if (pending) { const file = new File(pending.uri); if (file.exists) file.delete(); }
         leave();
@@ -65,19 +77,24 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     else leave();
   }
   usePreventRemove(Boolean(busy || dirty || ink || pending), ({ data }) => confirmLeave(() => navigation.dispatch(data.action)));
-  const adopt = useCallback((next: PiesaPresentation, saved = false, includePrefills = false) => {
+  const adopt = useCallback((next: OfficialAssessmentPresentation, saved = false, includePrefills = false) => {
     if (!next || next.id !== recordId || next.workOrderId !== workOrderId || !['draft', 'complete'].includes(next.status)
+      || (service === 'safety' ? !('kind' in next) || !['electrical', 'gas'].includes(next.kind) : 'kind' in next)
       || !Number.isSafeInteger(next.revision) || !Array.isArray(next.form?.fields) || !Array.isArray(next.form.declarations)
       || !next.answers || typeof next.answers !== 'object' || Array.isArray(next.answers) || !next.signerFields
       || !Array.isArray(next.evidence) || !Array.isArray(next.signatures) || !Array.isArray(next.missing)
       || typeof next.ready !== 'boolean' || !next.signingScopes?.before || !next.signingScopes.after
       || typeof next.reportUrl !== 'string' || !Array.isArray(next.delivery)
-      || next.prefillAnswers !== undefined && (!next.prefillAnswers || typeof next.prefillAnswers !== 'object' || Array.isArray(next.prefillAnswers))
-      || next.businessContactSuggestion !== undefined && (!next.businessContactSuggestion || typeof next.businessContactSuggestion.name !== 'string' || typeof next.businessContactSuggestion.phone !== 'string')) throw new Error('This assessment does not match the selected job.');
+      || next.jobProgress !== undefined && (!next.jobProgress || typeof next.jobProgress.changed !== 'boolean' || typeof next.jobProgress.stage !== 'string'
+        || next.jobProgress.revision !== undefined && !Number.isSafeInteger(next.jobProgress.revision)
+        || next.jobProgress.pending !== undefined && typeof next.jobProgress.pending !== 'boolean'
+        || !Array.isArray(next.jobProgress.blockers) || next.jobProgress.blockers.some(item => !item || typeof item.key !== 'string' || typeof item.label !== 'string' || typeof item.target !== 'string'))
+      || !('kind' in next) && next.prefillAnswers !== undefined && (!next.prefillAnswers || typeof next.prefillAnswers !== 'object' || Array.isArray(next.prefillAnswers))
+      || !('kind' in next) && next.businessContactSuggestion !== undefined && (!next.businessContactSuggestion || typeof next.businessContactSuggestion.name !== 'string' || typeof next.businessContactSuggestion.phone !== 'string')) throw new Error('This assessment does not match the selected job.');
     const previous = current.current.record;
     const completedElsewhere = next.status === 'complete' && previous?.status === 'draft' && !saved && !sameAnswers(previous.answers, current.current.answers);
     const merge = previous && !saved && next.status === 'draft' ? mergeActivityAnswers(previous.answers, current.current.answers, next.answers) : { merged: next.answers, conflicts: [] };
-    if (!saved && includePrefills && next.status === 'draft') {
+    if (!saved && includePrefills && next.status === 'draft' && !('kind' in next)) {
       merge.merged = { ...merge.merged };
       for (const [key, value] of Object.entries(next.prefillAnswers || {})) {
         // A deliberately cleared suggestion must stay cleared on refresh.
@@ -96,13 +113,13 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
     if (merge.conflicts.length) setError('These answers also changed elsewhere. Your unsaved answers are retained; review them before saving.');
     if (completedElsewhere) setNotice('This assessment was completed elsewhere. The official completed answers are shown; your unsaved changes were not applied.');
     setPage(previousPage => next.status === 'complete' ? 'review' : previousPage || next.form.fields[0]?.section || 'review');
-  }, [recordId, workOrderId]);
+  }, [recordId, workOrderId, service]);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!online) throw new Error('Connect to load and complete this assessment.');
     const result = await apiRequest<Result>(`${endpoint}?recordId=${encodeURIComponent(recordId)}`, { signal });
     if (signal?.aborted || !current.current.alive) return;
     adopt(result.record, false, result.canManage === true); setCanManage(result.canManage === true);
-  }, [online, apiRequest, recordId, adopt]);
+  }, [online, apiRequest, recordId, adopt, endpoint]);
   useEffect(() => {
     const state = current.current; state.alive = true;
     const controller = new AbortController();
@@ -122,14 +139,31 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   }
   async function mutate(action: string, payload: object, method = 'POST') {
     const previous = current.current.record;
-    if (!online || !canManage || !previous || previous.status !== 'draft' && action !== 'retry_delivery') throw new Error('Connect with assessment access to save this form.');
-    const body = { ...payload, recordId: previous.id, ...(action === 'retry_delivery' ? {} : { baseRevision: previous.revision }) };
+    if (!online || !canManage || !previous || previous.status !== 'draft' && !['retry_delivery', 'recover_progress'].includes(action)) throw new Error('Connect with assessment access to save this form.');
+    if (action === 'recover_progress' && previous.status !== 'complete') throw new Error('Complete and retain the assessment PDF before updating job progress.');
+    if (service === 'safety' && previous.signatures.length && action === 'save') throw new Error('Signed answers are locked. The saved signature and answers remain unchanged.');
+    const body = { ...payload, recordId: previous.id, ...(service === 'piesa' && action === 'retry_delivery' ? {} : { baseRevision: previous.revision }) };
     const identity = JSON.stringify({ method, body });
     if (mutation.current.identity !== identity) mutation.current = { identity, requestId: Crypto.randomUUID() };
-    const result = await apiRequest<Result>(endpoint, { method, body: JSON.stringify({ ...body, requestId: mutation.current.requestId }) }, undefined, action === 'complete' || action === 'retry_delivery' ? { operation: 'report' } : {});
+    const result = await apiRequest<Result>(endpoint, { method, body: JSON.stringify({ ...body, requestId: mutation.current.requestId }) }, undefined, ['complete', 'retry_delivery', 'recover_progress'].includes(action) ? { operation: 'report' } : {});
     if (!current.current.alive) return;
+    if (['save', 'sign', 'attest_initial'].includes(action) && (!result.record || result.record.revision <= previous.revision)) {
+      throw new Error('Saving was not confirmed. Your unsaved work remains here. Refresh the saved assessment before trying again.');
+    }
+    if (action === 'sign' && (!('declarationKey' in payload) || !('scopeSha256' in payload) || !('signerName' in payload)
+      || !result.record.signatures.some(signature => signature.declarationKey === payload.declarationKey
+        && signature.scopeSha256 === payload.scopeSha256 && signature.signerName === payload.signerName))) {
+      throw new Error('The signature was not confirmed. Its unsaved ink remains here. Refresh the saved assessment before retrying.');
+    }
+    if (action === 'attest_initial' && ('kind' in result.record || !('scopeSha256' in payload)
+      || result.record.initialAttestation?.scopeSha256 !== result.record.signingScopes.before || result.record.answers.initial_correct !== true)) {
+      throw new Error('The initial declaration was not confirmed. Refresh the saved assessment before retrying.');
+    }
     if (action === 'complete' && (result.record?.status !== 'complete' || !result.record.reportUrl)) throw new Error('Completion was not confirmed. Refresh the saved assessment before trying again.');
-    adopt(result.record, true); setNotice(action === 'complete' ? 'Assessment completed. Its PDF is saved with this job.' : 'Saved.');
+    if (action === 'recover_progress' && (result.record?.status !== 'complete' || result.record.revision !== previous.revision
+      || !result.record.reportUrl || result.record.reportUrl !== previous.reportUrl || !result.record.jobProgress)) throw new Error('Job progress was not confirmed. The completed assessment and PDF remain saved. Refresh before trying again.');
+    adopt(result.record, true); setNotice(action === 'complete' ? 'Assessment completed. Its PDF is saved with this job.'
+      : action === 'recover_progress' ? 'Job progress checked. The completed assessment and PDF remain saved.' : 'Saved.');
   }
   async function save() {
     const previous = current.current.record;
@@ -168,7 +202,7 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   async function confirmInitial() {
     await save();
     const saved = current.current.record;
-    if (!current.current.alive || !saved || saved.status !== 'draft') return;
+    if (!current.current.alive || !saved || saved.status !== 'draft' || 'kind' in saved) return;
     if (saved.answers.initial_correct === true && saved.initialAttestation?.scopeSha256 === saved.signingScopes.before) return;
     await mutate('attest_initial', { action: 'attest_initial', scopeSha256: saved.signingScopes.before, accepted: true });
   }
@@ -179,10 +213,20 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   }
   async function retainEvidence(field: ExpandedActivityField, uri: string, name: string) {
     const original = new File(uri);
-    if (!original.exists || original.size < 5 || original.size > 8 * 1024 * 1024) throw new Error('Choose an evidence file under 8 MB.');
-    const kept = new File(Paths.document, `piesa-${Crypto.randomUUID()}-${name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100)}`);
+    const maximumMb = service === 'piesa' ? 8 : field.type === 'photo' || /\.(jpe?g|png)$/i.test(name) ? 2 : 6;
+    if (!original.exists || original.size < 5 || original.size > maximumMb * 1024 * 1024) throw new Error(`Choose an evidence file under ${maximumMb} MB.`);
+    if (service === 'safety' && record && (record.evidence.length >= 20 || record.evidence.reduce((sum, item) => sum + item.size, 0) + original.size > 12 * 1024 * 1024)) throw new Error('Keep evidence within 20 files and 12 MB in total so it can be attached to the email.');
+    const kept = new File(Paths.document, `${service}-${Crypto.randomUUID()}-${name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100)}`);
     original.copy(kept); const item = { fieldKey: field.key, uri: kept.uri, name };
     setPending(item); await upload(item);
+  }
+  async function retainPhoto(field: ExpandedActivityField, uri: string, name: string) {
+    if (service === 'piesa') return retainEvidence(field, uri, name);
+    const prepared = await prepareSafetyCheckPhoto(uri);
+    try {
+      if (!current.current.alive) return;
+      await retainEvidence(field, prepared.uri, name.replace(/\.[^.]*$/, '') + '.jpg');
+    } finally { if (prepared.exists) prepared.delete(); }
   }
   async function capture(field: ExpandedActivityField, camera: boolean) {
     await save();
@@ -190,29 +234,39 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) throw new Error('Allow camera access in your phone settings to take evidence photos.');
       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, allowsEditing: false, exif: true, cameraType: ImagePicker.CameraType.back });
-      if (!result.canceled && result.assets[0]) await retainEvidence(field, result.assets[0].uri, result.assets[0].fileName || 'Assessment-photo.jpg');
+      if (!result.canceled && result.assets[0]) await retainPhoto(field, result.assets[0].uri, result.assets[0].fileName || 'Assessment-photo.jpg');
     } else {
       const result = await DocumentPicker.getDocumentAsync({ type: field.type === 'photo' ? ['image/jpeg', 'image/png'] : ['application/pdf', 'image/jpeg', 'image/png'], copyToCacheDirectory: true, multiple: false });
-      if (!result.canceled && result.assets[0]) await retainEvidence(field, result.assets[0].uri, result.assets[0].name);
+      if (!result.canceled && result.assets[0]) {
+        const file = result.assets[0];
+        if (field.type === 'photo' || file.mimeType?.startsWith('image/') || /\.(jpe?g|png|heic|heif)$/i.test(file.name)) await retainPhoto(field, file.uri, file.name);
+        else await retainEvidence(field, file.uri, file.name);
+      }
     }
   }
   async function upload(item: PendingEvidence) {
     const previous = current.current.record;
-    if (!online || !canManage || !previous || previous.status !== 'draft') throw new Error('Reconnect to upload this retained evidence.');
+    if (!online || !canManage || !previous || previous.status !== 'draft' || service === 'safety' && previous.signatures.length) throw new Error('Reconnect with unsigned form access to upload this retained evidence.');
     const file = new File(item.uri);
     if (!file.exists) throw new Error('This retained file is unavailable. Take or choose it again.');
+    const digest = new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, await file.bytes()));
+    const sha256 = Array.from(digest, value => value.toString(16).padStart(2, '0')).join('');
     const identity = JSON.stringify({ operation: 'upload', recordId: previous.id, revision: previous.revision, fieldKey: item.fieldKey, uri: item.uri });
     if (mutation.current.identity !== identity) mutation.current = { identity, requestId: Crypto.randomUUID() };
     const body = new FormData(); body.append('action', 'upload'); body.append('recordId', previous.id);
     body.append('baseRevision', String(previous.revision)); body.append('fieldKey', item.fieldKey); body.append('requestId', mutation.current.requestId); body.append('file', file);
     const result = await apiRequest<Result>(endpoint, { method: 'POST', body });
     if (!current.current.alive) return;
+    if (!result.record || result.record.revision <= previous.revision || !result.record.evidence.some(evidence => evidence.fieldKey === item.fieldKey
+      && evidence.sha256 === sha256 && evidence.size === file.size && !previous.evidence.some(saved => saved.id === evidence.id))) {
+      throw new Error('The photo or document upload was not confirmed. Its retained copy stays on your phone. Refresh the saved assessment before retrying.');
+    }
     adopt(result.record, true); setPending(null); file.delete(); setNotice('Evidence saved.');
   }
   async function saveFile(view: 'pdf' | 'evidence', evidenceId = '') {
     const value = current.current.record, ownerKey = user?.localOwnerKey;
     if (!value || !ownerKey) throw new Error('Reopen this job with your current business access.');
-    const downloaded = await downloadElectricalAssessmentFile(value.id, view, ownerKey, evidenceId);
+    const downloaded = await (service === 'piesa' ? downloadElectricalAssessmentFile : downloadSafetyCheckFile)(value.id, view, ownerKey, evidenceId);
     if (!current.current.alive) return;
     const extension = downloaded.contentType === 'application/pdf' ? 'pdf' : downloaded.contentType === 'image/png' ? 'png' : 'jpg';
     let directory: Directory;
@@ -234,29 +288,29 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
   const pages = [...sections, 'signatures', 'review'];
   const fields = record ? expandedActivityFields(record.form, answers) : [];
   const declarations = record?.form.declarations.filter(item => fieldConditionMet(item.condition, answers, record.form)) || [];
-  const disabled = !writable || Boolean(busy);
+  const disabled = !writable || Boolean(busy), fieldsDisabled = !answersWritable || Boolean(busy);
   const signatureReady = !dirty && !pending && !record?.missing.some(item => item.kind !== 'signature');
   function renderField(field: ExpandedActivityField) {
     const label = `${field.label}${field.required ? ' *' : ''}${field.repeatGroup ? ` · ${activityRepeatItemLabel(field.repeatGroup)} ${field.repeatIndex + 1}` : ''}`;
     const evidence = record?.evidence.filter(item => item.fieldKey === field.key) || [];
     return <View key={field.key} style={styles.question}>
-      {!['boolean', 'select', 'date'].includes(field.type) || field.key === 'initial_correct' ? <Text style={styles.label}>{label}</Text> : null}{field.help ? <Text style={styles.help}>{field.help}</Text> : null}
-      {field.key === 'initial_correct' ? <>
+      {!['boolean', 'select', 'date'].includes(field.type) || service === 'piesa' && field.key === 'initial_correct' ? <Text style={styles.label}>{label}</Text> : null}{field.help ? <Text style={styles.help}>{field.help}</Text> : null}
+      {service === 'piesa' && field.key === 'initial_correct' ? <>
         <Text style={styles.help}>{answers.initial_correct === true && !dirty ? 'Initial assessment declaration confirmed.' : 'Review the initial assessment, then confirm this declaration. Your answers save automatically.'}</Text>
         <FieldButton disabled={disabled || Boolean(pending) || answers.initial_correct === true && !dirty} onPress={() => void perform('attest', confirmInitial)}>Confirm initial assessment declaration</FieldButton>
-      </> : field.type === 'boolean' || field.type === 'select' ? <FieldSelect label={label} value={field.type === 'boolean' ? answers[field.key] === true ? 'yes' : answers[field.key] === false ? 'no' : '' : String(answers[field.key] ?? '')} disabled={disabled}
+      </> : field.type === 'boolean' || field.type === 'select' ? <FieldSelect label={label} value={field.type === 'boolean' ? answers[field.key] === true ? 'yes' : answers[field.key] === false ? 'no' : '' : String(answers[field.key] ?? '')} disabled={fieldsDisabled}
         options={field.type === 'boolean' ? [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] : field.options.map(option => ({ value: option, label: activityOptionLabel(option, field.optionLabels?.[option]) }))}
         onChange={value => edit(field.key, field.type === 'boolean' ? value === 'yes' : value)} />
-        : field.type === 'date' ? <FieldDatePicker label={label} value={String(answers[field.key] || '')} disabled={disabled} onChange={value => edit(field.key, value)} />
+        : field.type === 'date' ? <FieldDatePicker label={label} value={String(answers[field.key] || '')} disabled={fieldsDisabled} onChange={value => edit(field.key, value)} />
           : field.type === 'photo' || field.type === 'document' ? <>
-            {field.type === 'photo' ? <FieldButton variant="secondary" disabled={disabled || Boolean(pending)} onPress={() => void perform('camera', () => capture(field, true))}>Take evidence photo</FieldButton> : null}
-            <FieldButton variant="secondary" disabled={disabled || Boolean(pending)} onPress={() => void perform('document', () => capture(field, false))}>Choose {field.type === 'photo' ? 'evidence photo' : 'document'}</FieldButton>
+            {field.type === 'photo' ? <FieldButton variant="secondary" disabled={fieldsDisabled || Boolean(pending)} onPress={() => void perform('camera', () => capture(field, true))}>Take evidence photo</FieldButton> : null}
+            <FieldButton variant="secondary" disabled={fieldsDisabled || Boolean(pending)} onPress={() => void perform('document', () => capture(field, false))}>Choose {field.type === 'photo' ? 'evidence photo' : 'document'}</FieldButton>
             {evidence.map(item => <FieldButton key={item.id} variant="quiet" disabled={Boolean(busy) || !online} onPress={() => void perform('file', () => saveFile('evidence', item.id))}>Save evidence · {item.fileName}</FieldButton>)}
-          </> : <TextInput accessibilityLabel={field.label} value={String(answers[field.key] ?? '')} editable={!disabled} multiline={field.key.includes('notes')} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input}
+          </> : <TextInput accessibilityLabel={field.label} value={String(answers[field.key] ?? '')} editable={!fieldsDisabled} multiline={field.key.includes('notes')} keyboardType={field.type === 'number' ? 'decimal-pad' : 'default'} style={styles.input}
             onChangeText={value => edit(field.key, field.type === 'number' && value !== '' && Number.isFinite(Number(value)) ? Number(value) : value)} />}
       {field.repeatGroup && field.repeatIndex === activityRepeatCount(record!.form, answers, field.repeatGroup) - 1 && fields.filter(item => item.repeatGroup === field.repeatGroup && item.repeatIndex === field.repeatIndex).at(-1)?.key === field.key ? <>
-        <FieldButton variant="secondary" disabled={disabled || activityRepeatCount(record!.form, answers, field.repeatGroup) >= 20} onPress={() => edit(`$repeat.${field.repeatGroup}`, activityRepeatCount(record!.form, answers, field.repeatGroup!) + 1)}>Add another {activityRepeatItemLabel(field.repeatGroup)}</FieldButton>
-        {field.repeatIndex > 0 ? <FieldButton variant="quiet" disabled={disabled} onPress={() => {
+        <FieldButton variant="secondary" disabled={fieldsDisabled || activityRepeatCount(record!.form, answers, field.repeatGroup) >= 20} onPress={() => edit(`$repeat.${field.repeatGroup}`, activityRepeatCount(record!.form, answers, field.repeatGroup!) + 1)}>Add another {activityRepeatItemLabel(field.repeatGroup)}</FieldButton>
+        {field.repeatIndex > 0 ? <FieldButton variant="quiet" disabled={fieldsDisabled} onPress={() => {
           const next = removeLastActivityRepeat(record!.form, current.current.answers, field.repeatGroup!);
           current.current.answers = next; setAnswers(next); setNotice('');
         }}>Remove last {activityRepeatItemLabel(field.repeatGroup)}</FieldButton> : null}
@@ -284,14 +338,17 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
         <FieldButton disabled={disabled || !signatureReady || !accepted[declaration.key] || !signerName || !activitySignatureStrokesAreValid(draft.strokes)} onPress={() => void perform('sign', async () => {
           if (!activitySignatureStrokesAreValid(draft.strokes)) throw new Error('Draw your actual signature before saving.');
           await mutate('sign', { action: 'sign', declarationKey: declaration.key, signerName, accepted: true, scopeSha256: record.signingScopes[declaration.phase], strokes: draft.strokes.map(stroke => ({ points: stroke.points.map(point => ({ x: point.x, y: point.y })) })) });
-        })}>Save {declaration.role === 'customer' ? 'owner' : 'electrician'} signature</FieldButton>
+        })}>Save {declaration.role === 'customer' ? 'owner' : 'kind' in record && record.kind === 'gas' ? 'gasfitter' : 'electrician'} signature</FieldButton>
       </>}
     </View>;
   }
 
   return <KeyboardAwareScrollView ref={scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" scrollEnabled={!signatureDrawing || page !== 'signatures' || !writable || Boolean(busy)}>
-    <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => confirmLeave(onReturnToJob)}>Back to job</FieldButton>
-    <Text style={styles.title}>Pre-installation electrical safety assessment (Insulation)</Text>
+    <FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => {
+      if (dirty && writable && !ink && !pending) void perform('leave', async () => { await save(); if (current.current.alive) onReturnToJob(); });
+      else confirmLeave(onReturnToJob);
+    }}>Back to job</FieldButton>
+    <Text style={styles.title}>{record?.form.title || (service === 'piesa' ? 'Pre-installation electrical safety assessment (Insulation)' : 'Official safety check')}</Text>
     {record ? <Text style={styles.help}>{record.recordNumber} · {record.status === 'complete' ? 'Completed' : dirty ? 'Unsaved answers' : 'Saved'}</Text> : null}
     {!online ? <Text style={styles.error}>Connect to save answers, upload evidence, sign or complete this assessment. Unsaved answers stay here while this screen remains open.</Text> : null}
     {loading ? <Text style={styles.help}>Loading the official assessment...</Text> : null}
@@ -303,10 +360,11 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
         <FieldButton style={styles.shortcut} disabled={Boolean(busy)} onPress={() => void perform('section', () => moveTo('signatures'))}>Sign off</FieldButton>
         <FieldButton style={styles.shortcut} variant="secondary" disabled={Boolean(busy)} onPress={() => void perform('section', () => moveTo('review'))}>Finish &amp; email PDF</FieldButton>
       </View>
-      <Text style={styles.help}>Sign the declarations, then review and complete the PIESA to prepare and email its PDF. Any missing answers are shown before you can finish.</Text>
+      <Text style={styles.help}>{service === 'piesa' ? 'Sign the declarations, then review and complete the PIESA to prepare and email its PDF. Any missing answers are shown before you can finish.' : 'Complete the checks, attach evidence and sign the declarations. Finish to save the official PDF and request email delivery. Provider status is shown after completion.'}</Text>
+      {service === 'safety' && record.signatures.length && record.status === 'draft' ? <Text style={styles.help}>Signed answers and evidence are locked. Save the remaining signatures and finish this check.</Text> : null}
       <FieldSelect label="Assessment section" value={page} disabled={Boolean(busy)} options={pages.map(section => ({ value: section, label: section === 'signatures' ? 'Sign off' : section === 'review' ? 'Review & finish' : section }))} onChange={next => void perform('section', () => moveTo(next))} />
       {sections.includes(page) ? <><Text style={styles.title}>{page}</Text>
-        {record.businessContactSuggestion && fields.some(field => field.section === page && field.key === 'initial_rec_name') ? <>
+        {!('kind' in record) && record.businessContactSuggestion && fields.some(field => field.section === page && field.key === 'initial_rec_name') ? <>
           <Text style={styles.help}>Your business contact is {record.businessContactSuggestion.name}{record.businessContactSuggestion.phone ? ` · ${record.businessContactSuggestion.phone}` : ''}. Use these details only if they are the Registered Electrical Contractor for this assessment. Check and enter the REC registration number yourself.</Text>
           <FieldButton variant="secondary" disabled={disabled || Boolean(answers.initial_rec_name && (answers.initial_rec_phone || !record.businessContactSuggestion.phone))} onPress={() => {
             const suggestion = record.businessContactSuggestion!;
@@ -321,6 +379,19 @@ export function FieldVeuElectricalAssessmentWizard({ workOrderId, recordId, onli
           await mutate('complete', { action: 'complete' });
           if (current.current.record?.status === 'complete') { try { await onChanged(); } catch { setNotice('Assessment completed and PDF retained. Refresh the job to update its progress.'); } }
         })}>{busy === 'complete' ? 'Completing and preparing PDF...' : 'Complete assessment and email PDF'}</FieldButton> : <>
+          <View style={styles.question}>
+            <Text style={styles.title}>Job progress</Text>
+            <Text style={styles.help}>{record.jobProgress?.stage === 'completed' ? 'Job completed in TLink.'
+              : record.jobProgress?.stage === 'cancelled' ? 'This job is cancelled. Its completed assessment and PDF remain saved.'
+                : record.jobProgress?.pending ? 'Assessment and PDF saved. Job progress still needs updating.'
+                  : record.jobProgress ? 'Assessment and PDF saved. The job still has items to finish.'
+                    : 'Assessment and PDF saved. Check the job progress below or return to the job to see its current status.'}</Text>
+            {record.jobProgress?.blockers.map(item => <Text key={item.key} style={styles.help}>{item.label}</Text>)}
+            {canManage && !['completed', 'cancelled'].includes(record.jobProgress?.stage || '') ? <FieldButton variant="secondary" disabled={Boolean(busy) || !online} onPress={() => void perform('progress', async () => {
+              await mutate('recover_progress', { action: 'recover_progress' });
+              try { await onChanged(); } catch { setNotice('Job progress checked. Refresh the job to see its current status. The assessment and PDF remain saved.'); }
+            })}>{busy === 'progress' ? 'Updating job progress...' : 'Update job progress'}</FieldButton> : null}
+          </View>
           <FieldButton disabled={Boolean(busy) || !online} onPress={() => void perform('pdf', () => saveFile('pdf'))}>Save completed assessment PDF on phone</FieldButton>
           <Text style={styles.help}>The completed PDF is retained in this job&apos;s Files.</Text>
           {record.delivery.map(delivery => <View key={delivery.role} style={styles.question}><Text style={styles.label}>{delivery.role === 'customer' ? 'Customer copy' : 'Business copy'} · {delivery.status.replaceAll('_', ' ')}</Text><Text style={styles.help}>{delivery.message}</Text></View>)}

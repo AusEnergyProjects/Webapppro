@@ -8,6 +8,8 @@ import { jobSyncChangeStatements, nextJobRevision } from "./trade-team-sync-serv
 import { submittedActivityFieldCaseSql, UNFINISHED_ACTIVITY_FIELD_INTENTS_SQL } from "./trade-activity-forms-completion";
 import { photoRequestProofOverview } from "./photo-request-review-server";
 import { normalisePhotoRequirements } from "./trade-photo-requests";
+import type { FormJobProgress, ProgressBlocker } from "./form-job-progress";
+export type { FormJobProgress } from "./form-job-progress";
 
 export const UNSATISFIED_COMPLIANCE_REQUIREMENTS_SQL = `SELECT 1
   FROM compliance_cases compliance_case
@@ -196,6 +198,11 @@ export function fieldCompletionGuard(ownerUid: string, workOrderId: string, phot
           AND NOT (${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})
       )
       AND NOT EXISTS (
+        SELECT 1 FROM trade_safety_checks assessment
+        WHERE assessment.work_order_id = ? AND assessment.owner_uid = ?
+          AND NOT (${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})
+      )
+      AND NOT EXISTS (
         SELECT 1 FROM trade_crm_job_notes blocker
         WHERE blocker.work_order_id = ? AND blocker.firebase_uid = ?
           AND blocker.note_type = 'issue' AND blocker.issue_status = 'open'
@@ -268,6 +275,8 @@ export function fieldCompletionGuard(ownerUid: string, workOrderId: string, phot
     ownerUid,
     workOrderId,
     ownerUid,
+    workOrderId,
+    ownerUid,
     ownerUid,
     workOrderId,
     workOrderId,
@@ -296,8 +305,6 @@ export function fieldCompletionGuard(ownerUid: string, workOrderId: string, phot
 }
 
 type ProgressVisit = { id: string; revision: number; assignee_member_id: string; status: string };
-type ProgressBlocker = { key: string; label: string; target: string };
-export type FormJobProgress = { changed: boolean; stage: string; revision?: number; pending?: boolean; blockers: ProgressBlocker[] };
 const activeStatuses = new Set(["scheduled", "en_route", "arrived", "in_progress"]);
 
 /** Management/read scope is not evidence that the actor performed another worker's visit. */
@@ -316,6 +323,8 @@ const VISIT_SNAPSHOT_SQL = `COALESCE((SELECT json_group_array(json(visit_snapsho
 const COMPLETED_FORM_SQL = `(EXISTS (SELECT 1 FROM trade_job_forms
     WHERE work_order_id = ? AND firebase_uid = ? AND status = 'complete')
   OR EXISTS (SELECT 1 FROM trade_veu_electrical_assessments assessment
+    WHERE assessment.work_order_id = ? AND assessment.owner_uid = ? AND ${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})
+  OR EXISTS (SELECT 1 FROM trade_safety_checks assessment
     WHERE assessment.work_order_id = ? AND assessment.owner_uid = ? AND ${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})
   OR EXISTS (SELECT 1 FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?
     AND status = 'submitted_for_creditex_review' AND pdf_object_key <> '' AND length(pdf_sha256) = 64
@@ -369,7 +378,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
   if (options.startOnly && job.stage === "in_progress" && (!selection.visit || selection.visit.status === "in_progress")) {
     return { changed: false, stage: job.stage, blockers: [] };
   }
-  const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
+  const completedFormValues = [workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid];
   const unscheduledActor = job.assignee_member_id === access.memberId || (access.isOwner && !job.assignee_member_id);
   // These existence checks share the same freshly authorised job and one database snapshot.
   // Completion still rechecks every requirement in the atomic mutation guard below.
@@ -380,6 +389,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
     WHERE
       EXISTS (SELECT 1 FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_veu_electrical_assessments WHERE work_order_id = ? AND owner_uid = ?)
+      OR EXISTS (SELECT 1 FROM trade_safety_checks WHERE work_order_id = ? AND owner_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_activity_field_records WHERE work_order_id = ? AND owner_uid = ?)
       OR EXISTS (SELECT 1 FROM trade_rental_inspections WHERE work_order_id = ? AND firebase_uid = ?)
       OR EXISTS (SELECT 1 FROM compliance_activity_work_pack_instances pack JOIN compliance_cases c
@@ -387,7 +397,7 @@ async function applyTradeFormJobProgress(access: TeamAccess, workOrderId: string
         WHERE pack.work_order_id = ? AND c.work_order_id = pack.work_order_id AND c.installer_uid = ?)`)
     .bind(selection.activeCount === 0 ? 1 : 0, workOrderId, access.ownerUid,
       selection.activeCount === 0 && unscheduledActor ? 1 : 0, ...completedFormValues,
-      workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid)
+      workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid, workOrderId, access.ownerUid)
     .first<{ issued_rental: number; completed_form: number }>();
   if (!form) return { changed: false, stage: job.stage, blockers: [] };
   const issuedRental = selection.activeCount === 0 && form.issued_rental === 1;

@@ -1,4 +1,5 @@
 import type { ActivityAnswers, ActivityEvidence, ActivityForm, ActivitySignature } from "./trade-activity-form-types";
+import type { FormJobProgress } from "./form-job-progress";
 
 /** A job safety assessment, never a certificate claim or compliance intent. */
 export type PiesaRecord = {
@@ -41,6 +42,8 @@ export type PiesaPresentation = Omit<PiesaRecord, "ownerUid" | "evidence"> & {
   signerFields: Readonly<Record<string, string>>;
   reportUrl: string;
   delivery: PiesaDelivery[];
+  /** Result of an explicit completion/progress write; ordinary reads stay read-only. */
+  jobProgress?: FormJobProgress;
 };
 
 export class PiesaError extends Error {

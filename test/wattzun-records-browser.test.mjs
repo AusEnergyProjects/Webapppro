@@ -18,7 +18,7 @@ const bundle=await build({stdin:{resolveDir:root,loader:'tsx',contents:`
 const js=bundle.outputFiles.find(file=>file.path.endsWith('.js')).text;
 const css=bundle.outputFiles.find(file=>file.path.endsWith('.css')).text;
 let browser;
-test.before(async()=>{if(browserPath)browser=await chromium.launch({executablePath:browserPath,headless:true});});
+test.before(async()=>{if(browserPath)browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });});
 test.after(async()=>{await browser?.close();});
 async function pageFixture({width=1366}={}){
   const page=await browser.newPage({viewport:{width,height:900}});

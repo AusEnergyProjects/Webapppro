@@ -71,7 +71,7 @@ async function fixture(browser, width = 1280, canManage = true) {
 }
 
 test("Current council profile previews the real, safe customer journey", { skip: !browserPath, timeout: 90000 }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const width of [1280, 488, 390]) await t.test(`unsaved branding, wide logo, focus and enquiry at ${width}px`, async () => {
       const { page, errors } = await fixture(browser, width);

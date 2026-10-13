@@ -80,7 +80,7 @@ async function quoteReview(page) {
 }
 
 test('actual quote review keeps unknown amounts blank and requires explicit spelling and Google review before saving', { skip: !executablePath && 'No installed test browser' }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, errors } = await pageFor(browser);
     await page.getByRole('button', { name: 'Alex Customer 12 Main Street, Richmond, VIC, 3121' }).waitFor();
@@ -104,7 +104,7 @@ test('actual quote review keeps unknown amounts blank and requires explicit spel
   } finally { await browser.close(); }
 });
 test('partial quote recovery keeps the exact request ID/body and offers the actual saved job', { skip: !executablePath && 'No installed test browser' }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, errors } = await pageFor(browser, { partial: true });
     await quoteReview(page); await page.getByRole('button', { name: 'Confirm and save quote draft' }).click();
@@ -120,7 +120,7 @@ test('partial quote recovery keeps the exact request ID/body and offers the actu
 });
 
 test('ambiguous recovery refreshes only the same Google proof while keeping submitted identity and amounts fixed', { skip: !executablePath && 'No installed test browser' }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, errors } = await pageFor(browser, { expireOnRetry: true });
     await quoteReview(page); await page.getByRole('button', { name: 'Confirm and save quote draft' }).click();
@@ -146,7 +146,7 @@ test('ambiguous recovery refreshes only the same Google proof while keeping subm
   } finally { await browser.close(); }
 });
 test('editing the name or Google query revokes confirmation and neutral selections never save', { skip: !executablePath && 'No installed test browser' }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page } = await pageFor(browser, { proposal: { ...proposal, kind: 'create_customer', serviceCategory: '', description: '', lines: [] } });
     await googleAddress(page); await page.getByRole('checkbox').check();
@@ -162,7 +162,7 @@ test('editing the name or Google query revokes confirmation and neutral selectio
   } finally { await browser.close(); }
 });
 test('mobile and night review layouts fit the viewport with usable controls', { skip: !executablePath && 'No installed test browser' }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const config of [{ width: 390 }, { width: 1366, night: true }]) {
       const { page, errors } = await pageFor(browser, config);
@@ -175,7 +175,7 @@ test('mobile and night review layouts fit the viewport with usable controls', { 
   } finally { await browser.close(); }
 });
 test('an address request override scopes both Google stages and rejects a late selection after the business changes', { skip: !executablePath && 'No installed test browser' }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, errors } = await pageFor(browser, { addressOnly: true, delayAddressResolve: true });
     await page.getByRole('option', { name: '12 Main Street, Richmond VIC 3121, Australia' }).click();

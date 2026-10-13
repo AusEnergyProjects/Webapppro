@@ -53,6 +53,10 @@ export function buildTradeJobFormLibrary({ serviceCategory, addressState, buildi
   }
   for (const rentalModule of RENTAL_ASSESSMENT_MODULES) {
     const eligibility = saved?.rentalModules.find(entry => entry.id === rentalModule.key);
+    // New electrical and gas work uses the official PDF workflows on the job.
+    // Keep previously attached rental records discoverable without offering a
+    // second checklist for new work.
+    if (["electrical_safety_check", "gas_safety_check"].includes(rentalModule.key) && !eligibility?.added) continue;
     options.push(option({ kind: "rental", moduleKey: rentalModule.key, name: rentalModule.label }, {
       group: "Rental assessments", jurisdiction: "VIC", description: rentalModule.reportBoundary, categories: ["rental-inspection"],
       unavailableReason: addressState !== "VIC" ? "Rental assessment forms currently cover Victorian properties."

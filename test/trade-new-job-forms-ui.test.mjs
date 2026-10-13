@@ -327,11 +327,23 @@ function savedPanel({ respond, onChanged, ...initial } = {}) {
     onLibraryOpenChange: open => h.update({ libraryOpen: open }), onChanged: async () => { changes++; await onChanged?.(); }, ...initial }, {
     "./TradeBusinessProvider": { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => ({ ownerUid: "owner" }) },
     "./TradeJobFormLibrary": { TradeJobFormLibrary: "form-library" },
+    "./TradeSafetyChecksPanel": { TradeSafetyChecksPanel: "official-safety-checks" },
     "@/lib/trade-business-form-design": {}, "@/lib/trade-form-library.mjs": {},
     "./TradeWorkTimeTracking": {}, "./WattzunFormAssistButton": {}, "@/lib/wattzun-form-client": {},
   });
   return { ...h, requests, get changes() { return changes; } };
 }
+
+test("completed-job form editing remains locked while authorised safety delivery recovery stays available", async () => {
+  const h = savedPanel({ readOnly: true, canManageSafetyDelivery: true });
+  const tree = await h.settle();
+  const safety = nodes(tree, node => node.type === "official-safety-checks")[0];
+  assert.equal(safety.props.readOnly, true);
+  assert.equal(safety.props.canManageDelivery, true);
+  assert.equal(libraryIn(tree), undefined);
+  h.update({ canManageSafetyDelivery: false });
+  assert.equal(nodes(h.render(), node => node.type === "official-safety-checks")[0].props.canManageDelivery, false);
+});
 
 test("saved-job Add form can explicitly open and close the canonical attachment library", async () => {
   const h = savedPanel();

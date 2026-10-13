@@ -63,7 +63,7 @@ async function pageFor(browser, config = {}) {
 }
 
 test('actual Wattzun workflow review handles operational confirmations, ambiguity, recovery and scope changes', { skip: !executablePath && 'No installed test browser' }, async t => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     await t.test('initial server review has one explicit confirmation and scoped send with honest provider receipt', async () => {
       const { page, errors } = await pageFor(browser);

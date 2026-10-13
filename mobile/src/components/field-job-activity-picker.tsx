@@ -6,6 +6,7 @@ import { colours, spacing } from '@/lib/theme';
 import { FieldButton } from './field-button';
 import { FieldSelect } from './field-select';
 import { FieldVeuElectricalAssessmentPicker } from './field-veu-electrical-assessment-picker';
+import { FieldSafetyCheckPicker } from './FieldSafetyCheckPicker';
 import { fieldActivityPremisesVariantId, fieldActivityRequiresPremisesVariant } from './job-work-selection';
 
 type Choice = { id: string; title: string; added: boolean; unavailableReason: string };
@@ -15,8 +16,9 @@ type Catalogue = {
   programs: { id: string; code: string; label: string }[]; activities: Activity[]; rentalModules: Choice[]; rentalVisits?: Choice[];
 };
 
-export function FieldJobActivityPicker({ workOrderId, online, onChanged, onOpenElectricalAssessment }: {
+export function FieldJobActivityPicker({ workOrderId, online, onChanged, onOpenElectricalAssessment, onOpenSafetyCheck }: {
   workOrderId: string; online: boolean; onChanged: () => Promise<void>; onOpenElectricalAssessment: (recordId: string) => void;
+  onOpenSafetyCheck: (recordId: string) => void;
 }) {
   const apiRequest = useBusinessApi();
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
@@ -62,6 +64,7 @@ export function FieldJobActivityPicker({ workOrderId, online, onChanged, onOpenE
 
   return <View style={styles.section}>
     <FieldVeuElectricalAssessmentPicker key={workOrderId} workOrderId={workOrderId} online={online} onChanged={onChanged} onOpen={onOpenElectricalAssessment} />
+    <FieldSafetyCheckPicker key={`safety:${workOrderId}`} workOrderId={workOrderId} online={online} onChanged={onChanged} onOpen={onOpenSafetyCheck} />
     <Text style={styles.title}>Rental and program forms</Text>
     <Text style={styles.help}>Add a rental assessment or program activity to this job.</Text>
     {!online ? <Text style={styles.help}>Connect to add a new activity. Already attached forms remain available on the job.</Text> : null}

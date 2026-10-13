@@ -485,6 +485,7 @@ CREATE TABLE compliance_activity_work_pack_final_records (
       work_pack_version_id text NOT NULL
     );`);
   database.exec(fs.readFileSync(new URL("../drizzle/0256_trade_veu_electrical_assessments.sql", import.meta.url), "utf8"));
+  database.exec(fs.readFileSync(new URL("../drizzle/0262_trade_official_safety_checks.sql", import.meta.url), "utf8"));
   installCreditexTrainingFixture(database);
   installEmptyTradeCrews(database);
   const db = testD1(database);
@@ -534,6 +535,52 @@ function electricalAssessment(database, { id = "piesa", workOrderId = "job-1", o
     VALUES (?,?,?,1,?,?,?,?,?,?,'actor-1','now','now',?)`)
     .run(id, workOrderId, ownerUid, status, payload, "a".repeat(64), completedAt ? "piesa/completed.pdf" : "", completedAt ? "b".repeat(64) : "", completedAt ? 100 : 0, completedAt);
 }
+
+function officialSafetyCheck(database, kind, status = 'draft') {
+  const id = `official-${kind}`, completedAt = status === 'complete' ? '2026-10-13T02:00:00.000Z' : '';
+  const payload = JSON.stringify({ id, workOrderId: 'job-1', ownerUid: 'owner-1', kind, revision: 1, status, completedAt });
+  database.prepare(`INSERT INTO trade_safety_checks
+    (id,work_order_id,owner_uid,kind,revision,status,payload,payload_sha256,pdf_object_key,pdf_sha256,pdf_size_bytes,actor_uid,created_at,updated_at,completed_at)
+    VALUES (?,'job-1','owner-1',?,1,?,?,?,?,?,?,'actor-1','now','now',?)`)
+    .run(id, kind, status, payload, 'a'.repeat(64), completedAt ? 'safety/completed.pdf' : '', completedAt ? 'b'.repeat(64) : '', completedAt ? 100 : 0, completedAt);
+}
+
+test('official electrical and gas drafts block completion after other forms finish', async () => {
+  for (const kind of ['electrical', 'gas']) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec("UPDATE trade_job_forms SET status='complete'"); officialSafetyCheck(database, kind);
+      const result = await progress.reconcileTradeFormJobProgress(progressAccess, 'job-1', { db });
+      assert.equal(result.stage, 'in_progress'); assert.ok(result.blockers.length);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type='job_completed'").get().count, 0);
+    } finally { database.close(); }
+  }
+});
+
+test('a retained official PDF can finish an unscheduled job once without a duplicate completion event', async () => {
+  for (const kind of ['electrical', 'gas']) {
+    const { database, db, progress } = progressFixture();
+    try {
+      database.exec('DELETE FROM trade_crm_appointments; DELETE FROM trade_job_forms'); officialSafetyCheck(database, kind, 'complete');
+      const first = await progress.reconcileTradeFormJobProgress(progressAccess, 'job-1', { db });
+      assert.equal(first.stage, 'completed'); assert.equal(first.changed, true);
+      const replay = await progress.reconcileTradeFormJobProgress(progressAccess, 'job-1', { db });
+      assert.equal(replay.changed, false);
+      assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type='job_completed'").get().count, 1);
+    } finally { database.close(); }
+  }
+});
+
+test('completed official forms retain independent outstanding task blockers', async () => {
+  const { database, db, progress } = progressFixture();
+  try {
+    database.exec("UPDATE trade_job_forms SET status='complete'; INSERT INTO trade_work_order_tasks(id,work_order_id,firebase_uid,status) VALUES ('required','job-1','owner-1','todo')");
+    officialSafetyCheck(database, 'electrical', 'complete'); officialSafetyCheck(database, 'gas', 'complete');
+    const result = await progress.reconcileTradeFormJobProgress(progressAccess, 'job-1', { db });
+    assert.equal(result.stage, 'in_progress'); assert.ok(result.blockers.length);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_work_order_events WHERE event_type='job_completed'").get().count, 0);
+  } finally { database.close(); }
+});
 
 test("field overview identifies its own unfinished PIESA without clearing other required forms", async t => {
   const { database, route } = progressFixture();

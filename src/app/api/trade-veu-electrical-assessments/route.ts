@@ -3,8 +3,8 @@ import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { PiesaError, type PiesaRecord } from "@/lib/veu-electrical-assessment";
 import { createVeuElectricalForm, VEU_ELECTRICAL_SIGNER_FIELDS, VEU_ELECTRICAL_SOURCE_URL, VEU_ELECTRICAL_SOURCE_PATH, VEU_ELECTRICAL_SOURCE_SHA256 } from "@/lib/veu-electrical-safety-form";
-import { attestPiesaInitial, completePiesaRecord, listPiesaRecords, piesaPresentation, readPiesaEvidence, readPiesaPdf,
-  readPiesaRecord, retryPiesaDelivery, savePiesaAnswers, signPiesaDeclaration, startPiesaRecord, uploadPiesaEvidence } from "@/lib/trade-veu-electrical-assessment-server";
+import { attestPiesaInitial, completePiesaRecordWithProgress, listPiesaRecords, piesaPresentation, readPiesaEvidence, readPiesaPdf,
+  readPiesaRecord, recoverPiesaJobProgress, retryPiesaDelivery, savePiesaAnswers, signPiesaDeclaration, startPiesaRecord, uploadPiesaEvidence } from "@/lib/trade-veu-electrical-assessment-server";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -69,7 +69,12 @@ async function mutate(request: Request, patch: boolean) {
       const key = body.requestId === undefined ? undefined : string(body.requestId);
       if (patch) record = await savePiesaAnswers(access, string(body.recordId), revision(body.baseRevision), body.answers, key);
       else if (body.action === "start") record = await startPiesaRecord(access, string(body.workOrderId));
-      else if (body.action === "complete") record = await completePiesaRecord(access, string(body.recordId), revision(body.baseRevision), key);
+      else if (body.action === "complete" || body.action === "recover_progress") {
+        const completed = body.action === "complete"
+          ? await completePiesaRecordWithProgress(access, string(body.recordId), revision(body.baseRevision), key)
+          : await recoverPiesaJobProgress(access, string(body.recordId), revision(body.baseRevision));
+        return adminJson({ ok: true, record: await piesaPresentation(access, completed.record, completed.jobProgress) });
+      }
       else if (body.action === "retry_delivery") return adminJson({ ok: true, record: await retryPiesaDelivery(access, string(body.recordId)) });
       else if (body.action === "attest_initial") record = await attestPiesaInitial(access, string(body.recordId), revision(body.baseRevision), string(body.scopeSha256), body.accepted, key);
       else if (body.action === "sign") record = await signPiesaDeclaration(access, string(body.recordId), revision(body.baseRevision), {

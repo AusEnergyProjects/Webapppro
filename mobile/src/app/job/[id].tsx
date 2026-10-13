@@ -25,6 +25,8 @@ import { FieldCommercialWorkspace } from '@/components/field-commercial-workspac
 import { FieldFormLibrary } from '@/components/field-form-library';
 import { FieldVeuElectricalAssessmentPicker, type FieldElectricalAssessmentState } from '@/components/field-veu-electrical-assessment-picker';
 import { FieldVeuElectricalAssessmentWizard } from '@/components/FieldVeuElectricalAssessmentWizard';
+import { FieldSafetyCheckPicker, type FieldSafetyCheckState } from '@/components/FieldSafetyCheckPicker';
+import { FieldSafetyCheckWizard } from '@/components/FieldSafetyCheckWizard';
 import { FieldSwmsFiles, FieldSwmsForm, type SwmsPayload } from '@/components/field-swms-form';
 import { RentalInspectionWorkflow } from '@/components/rental-inspection-workflow';
 import { subscribeRentalSaves } from '@/lib/rental-save-queue';
@@ -136,7 +138,7 @@ function jobFinishLocalBlockers(job: FieldJob) {
   ].filter(Boolean);
 }
 
-function jobHasNoRequiredForms(job: FieldJob, assessment: FieldElectricalAssessmentState | null) {
+function jobHasNoRequiredForms(job: FieldJob, assessment: FieldElectricalAssessmentState | null, safety: FieldSafetyCheckState | null) {
   return job.fieldLane !== 'creditex_manual'
     && !job.forms.length
     && !job.rentalInspection
@@ -144,7 +146,9 @@ function jobHasNoRequiredForms(job: FieldJob, assessment: FieldElectricalAssessm
     && !job.activityWorkPacks?.length
     && !complianceCasesForJob(job).length
     && assessment?.workOrderId === job.id
-    && assessment.state === 'empty';
+    && assessment.state === 'empty'
+    && safety?.workOrderId === job.id
+    && safety.state === 'empty';
 }
 
 function jobCompletionMessage(job: FieldJob, state: JobCompletionQueueState | null) {
@@ -338,6 +342,8 @@ export default function JobScreen() {
   const [activityLoadError, setActivityLoadError] = useState('');
   const [electricalAssessmentState, setElectricalAssessmentState] = useState<FieldElectricalAssessmentState | null>(null);
   const [electricalAssessmentId, setElectricalAssessmentId] = useState<string | null>(null);
+  const [safetyCheckState, setSafetyCheckState] = useState<FieldSafetyCheckState | null>(null);
+  const [safetyCheckId, setSafetyCheckId] = useState<string | null>(null);
   const [completionQueue, setCompletionQueue] = useState<{ workOrderId: string; state: JobCompletionQueueState } | null>(null);
   const finishingJob = useRef(false);
   const recoveringPhoto = useRef(false);
@@ -559,7 +565,7 @@ export default function JobScreen() {
         setSavedMessage(currentJob.stage === 'completed' ? 'Job completed and synced to TLink.' : 'Cancelled jobs cannot be completed.');
         return;
       }
-      if (!jobHasNoRequiredForms(currentJob, electricalAssessmentState)) {
+      if (!jobHasNoRequiredForms(currentJob, electricalAssessmentState, safetyCheckState)) {
         throw new Error('Complete this job through its required forms. Connect to check the current forms if they are not shown.');
       }
       const blockers = jobFinishLocalBlockers(currentJob);
@@ -1380,7 +1386,7 @@ export default function JobScreen() {
   const complianceIntents = job.complianceIntents || [];
   const complianceCases = complianceCasesForJob(job);
   const finishBlockers = jobFinishLocalBlockers(job);
-  const formlessJob = jobHasNoRequiredForms(job, electricalAssessmentState);
+  const formlessJob = jobHasNoRequiredForms(job, electricalAssessmentState, safetyCheckState);
   const completionState = completionQueue?.workOrderId === job.id ? completionQueue.state : null;
   const completionPending = Boolean(completionState?.finish && ['queued', 'retry'].includes(completionState.finish.status));
   const completionProblem = Boolean(completionState?.finish && !completionPending);
@@ -1389,6 +1395,7 @@ export default function JobScreen() {
   const creditexManual = job.fieldLane === 'creditex_manual';
   const syntheticManual = job.recordMode === 'synthetic_test' && creditexManual;
   if (!creditexManual && electricalAssessmentId) return <Screen scroll={false} style={{ padding: 0 }}><FieldVeuElectricalAssessmentWizard key={`${job.id}:${electricalAssessmentId}`} workOrderId={job.id} recordId={electricalAssessmentId} online={sync.online} onReturnToJob={() => { setElectricalAssessmentId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
+  if (!creditexManual && safetyCheckId) return <Screen scroll={false} style={{ padding: 0 }}><FieldSafetyCheckWizard key={`${job.id}:${safetyCheckId}`} workOrderId={job.id} recordId={safetyCheckId} online={sync.online} onReturnToJob={() => { setSafetyCheckId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   if (!creditexManual && complianceIntents.some((intent) => intent.id === activeFormId)) return <Screen scroll={false} style={{ padding: 0 }}><ActivityFieldFormWizard key={activeFormId} workOrderId={job.id} intentId={activeFormId!} variantId={complianceIntents.find((intent) => intent.id === activeFormId)?.variantId || ''} online={sync.online} onReturnToJob={() => { setActiveFormId(null); void load(); }} onChanged={async () => { await syncNow(); await load(); }} /></Screen>;
   const selectedBusinessForm = fieldForms.find((form) => form.id === activeFormId);
   if (selectedBusinessForm) return <Screen><JobFieldForm key={selectedBusinessForm.id} form={selectedBusinessForm} workOrderId={job.id} busy={busy === 'form:' + selectedBusinessForm.id} onSave={saveForm} onReturnToJob={() => setActiveFormId(null)} /></Screen>;
@@ -1424,6 +1431,7 @@ export default function JobScreen() {
       {!activeFormId ? <View style={styles.card}>
         <Text style={styles.cardTitle}>{['completed', 'cancelled'].includes(job.stage) ? 'Job forms' : 'Forms to complete'}</Text>
         {!creditexManual ? <FieldVeuElectricalAssessmentPicker key={job.id} workOrderId={job.id} online={sync.online} mode="attached" onStateChange={setElectricalAssessmentState} onOpen={setElectricalAssessmentId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+        {!creditexManual ? <FieldSafetyCheckPicker key={`safety:${job.id}`} workOrderId={job.id} online={sync.online} mode="attached" onStateChange={setSafetyCheckState} onOpen={setSafetyCheckId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
         {activityLoadError ? <Text style={styles.meta}>{activityLoadError}</Text> : null}
         {complianceIntents.map((intent) => {
           const pack = (job.activityWorkPacks || []).find((item) => item.instance.complianceIntentId === intent.id);
@@ -1442,7 +1450,7 @@ export default function JobScreen() {
         })}
         {job.rentalInspection ? <Pressable accessibilityRole="button" onPress={() => setActiveFormId('rental')} style={styles.formRow}><MaterialCommunityIcons name={job.rentalInspection.status === 'issued' ? 'check-circle-outline' : 'home-search-outline'} size={27} color={colours.green} /><View style={styles.flex}><Text style={styles.taskTitle}>Rental inspections and safety checks</Text><Text style={styles.meta}>{job.rentalInspection.progress.completeModules}/{job.rentalInspection.progress.moduleTotal} complete</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable> : null}
         {fieldForms.map((form) => <Pressable key={form.id} accessibilityRole="button" onPress={() => setActiveFormId(form.id)} style={styles.formRow}><MaterialCommunityIcons name={form.status === 'complete' ? 'check-circle-outline' : 'alert-circle-outline'} size={27} color={form.status === 'complete' ? colours.green : colours.amber} /><View style={styles.flex}><Text style={styles.taskTitle}>{form.name}</Text><Text style={styles.meta}>{form.status === 'complete' ? 'Complete' : form.missing.length ? `${form.missing.length} required fields remaining` : 'Ready to complete'}</Text></View><MaterialCommunityIcons name="chevron-right" size={24} color={colours.green} /></Pressable>)}
-        {!complianceIntents.length && !fieldForms.length && !job.rentalInspection && (creditexManual || electricalAssessmentState?.workOrderId === job.id && electricalAssessmentState.state === 'empty') ? <Text style={styles.body}>No forms are attached to this job.</Text> : null}
+        {!complianceIntents.length && !fieldForms.length && !job.rentalInspection && (creditexManual || electricalAssessmentState?.workOrderId === job.id && electricalAssessmentState.state === 'empty' && safetyCheckState?.workOrderId === job.id && safetyCheckState.state === 'empty') ? <Text style={styles.body}>No forms are attached to this job.</Text> : null}
         {!creditexManual && !['completed', 'cancelled'].includes(job.stage) ? <FieldButton variant="secondary" onPress={() => setActiveFormId('form-library')}>Add work or a form</FieldButton> : null}
       </View> : null}
 
@@ -1496,12 +1504,13 @@ export default function JobScreen() {
       </View> : null}
 
 
-      {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onOpenElectricalAssessment={setElectricalAssessmentId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+      {!creditexManual && activeFormId === 'form-library' ? <FieldFormLibrary workOrderId={job.id} serviceCategory={job.serviceCategory} online={sync.online} onBack={() => setActiveFormId(null)} onOpenElectricalAssessment={setElectricalAssessmentId} onOpenSafetyCheck={setSafetyCheckId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
       {!creditexManual && activeFormId === 'swms' && swmsDraft?.record?.workOrderId === job.id ? <FieldSwmsForm key={swmsDraft.record.id} initial={{ ...swmsDraft, record: swmsDraft.record }} online={sync.online} onBack={() => { setSwmsDraft(null); setActiveFormId('files'); }} onChanged={async () => { await syncNow(); await load(); }} /> : null}
 
       {activeFormId === 'files' ? <View style={styles.card}>
         {!creditexManual ? <FieldVeuElectricalAssessmentPicker key={job.id} workOrderId={job.id} online={sync.online} mode="files" onOpen={setElectricalAssessmentId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
+        {!creditexManual ? <FieldSafetyCheckPicker key={`safety:${job.id}`} workOrderId={job.id} online={sync.online} mode="files" onOpen={setSafetyCheckId} onChanged={async () => { await syncNow(); await load(); }} /> : null}
         <FieldButton variant="secondary" onPress={() => setActiveFormId(null)}>Job</FieldButton>
         <Text style={styles.label}>FIELD EVIDENCE</Text><Text style={styles.cardTitle}>Photos and documents</Text>
         <Text style={styles.body}>Photos and documents save securely on this device and upload when connected. Use the matching requirement below for program evidence.</Text>

@@ -1,5 +1,11 @@
 # Australian Energy Assessments and TLink forward roadmap
 
+## Official safety forms and phone completion, 13 October 2026
+
+Implemented: direct job access to PIESA and official Victorian electrical/gas forms, named touch signatures, immutable completed PDFs, canonical job progress and explicit recovery, separate photo/servicing-document email attachments, business/TLink report branding and readable delivery status. New legacy electrical/gas checklists are replaced by official selections; existing records and smoke/blinds services remain accessible. Migration 0262 preserves owner scope, record revisions and delivery/mutation receipts.
+
+Release and verification evidence: `C:/Webproject/outputs/safety-phone-flow-20261013/release-report.json`. Physical iPhone drawing and actual inbox receipt remain a field verification limit, separate from executable native/server checks.
+
 ## Creditex tester readiness and staff Leads access, 13 October 2026
 
 Implemented: readable compliance questionnaires and review controls in both visual modes, wrapping question fields and explicit Retry when Forms, Training or Onboarding fails to load. Team Leads now has separate view/manage grants, selected-business staff access and an audited actor boundary, with migration 0261 granting the existing full administrator permission bundle access. Field/crew and other restricted staff stay scoped to their authorised work.

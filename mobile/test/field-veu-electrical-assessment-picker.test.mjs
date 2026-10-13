@@ -16,7 +16,7 @@ function harness({ code = picker, entry = 'FieldVeuElectricalAssessmentPicker', 
   const slots = [], effects = [], pending = []; let cursor = 0, tree, unmounted = false;
   const listeners = new Set();
   const state = { response, requests: [], links: [], opened: [], changes: 0, states: [], props: { workOrderId: record.workOrderId, online,
-    onOpen: value => state.opened.push(value), onOpenElectricalAssessment: value => state.opened.push(value),
+    onOpen: value => state.opened.push(value), onOpenElectricalAssessment: value => state.opened.push(value), onOpenSafetyCheck: value => state.opened.push(value),
     onStateChange: value => state.states.push(value),
     onChanged: async () => { state.changes++; if (state.changeError) throw state.changeError; await state.changeWait; } } };
   const same = (a, b) => a && b && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
@@ -41,6 +41,7 @@ function harness({ code = picker, entry = 'FieldVeuElectricalAssessmentPicker', 
       Linking: { openURL: async url => { state.links.push(url); if (state.linkError) throw state.linkError; } } },
     './field-button': { FieldButton: 'FieldButton' }, './field-select': { FieldSelect: 'FieldSelect' },
     './field-veu-electrical-assessment-picker': { FieldVeuElectricalAssessmentPicker: 'FieldVeuElectricalAssessmentPicker' },
+    './FieldSafetyCheckPicker': { FieldSafetyCheckPicker: 'FieldSafetyCheckPicker' },
     './job-work-selection': { fieldActivityPremisesVariantId: () => '', fieldActivityRequiresPremisesVariant: () => false },
     '@/lib/theme': { colours: {}, spacing: {} }, '@/lib/config': { API_BASE_URL: 'https://fixture.invalid' },
     '@/lib/use-business-api': { useBusinessApi: () => api },

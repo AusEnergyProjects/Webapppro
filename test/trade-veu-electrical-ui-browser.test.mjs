@@ -89,7 +89,7 @@ async function setup(browser,width,query="") {
 }
 
 test("official assessment native controls save every applicable field and real ink on desktop/mobile",{skip:!executablePath&&"Native browser unavailable",timeout:120000},async t=>{
- const browser=await chromium.launch({executablePath,headless:true});
+ const browser=await chromium.launch({executablePath,headless:true, args: ['--disable-gpu'] });
  try {for(const width of [1366,390])await t.test(`${width}px`,async()=>{
   const f=await setup(browser,width),{page,record,writes}=f;await page.getByRole("button",{name:"Start assessment",exact:true}).click();
   const expected=electricalAnswers(record.form);delete expected.initial_correct;
@@ -128,7 +128,7 @@ test("official assessment native controls save every applicable field and real i
 });
 
 test("an external attachment arriving during the initial list request appears without restarting the form",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{
- const browser=await chromium.launch({executablePath,headless:true});try{
+ const browser=await chromium.launch({executablePath,headless:true, args: ['--disable-gpu'] });try{
   const f=await setup(browser,390,"?delayed-list");await f.state.initialListSeen;
   f.state.attachExternally();await f.page.evaluate(()=>window.refreshPiesa(1));await f.page.locator('[data-piesa-refresh="1"]').waitFor({state:"attached"});
   f.state.releaseInitialList();
@@ -142,7 +142,7 @@ test("an external attachment arriving during the initial list request appears wi
 });
 
 test("an external attachment refresh preserves the existing open assessment and unsaved answers",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{
- const browser=await chromium.launch({executablePath,headless:true});try{
+ const browser=await chromium.launch({executablePath,headless:true, args: ['--disable-gpu'] });try{
   const f=await setup(browser,390,"?prefill");await f.page.getByRole("button",{name:"Open assessment",exact:true}).click();
   const reference=f.page.locator('[id="piesa-piesa-one-job_reference"]');await reference.fill("UNSAVED-LOCAL-ANSWER");
   await f.page.evaluate(()=>window.refreshPiesa(1));await f.page.locator('[data-piesa-refresh="1"]').waitFor({state:"attached"});
@@ -154,7 +154,7 @@ test("an external attachment refresh preserves the existing open assessment and 
 });
 
 test("conditional medical attachment and failed-save retry preserve actual answers and request identity",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{
- const browser=await chromium.launch({executablePath,headless:true});try{
+ const browser=await chromium.launch({executablePath,headless:true, args: ['--disable-gpu'] });try{
   const f=await setup(browser,390);await f.page.getByRole("button",{name:"Start assessment",exact:true}).click();
   await f.page.locator('[id="piesa-piesa-one-job_reference"]').fill("SYNTHETIC-RETRY");f.state.rejectNextSave=true;
   await f.page.getByRole("button",{name:"Save answers",exact:true}).click();await f.page.getByRole("alert").filter({hasText:"Synthetic save unavailable"}).waitFor();
@@ -169,7 +169,7 @@ test("conditional medical attachment and failed-save retry preserve actual answe
 });
 
 test("official safety library is authenticated, source-based and read-only; job read-only users cannot write",{skip:!executablePath&&"Native browser unavailable",timeout:30000},async()=>{
- const browser=await chromium.launch({executablePath,headless:true});try{
+ const browser=await chromium.launch({executablePath,headless:true, args: ['--disable-gpu'] });try{
   const f=await setup(browser,390,"?catalogue");await f.page.getByText("VICTORIA · OFFICIAL FORM",{exact:true}).waitFor();await f.page.getByText("View assessment questions",{exact:true}).click();await f.page.getByText("Date of inspection",{exact:true}).waitFor();
   assert.equal(await f.page.getByRole("button",{name:"Start assessment",exact:true}).count(),0);assert.equal(await f.page.locator("input,select,textarea").count(),0);assert.equal(f.writes.length,0);assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await f.page.close();
   const g=await setup(browser,390,"?readonly");await g.page.getByRole("button",{name:"Open assessment",exact:true}).click();assert.equal(await g.page.getByRole("button",{name:"Save answers",exact:true}).count(),0);assert.equal(await g.page.getByRole("button",{name:"Fill by voice",exact:true}).count(),0);assert.equal(await g.page.locator("fieldset input:not(:disabled),fieldset select:not(:disabled)").count(),0);assert.equal(g.writes.length,0);await g.page.close();
@@ -177,7 +177,7 @@ test("official safety library is authenticated, source-based and read-only; job 
 });
 
 test("existing draft known details are visible, editable and explicitly saved; REC suggestions never claim registration",{skip:!executablePath&&"Native browser unavailable",timeout:40000},async t=>{
- const browser=await chromium.launch({executablePath,headless:true});try{
+ const browser=await chromium.launch({executablePath,headless:true, args: ['--disable-gpu'] });try{
   for(const width of [1366,390])await t.test(`${width}px`,async()=>{
    const f=await setup(browser,width,"?prefill"),{page}=f;
    await page.getByRole("button",{name:"Open assessment",exact:true}).click();

@@ -82,6 +82,7 @@ function renderJobCard(title, overrides = {}) {
   const jsx = (type, props, ...children) => ({ type, props: { ...props, children } });
   const dependencies = { React: { createElement: jsx, Fragment: 'Fragment' }, View: 'View', Text: 'Text', TextInput: 'TextInput', FieldButton: 'FieldButton', Pressable: 'Pressable',
     FieldSwmsFiles: 'FieldSwmsFiles', FieldVeuElectricalAssessmentPicker: 'FieldVeuElectricalAssessmentPicker', setElectricalAssessmentId() {},
+    FieldSafetyCheckPicker: 'FieldSafetyCheckPicker', setSafetyCheckId() {},
     syncNow: async () => {}, load: async () => {}, styles: {}, job: { id: 'job', media: [] }, busy: '', syntheticManual: false, complianceCases: [], creditexManual: false,
     sync: { online: true }, duration: '', notes: '', setDuration() {}, setNotes() {}, chooseDocument() {},
     finishBlockers: [], formlessJob: false, completionState: { finish: null }, completionPending: false, completionProblem: false,
@@ -107,15 +108,16 @@ function formlessFixture(overrides = {}) {
 
 test('explicit finish requires verified same-job absence of every form source', () => {
   const job = formlessFixture();
-  assert.equal(jobHasNoRequiredForms(job, emptyAssessment), true);
+  assert.equal(jobHasNoRequiredForms(job, emptyAssessment, emptyAssessment), true);
   for (const assessment of [null, { ...emptyAssessment, workOrderId: 'other-job' },
     ...['loading', 'unavailable', 'attached'].map(state => ({ ...emptyAssessment, state }))]) {
-    assert.equal(jobHasNoRequiredForms(job, assessment), false);
+    assert.equal(jobHasNoRequiredForms(job, assessment, emptyAssessment), false);
+    assert.equal(jobHasNoRequiredForms(job, emptyAssessment, assessment), false);
   }
   for (const requirement of [{ forms: [{ status: 'complete' }] }, { rentalInspection: { status: 'issued' } },
     { complianceIntents: [{ status: 'completed' }] }, { activityWorkPacks: [{}] },
     { complianceCases: [{}] }, { compliance: {} }, { fieldLane: 'creditex_manual' }]) {
-    assert.equal(jobHasNoRequiredForms({ ...job, ...requirement }, emptyAssessment), false);
+    assert.equal(jobHasNoRequiredForms({ ...job, ...requirement }, emptyAssessment, emptyAssessment), false);
   }
 });
 
@@ -129,7 +131,7 @@ function completionHarness({ job = formlessFixture(), currentJob = job, currentQ
     findJob: async () => ++jobReads === 1 ? currentJob : updatedJob,
     getJobCompletionQueueState: async () => ++queueReads === 1 ? currentQueue : updatedQueue,
     setCompletionQueue: value => projections.push(value), setJob() {},
-    jobHasNoRequiredForms, electricalAssessmentState: emptyAssessment, jobFinishLocalBlockers, jobCompletionMessage,
+    jobHasNoRequiredForms, electricalAssessmentState: emptyAssessment, safetyCheckState: emptyAssessment, jobFinishLocalBlockers, jobCompletionMessage,
     saveAction: async value => { writes.push(value); if (saveError) throw saveError; },
     Alert: { alert: (...args) => alerts.push(args) },
   });
@@ -202,7 +204,7 @@ test('completion double taps share one durable action', async () => {
     job, busy: '', finishingJob, setBusy() {}, setSavedMessage() {}, setCompletionQueue() {}, setJob() {},
     findJob: async () => { if (++reads === 1) await new Promise(resolve => { release = resolve; }); return job; },
     getJobCompletionQueueState: async () => ({ finish: null }),
-    jobHasNoRequiredForms, electricalAssessmentState: emptyAssessment, jobFinishLocalBlockers, jobCompletionMessage,
+    jobHasNoRequiredForms, electricalAssessmentState: emptyAssessment, safetyCheckState: emptyAssessment, jobFinishLocalBlockers, jobCompletionMessage,
     saveAction: async value => writes.push(value), Alert: { alert: (...args) => assert.fail(args.join(': ')) },
   });
   const first = complete();

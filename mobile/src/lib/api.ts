@@ -157,9 +157,22 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, user?:
 export async function downloadElectricalAssessmentFile(
   recordId: string, view: 'pdf' | 'evidence', expectedBusinessKey: string, evidenceId = '',
 ): Promise<{ bytes: Uint8Array; contentType: string }> {
+  return downloadOfficialAssessmentFile('/api/trade-veu-electrical-assessments', 'PIESA', recordId, view, expectedBusinessKey, evidenceId);
+}
+
+export async function downloadSafetyCheckFile(
+  recordId: string, view: 'pdf' | 'evidence', expectedBusinessKey: string, evidenceId = '',
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  return downloadOfficialAssessmentFile('/api/trade-safety-checks', 'SAFETY_CHECK', recordId, view, expectedBusinessKey, evidenceId);
+}
+
+async function downloadOfficialAssessmentFile(
+  endpoint: '/api/trade-veu-electrical-assessments' | '/api/trade-safety-checks', code: 'PIESA' | 'SAFETY_CHECK',
+  recordId: string, view: 'pdf' | 'evidence', expectedBusinessKey: string, evidenceId: string,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(recordId) || !expectedBusinessKey || (view !== 'pdf' && view !== 'evidence')
     || (view === 'evidence' && !/^[A-Za-z0-9_-]{1,160}$/.test(evidenceId))) {
-    throw new ApiError('This assessment file request is invalid.', 400, 'PIESA_FILE_REQUEST_INVALID');
+    throw new ApiError('This assessment file request is invalid.', 400, `${code}_FILE_REQUEST_INVALID`);
   }
   const revision = businessSessionRevision();
   const assertBusiness = () => {
@@ -167,7 +180,7 @@ export async function downloadElectricalAssessmentFile(
   };
   const headers = await authenticatedHeaders({}, undefined, false, expectedBusinessKey);
   assertBusiness();
-  const path = `/api/trade-veu-electrical-assessments?recordId=${encodeURIComponent(recordId)}&view=${view}${view === 'evidence' ? `&evidenceId=${encodeURIComponent(evidenceId)}` : ''}`;
+  const path = `${endpoint}?recordId=${encodeURIComponent(recordId)}&view=${view}${view === 'evidence' ? `&evidenceId=${encodeURIComponent(evidenceId)}` : ''}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REPORT_REQUEST_TIMEOUT_MS);
   try {
@@ -175,17 +188,17 @@ export async function downloadElectricalAssessmentFile(
     assertBusiness();
     if (!response.ok) {
       const body = await responseBody(response);
-      throw new ApiError(String(body.error || 'The assessment file could not be saved.'), response.status, String(body.code || 'PIESA_FILE_UNAVAILABLE'));
+      throw new ApiError(String(body.error || 'The assessment file could not be saved.'), response.status, String(body.code || `${code}_FILE_UNAVAILABLE`));
     }
     const contentType = (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
     const maximum = 12 * 1024 * 1024;
     const advertised = response.headers.get('content-length');
     if (!['application/pdf', 'image/jpeg', 'image/png'].includes(contentType) || (view === 'pdf' && contentType !== 'application/pdf')
       || (advertised !== null && (!/^\d+$/.test(advertised) || Number(advertised) > maximum))) {
-      throw new ApiError('The assessment file was not a supported document.', 409, 'PIESA_FILE_INVALID');
+      throw new ApiError('The assessment file was not a supported document.', 409, `${code}_FILE_INVALID`);
     }
     const reader = response.body?.getReader();
-    if (!reader) throw new ApiError('The assessment document is empty.', 409, 'PIESA_FILE_INVALID');
+    if (!reader) throw new ApiError('The assessment document is empty.', 409, `${code}_FILE_INVALID`);
     const chunks: Uint8Array[] = [];
     let size = 0;
     try {
@@ -194,7 +207,7 @@ export async function downloadElectricalAssessmentFile(
         assertBusiness();
         if (chunk.done) break;
         size += chunk.value.byteLength;
-        if (size > maximum) throw new ApiError('The assessment file is too large.', 413, 'PIESA_FILE_INVALID');
+        if (size > maximum) throw new ApiError('The assessment file is too large.', 413, `${code}_FILE_INVALID`);
         chunks.push(chunk.value);
       }
     } catch (error) {
@@ -209,7 +222,7 @@ export async function downloadElectricalAssessmentFile(
       : bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
         : bytes[0] === 0x89 && bytes[1] === 0x50 ? 'image/png' : '';
     if (bytes.length < 5 || actualType !== contentType || (advertised !== null && Number(advertised) !== bytes.length)) {
-      throw new ApiError('The assessment document could not be verified.', 409, 'PIESA_FILE_INVALID');
+      throw new ApiError('The assessment document could not be verified.', 409, `${code}_FILE_INVALID`);
     }
     return { bytes, contentType };
   } catch (error) {

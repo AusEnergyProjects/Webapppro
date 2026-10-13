@@ -106,6 +106,7 @@ function fixture(t, accessPatch = {}, options = {}) {
     catch (error) { sql.exec('ROLLBACK'); throw error; }
   } };
   sql.exec(read('drizzle/0256_trade_veu_electrical_assessments.sql'));
+  sql.exec(read('drizzle/0262_trade_official_safety_checks.sql'));
   const piesaGuards = load('src/lib/trade-veu-electrical-schema-guards.ts', { './tlink-schema-guards': schemaGuardSql });
   for (const guard of piesaGuards.PIESA_SCHEMA_GUARDS) sql.exec(guard.sql);
   const piesaDraft = load('src/lib/trade-veu-electrical-draft.ts', { './trade-activity-forms': activityForms, './veu-electrical-safety-form': electricalForm });
@@ -434,23 +435,34 @@ test('a later real-rental insert failure rolls back previously inserted PIESA, v
   assert.equal(result.status, 500, JSON.stringify(result.body)); assert.deepEqual(f.state(), before);
 });
 
-for (const action of ['create_job', 'create_scheduled_job']) test(`${action} requires current credential evidence for selected rental electrical safety form`, async t => {
+for (const action of ['create_job', 'create_scheduled_job']) test(`${action} requires current credential evidence for selected rental smoke safety form`, async t => {
   const f = fixture(t); f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run('["hot-water","rental-inspection"]');
-  const request = create({ action, formSelectionsJson: '[]', rentalInspectionModulesJson: '["electrical_safety_check"]',
+  const request = create({ action, formSelectionsJson: '[]', rentalInspectionModulesJson: '["smoke_alarm_check"]',
     rentalAssessmentScope: 'current_minimum_standards' });
   const before = f.state(), missing = await f.send(request);
   assert.equal(missing.status, 400, JSON.stringify(missing.body)); assert.equal(missing.body.code, 'RENTAL_WORKER_CREDENTIAL_REQUIRED');
   assert.deepEqual(f.state(), before);
   f.sql.exec(`INSERT INTO trade_team_member_files VALUES('licence-file','owner','member','active','2999-01-01');
-    INSERT INTO trade_team_member_credentials VALUES('licence','owner','member','licence-file','licensed_electrician','active','SYNTHETIC-LICENCE','VIC','licence','2999-01-01');`);
+    INSERT INTO trade_team_member_credentials VALUES('licence','owner','member','licence-file','suitably_qualified_smoke_alarm_worker','active','SYNTHETIC-TRAINING','VIC','training','2999-01-01');`);
   f.beforeBatch(() => f.sql.exec("UPDATE trade_team_member_credentials SET status='revoked' WHERE id='licence'"));
   const revoked = await f.send(request);
   assert.equal(revoked.status, 409, JSON.stringify(revoked.body)); assert.deepEqual(f.state(), before);
   f.sql.exec("UPDATE trade_team_member_credentials SET status='active' WHERE id='licence'");
   const created = await f.send(request); assert.equal(created.status, 201, JSON.stringify(created.body));
-  assert.deepEqual(JSON.parse(f.sql.prepare('SELECT selected_modules_snapshot FROM trade_rental_inspections').get().selected_modules_snapshot), ['electrical_safety_check']);
-  assert.equal(f.sql.prepare('SELECT module_key FROM trade_rental_inspection_modules').get().module_key, 'electrical_safety_check');
+  assert.deepEqual(JSON.parse(f.sql.prepare('SELECT selected_modules_snapshot FROM trade_rental_inspections').get().selected_modules_snapshot), ['smoke_alarm_check']);
+  assert.equal(f.sql.prepare('SELECT module_key FROM trade_rental_inspection_modules').get().module_key, 'smoke_alarm_check');
 });
+
+for (const action of ['create_job', 'create_scheduled_job']) for (const moduleKey of ['electrical_safety_check', 'gas_safety_check']) {
+  test(`${action} rejects new duplicate ${moduleKey} before creating customer or job records`, async t => {
+    const f = fixture(t); f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run('["hot-water","rental-inspection"]');
+    const before = f.state();
+    const result = await f.send(create({ action, formSelectionsJson: '[]', rentalInspectionModulesJson: JSON.stringify([moduleKey]) }));
+    assert.equal(result.status, 400, JSON.stringify(result.body));
+    assert.match(result.body.error, /Save the job, then add its official electrical or gas safety check from Forms/);
+    assert.deepEqual(f.state(), before);
+  });
+}
 
 test('cross-origin new-job assessment requests cannot create records', async t => {
   const f = fixture(t), before = f.state();

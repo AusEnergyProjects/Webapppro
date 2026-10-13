@@ -1,5 +1,15 @@
 # TLink and Australian Energy Assessments release truth
 
+## Official safety records and phone completion, 13 October 2026
+
+PIESA and the official Victorian electrical and gas safety checks are available directly from a job. Real named consent and drawn signatures bind to the saved answers and evidence. A completed immutable PDF counts towards the existing job-completion rules; other unfinished forms, tasks and visits remain blockers. Explicit progress recovery does not rewrite the assessment or send duplicate mail. Authorised staff retain delivery recovery on completed jobs.
+
+Migration 0262 stores business-scoped official safety records, versions and delivery/mutation receipts. The original ESV electrical PDF and June 2022 gas DOCX layout are retained, with business/TLink branding and a continuation for extra answers. The actual electrical inspection standard is recorded separately from the original template wording. Gas checks require the full AS 4575 servicing record. Photos are required by TLink as supporting evidence, rather than described as additional government requirements. New legacy electrical/gas checklist selections are blocked; historical records and the existing smoke/blinds service remain available.
+
+Official safety emails attach the saved government form PDF, photos and servicing records separately. Provider acceptance is distinguished from inbox receipt; uncertain delivery requires reconciliation. Native photo preparation bounds large iPhone images while preserving originals and unconfirmed phone copies. Source-based limitations, findings and due dates must be recorded before signature/completion.
+
+Validation and exact GitHub/Sites/iOS publication evidence: `C:/Webproject/outputs/safety-phone-flow-20261013/release-report.json`. Implementation is local until that matching publication is recorded. Physical iPhone retesting, the tester's private job and actual recipient inbox receipt are not asserted as verified.
+
 ## Creditex readability and delegated Leads access, 13 October 2026
 
 Compliance questionnaire cards, editable questions, review answers and controls use the existing portal/business theme palettes with paired foreground/background colours. Long questions wrap, mobile controls remain usable, and Forms, Training and Onboarding expose chunk-load failures with Retry. The existing report/PDF and special safety-form exclusions remain intact.

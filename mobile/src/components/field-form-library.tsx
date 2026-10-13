@@ -16,8 +16,9 @@ type Library = { canManage: boolean; templates: BusinessForm[] };
 type JobForms = { templates: { key: string; version: number; name: string; description: string }[]; forms: { templateKey: string; templateVersion: number }[] };
 const fresh = (): Question => ({ key: `question_${Crypto.randomUUID().replaceAll('-', '_')}`, label: '', type: 'select', required: false, options: ['Yes', 'No'] });
 
-export function FieldFormLibrary({ workOrderId, serviceCategory, onBack, onChanged, onOpenElectricalAssessment, online }: {
+export function FieldFormLibrary({ workOrderId, serviceCategory, onBack, onChanged, onOpenElectricalAssessment, onOpenSafetyCheck, online }: {
   workOrderId: string; serviceCategory: string; onBack: () => void; onChanged: () => Promise<void>; onOpenElectricalAssessment: (recordId: string) => void; online: boolean;
+  onOpenSafetyCheck: (recordId: string) => void;
 }) {
   const apiRequest = useBusinessApi();
   const [library, setLibrary] = useState<Library>({ canManage: false, templates: [] });
@@ -98,7 +99,7 @@ export function FieldFormLibrary({ workOrderId, serviceCategory, onBack, onChang
       {questions.length < 30 ? <FieldButton variant="secondary" disabled={busy} onPress={() => { setQuestions((current) => [...current, fresh()]); setDirty(true); }}>Add question</FieldButton> : null}
       <FieldButton disabled={busy || loading || !online || !name.trim() || !guidance.trim()} onPress={() => void save()}>Save and make available</FieldButton>
     </> : <>
-      <FieldJobActivityPicker workOrderId={workOrderId} online={online} onChanged={onChanged} onOpenElectricalAssessment={onOpenElectricalAssessment} />
+      <FieldJobActivityPicker workOrderId={workOrderId} online={online} onChanged={onChanged} onOpenElectricalAssessment={onOpenElectricalAssessment} onOpenSafetyCheck={onOpenSafetyCheck} />
       <Text style={styles.title}>Supporting forms</Text>
       <Text style={styles.help}>Optional business checklists for this job.</Text>
       {jobForms.templates.map((template) => {

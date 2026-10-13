@@ -28,11 +28,14 @@ function presentation(value) {
     delivery: value.status === 'complete' ? [{ role: 'customer', status: 'accepted', message: 'Provider accepted customer copy.' }, { role: 'business', status: 'failed', message: 'Provider rejected business copy.' }] : [] };
 }
 
-function harness({ record = fixture(), canManage = true, online = true } = {}) {
+function harness({ record = fixture(), canManage = true, online = true, adapter = null } = {}) {
   let cursor = 0, tree, unmounted = false, uuid = 0;
   const slots = [], effects = [], pendingEffects = [];
   const state = { record, requests: [], files: new Map(), links: [], alerts: [], changed: 0, left: 0, canManage, downloadCalls: [],
-    props: { workOrderId: record.workOrderId, recordId: record.id, online, onReturnToJob: () => state.left++, onChanged: async () => { state.changed++; if (state.changedError) throw state.changedError; } } };
+    props: { workOrderId: record.workOrderId, recordId: record.id, online, service: adapter ? 'safety' : 'piesa', onReturnToJob: () => state.left++, onChanged: async () => { state.changed++; if (state.changedError) throw state.changedError; } } };
+  const present = value => adapter ? adapter.presentation(value) : presentation(value);
+  const completion = value => adapter ? adapter.completion(value) : veuElectricalCompletion(value);
+  const signerFields = adapter?.signerFields || VEU_ELECTRICAL_SIGNER_FIELDS;
   const same = (left, right) => left && right && left.length === right.length && left.every((value, i) => Object.is(value, right[i]));
   const react = {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -43,23 +46,25 @@ function harness({ record = fixture(), canManage = true, online = true } = {}) {
       const previous = effects[index]; effects[index] = { deps }; pendingEffects.push(() => { previous?.cleanup?.(); effects[index].cleanup = fn(); }); } },
   };
   class LocalFile extends Blob {
-    constructor(...parts) { super([new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3])], { type: 'image/jpeg' }); this.uri = parts.join('/'); this.name = parts.at(-1); }
+    constructor(...parts) { const uri = parts.join('/'); const bytes = state.files.get(uri) || new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+      super([bytes], { type: uri.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg' }); this.uri = uri; this.name = parts.at(-1); }
     get exists() { return state.files.has(this.uri); } get size() { return state.files.get(this.uri)?.byteLength || 6; } get contentUri() { return `content://fixture/${this.name}`; }
     copy(target) { state.files.set(target.uri, state.files.get(this.uri)); } delete() { state.files.delete(this.uri); }
     write(bytes) { if (state.fileWriteError) throw state.fileWriteError; state.files.set(this.uri, bytes); }
+    async bytes() { return state.files.get(this.uri) || new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]); }
   }
   class TestApiError extends Error { constructor(message, code) { super(message); this.code = code; } }
   const api = async (path, init = {}) => {
     const body = init.body instanceof FormData ? Object.fromEntries(init.body.entries()) : init.body ? JSON.parse(init.body) : null;
     state.requests.push({ path, init, body });
-    if (!body) { if (state.loadError) throw state.loadError; return state.loadResponse || { record: presentation(state.record), canManage: state.canManage }; }
+    if (!body) { if (state.loadError) throw state.loadError; return state.loadResponse || { record: present(state.record), canManage: state.canManage }; }
     if (state.writeError) throw state.writeError;
     if (state.writeResponse) return state.writeResponse;
     assert.equal(body.recordId, state.record.id);
-    if (body.action !== 'retry_delivery') assert.equal(Number(body.baseRevision), state.record.revision, 'Every write binds the current saved revision');
+    if (adapter || body.action !== 'retry_delivery') assert.equal(Number(body.baseRevision), state.record.revision, 'Every write binds the current saved revision');
     const next = clone(state.record);
     if (init.method === 'PATCH') {
-      if (body.answers.initial_correct === true && next.answers.initial_correct !== true) throw new Error('Use the initial attestation control.');
+      if (!adapter && body.answers.initial_correct === true && next.answers.initial_correct !== true) throw new Error('Use the initial attestation control.');
       next.answers = normaliseActivityAnswers(next.form, body.answers);
       if (activitySigningScope(next, 'before') !== activitySigningScope(state.record, 'before')) { delete next.initialAttestation; if (state.record.answers.initial_correct === true) next.answers.initial_correct = false; }
     } else if (body.action === 'attest_initial') {
@@ -68,26 +73,26 @@ function harness({ record = fixture(), canManage = true, online = true } = {}) {
       if (activityMissing(next, 'before', false).length) throw new Error('Complete the initial assessment answers and attachments first.');
       next.initialAttestation = { actorUid: 'electrician', confirmedAt: '2026-10-08T03:00:00Z', scopeSha256: activitySigningScope(next, 'before') };
     } else if (body.action === 'upload') {
-      next.evidence.push({ id: 'evidence-one', fieldKey: body.fieldKey, fileName: body.file.name, contentType: body.file.type, sha256: activityHash('evidence'), size: body.file.size });
+      next.evidence.push({ id: `evidence-${next.revision}`, fieldKey: body.fieldKey, fileName: body.file.name, contentType: body.file.type, sha256: activityHash(await body.file.bytes()), size: body.file.size });
     } else if (body.action === 'sign') {
-      assert.equal(veuElectricalCompletion(next).missing.some(item => item.kind !== 'signature'), false, 'Canonical whole-form prerequisites gate genuine signatures');
+      assert.equal(completion(next).missing.some(item => item.kind !== 'signature'), false, 'Canonical whole-form prerequisites gate genuine signatures');
       const declaration = next.form.declarations.find(item => item.key === body.declarationKey);
-      assert.equal(body.signerName, next.answers[VEU_ELECTRICAL_SIGNER_FIELDS[declaration.key]]); assert.equal(body.accepted, true);
+      assert.equal(body.signerName, next.answers[signerFields[declaration.key]]); assert.equal(body.accepted, true);
       assert.equal(body.scopeSha256, activitySigningScope(next, declaration.phase)); assert.ok(inkExports.activitySignatureStrokesAreValid(body.strokes));
       next.signatures.push({ id: `ink-${declaration.key}`, declarationKey: declaration.key, signerName: body.signerName, role: declaration.role, phase: declaration.phase,
         declarationText: declaration.text, declarationSha256: activityHash(declaration.text), scopeSha256: body.scopeSha256, signedAt: '2026-10-08T03:01:00Z', actorUid: 'signer', strokes: body.strokes });
     } else if (body.action === 'complete') {
-      assert.equal(veuElectricalCompletion(next).ready, true, 'Canonical completion rules gate the native finish action'); next.status = 'complete';
+      assert.equal(completion(next).ready, true, 'Canonical completion rules gate the native finish action'); next.status = 'complete';
     } else assert.equal(body.action, 'retry_delivery');
-    next.revision++; state.record = next; return { record: presentation(next), canManage: state.canManage };
+    next.revision++; state.record = next; return { record: present(next), canManage: state.canManage };
   };
   const dependencies = {
-    react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
+    react, 'react/jsx-runtime': { jsx: (type, props, key) => ({ type, props, key }), jsxs: (type, props, key) => ({ type, props, key }) },
     'react-native': { Text: 'Text', View: 'View', Pressable: 'Pressable', TextInput: 'TextInput', Platform: { OS: 'android' }, StyleSheet: { create: value => value },
       Alert: { alert: (...args) => state.alerts.push(args) }, Linking: { openURL: async uri => state.links.push(uri) } },
     'expo-router': { useNavigation: () => ({ dispatch: () => state.left++ }) },
     'expo-router/react-navigation': { usePreventRemove: (blocked, callback) => { state.leaveGuard = { blocked, callback }; } },
-    'expo-crypto': { randomUUID: () => `request-${++uuid}` }, 'expo-file-system': { File: LocalFile, Paths: { cache: 'cache', document: 'document' },
+    'expo-crypto': { randomUUID: () => `request-${++uuid}`, CryptoDigestAlgorithm: { SHA256: 'SHA-256' }, digest: async (_algorithm, bytes) => Uint8Array.from(Buffer.from(activityHash(bytes), 'hex')).buffer }, 'expo-file-system': { File: LocalFile, Paths: { cache: 'cache', document: 'document' },
       Directory: { pickDirectoryAsync: async () => { if (state.folderError) throw state.folderError; return { createFile: name => new LocalFile('user-selected-folder', name) }; } } },
     'expo-document-picker': { getDocumentAsync: async () => state.document || { canceled: true, assets: [] } },
     'expo-image-picker': { CameraType: { back: 'back' }, requestCameraPermissionsAsync: async () => ({ granted: state.cameraPermission !== false }),
@@ -95,13 +100,23 @@ function harness({ record = fixture(), canManage = true, online = true } = {}) {
     '@/lib/theme': { colours: {}, spacing: {}, radius: {} }, '@/lib/use-business-api': { useBusinessApi: () => api },
     '@/providers/app-provider': { useApp: () => ({ user: { localOwnerKey: 'business-test' } }) },
     '@/lib/activity-form-completion': inkExports,
-    '@/lib/api': { ApiError: TestApiError, downloadElectricalAssessmentFile: async (...args) => { state.downloadCalls.push(args); return { bytes: new TextEncoder().encode('%PDF-1.7 test'), contentType: 'application/pdf' }; } },
+    '@/lib/safety-check-photo': { prepareSafetyCheckPhoto: async uri => {
+      state.photoPrepared = (state.photoPrepared || 0) + 1;
+      const prepared = new LocalFile('prepared', 'photo.jpg');
+      state.files.set(prepared.uri, state.files.get(uri)); return prepared;
+    } },
+    '@/lib/api': { ApiError: TestApiError,
+      downloadElectricalAssessmentFile: async (...args) => { state.downloadCalls.push(args); return { bytes: new TextEncoder().encode('%PDF-1.7 test'), contentType: 'application/pdf' }; },
+      downloadSafetyCheckFile: async (...args) => { state.downloadCalls.push(args); state.safetyDownload = true; return { bytes: new TextEncoder().encode('%PDF-1.7 test'), contentType: 'application/pdf' }; } },
     '../../../src/lib/trade-activity-form-flow': flow,
     './keyboard-aware-scroll-view': { KeyboardAwareScrollView: 'Scroll' }, './field-button': { FieldButton: 'FieldButton' },
     './field-select': { FieldSelect: 'FieldSelect' }, './field-date-picker': { FieldDatePicker: 'FieldDatePicker' }, './SignatureCapture': { SignatureCapture: 'SignatureCapture' },
   };
   const exports = {}; new Function('require', 'exports', compile(source))(id => { assert.ok(id in dependencies, id); return dependencies[id]; }, exports);
-  function render() { cursor = 0; tree = exports.FieldVeuElectricalAssessmentWizard(state.props); while (pendingEffects.length) pendingEffects.shift()(); return tree; }
+  function render() { cursor = 0;
+    // Execute the current inner component; the public PIESA wrapper has no hooks.
+    tree = exports.FieldOfficialAssessmentWizard(state.props);
+    while (pendingEffects.length) pendingEffects.shift()(); return tree; }
   const visit = node => Array.isArray(node) ? node.flatMap(visit) : !node || typeof node !== 'object' ? [] : [node, ...visit(node.props?.children)];
   const nodes = () => visit(tree);
   const button = text => nodes().find(node => node.type === 'FieldButton' && [node.props.children].flat(5).join('') === text);
@@ -109,7 +124,8 @@ function harness({ record = fixture(), canManage = true, online = true } = {}) {
   const select = label => nodes().find(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && matchesLabel(node, label));
   async function press(text) { const node = button(text); assert.ok(node, text); assert.equal(node.props.disabled, false, `Button enabled: ${text}`); node.props.onPress(); await flush(); render(); }
   async function section(page) { select('Assessment section').props.onChange(page); await flush(); render(); }
-  function answer(field, value) { const node = nodes().filter(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && matchesLabel(node, field.label))[field.repeatIndex || 0]; assert.ok(node, field.key); assert.notEqual(node.props.disabled, true, field.key); assert.notEqual(node.props.editable, false, field.key);
+  function answer(field, value) { const question = nodes().find(node => node.type === 'View' && node.key === field.key);
+    const node = visit(question).find(node => ['FieldSelect', 'FieldDatePicker', 'TextInput'].includes(node.type) && matchesLabel(node, field.label)); assert.ok(node, field.key); assert.notEqual(node.props.disabled, true, field.key); assert.notEqual(node.props.editable, false, field.key);
     if (node.type === 'TextInput') node.props.onChangeText(String(value)); else node.props.onChange(field.type === 'boolean' ? value ? 'yes' : 'no' : String(value)); render(); }
   return { state, render, nodes, button, select, press, section, answer,
     texts: () => nodes().filter(node => ['Text', 'FieldSelect', 'FieldDatePicker'].includes(node.type)).flatMap(node => node.type === 'Text' ? [node.props.children].flat(4) : node.props.label).join(' '),
@@ -262,6 +278,37 @@ test('a native selected original is retained after failed upload and retries wit
   assert.equal(h.state.record.evidence.length, 1); assert.equal(h.state.files.size, 1, 'Retained copy deleted only after verified upload'); h.cleanup();
 });
 
+test('unconfirmed upload acknowledgements retain the exact photo/document and request identity until its bytes are verified', async t => {
+  const record = electricalFixture({ life_support: true, life_support_consent: true }); record.status = 'draft';
+  const h = harness({ record }); t.after(() => h.cleanup()); await load(h);
+  const field = record.form.fields.find(item => item.key === 'life_support_record'); await h.section(field.section);
+  h.state.files.set('picked.pdf', new TextEncoder().encode('%PDF-1.7 actual selected bytes'));
+  h.state.document = { canceled: false, assets: [{ uri: 'picked.pdf', name: 'Consent.pdf' }] };
+  const saved = presentation(record); h.state.writeResponse = { record: saved, canManage: true };
+  await h.press('Choose document'); const first = h.state.requests.at(-1).body;
+  assert.match(h.texts(), /upload was not confirmed/); assert.equal(h.state.files.size, 2);
+  assert.match(h.texts(), /retained on your phone/);
+  h.state.writeResponse = { record: { ...saved, revision: saved.revision + 1, evidence: [{ id: 'false-ack',
+    fieldKey: field.key, sha256: activityHash('different bytes'), size: 5, contentType: 'application/pdf', fileName: 'Consent.pdf' }] }, canManage: true };
+  await h.press('Retry evidence upload'); assert.equal(h.state.files.size, 2); assert.equal(h.state.requests.at(-1).body.requestId, first.requestId);
+  assert.equal(h.state.record.evidence.length, 0); assert.doesNotMatch(h.texts(), /Evidence saved/);
+  h.state.writeResponse = null; await h.press('Retry evidence upload');
+  assert.equal(h.state.requests.at(-1).body.requestId, first.requestId); assert.equal(h.state.files.size, 1);
+  assert.equal(h.state.record.evidence[0].sha256, activityHash(h.state.files.get('picked.pdf')));
+});
+
+test('a signature response without the actual named saved scope cannot discard drawn ink or claim saved success', async t => {
+  const record = electricalFixture(); record.status = 'draft'; const h = harness({ record }); t.after(() => h.cleanup()); await load(h);
+  await h.press('Sign off'); h.nodes().find(node => node.type === 'Pressable').props.onPress(); h.render();
+  const pad = h.nodes().find(node => node.type === 'SignatureCapture'); pad.props.onChange({ ...pad.props.value, strokes }); h.render();
+  h.state.writeResponse = { record: { ...presentation(record), revision: record.revision + 1 }, canManage: true };
+  await h.press('Save owner signature'); const failed = h.state.requests.at(-1).body;
+  assert.match(h.texts(), /signature was not confirmed/); assert.deepEqual(h.nodes().find(node => node.type === 'SignatureCapture').props.value.strokes, strokes);
+  assert.equal(h.state.record.signatures.length, 0); assert.equal(h.state.record.status, 'draft');
+  h.state.writeResponse = null; await h.press('Save owner signature'); assert.equal(h.state.requests.at(-1).body.requestId, failed.requestId);
+  assert.equal(h.state.record.signatures.length, 1); assert.equal(h.nodes().find(node => node.type === 'SignatureCapture'), undefined);
+});
+
 test('actual owner ink and consent complete the native form and expose real PDF and both delivery states', async () => {
   const value = electricalFixture(); value.status = 'draft'; const h = harness({ record: value }); await load(h);
   await h.section('review'); assert.equal(h.select('Assessment section').props.value, 'signatures'); assert.match(h.texts(), /before continuing/);
@@ -332,7 +379,10 @@ test('saving a native PDF handles folder cancellation and denied writes without 
 
 test('native navigation blocks unsaved work and clears abandoned retained evidence only after explicit discard', async () => {
   const h = harness(); await load(h); h.answer(h.state.record.form.fields.find(field => field.key === 'life_support'), false);
-  h.button('Back to job').props.onPress(); assert.equal(h.state.left, 0); assert.match(h.state.alerts.at(-1)[0], /Unsaved/);
+  // Router/back gestures cannot silently discard edits. The visible Back to job
+  // button saves answers first, while route dismissal requires explicit discard.
+  h.state.leaveGuard.callback({ data: { action: { type: 'GO_BACK' } } });
+  assert.equal(h.state.left, 0); assert.match(h.state.alerts.at(-1)[0], /Unsaved/);
   h.state.alerts.at(-1)[2][1].onPress(); assert.equal(h.state.left, 1); h.cleanup();
 });
 

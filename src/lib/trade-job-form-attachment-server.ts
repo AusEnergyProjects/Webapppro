@@ -17,6 +17,9 @@ export function initialRentalAssessmentModules(value: unknown, serviceCategory: 
   if (!Array.isArray(parsed) || parsed.length > RENTAL_ASSESSMENT_MODULE_KEYS.length
     || parsed.some(key => typeof key !== "string" || !RENTAL_ASSESSMENT_MODULE_KEYS.some(moduleKey => moduleKey === key))
     || new Set(parsed).size !== parsed.length) throw invalid();
+  if (parsed.some(key => key === "electrical_safety_check" || key === "gas_safety_check")) {
+    throw new TradeFormSelectionError("Save the job, then add its official electrical or gas safety check from Forms.");
+  }
   return parsed.length ? normalizeRentalAssessmentModules(parsed) : [];
 }
 

@@ -38,7 +38,7 @@ const styles = ["../src/app/globals.css", "../src/app/protected-workspaces.css",
 const executablePath = [process.env.TEST_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/chromium", "/usr/bin/google-chrome"].find(path => path && existsSync(path));
 
 test("business header shows identity and account controls directly without a menu at desktop and phone widths", { skip: !executablePath }, async () => {
-  const browser = await chromium.launch({ executablePath, headless: true });
+  const browser = await chromium.launch({ executablePath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const [width, isSupplier] of [320, 390, 768, 960, 1280, 1601, 1920, 2276].flatMap(width => [[width, false], [width, true]])) {
       const page = await browser.newPage({ viewport: { width, height: 850 } });

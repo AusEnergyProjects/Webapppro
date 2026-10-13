@@ -55,7 +55,7 @@ const css = bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
 const modes = fs.readFileSync(path.join(root, 'src/app/tlink-colour-mode.css'), 'utf8');
 
 test('Sales board paginates beyond 25 and supports saved details, same-job navigation and accessible responsive dialogs', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const scenario of [{name:'desktop-day',width:1366,height:900,mode:'day'}, {name:'desktop-night',width:1366,height:900,mode:'night'}, {name:'mobile-day',width:390,height:844,mode:'day'}, {name:'mobile-night',width:390,height:844,mode:'night'}]) await t.test(scenario.name, async () => {
       const page = await browser.newPage({ viewport: { width: scenario.width, height: scenario.height } });

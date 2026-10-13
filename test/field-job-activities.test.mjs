@@ -117,12 +117,56 @@ test('existing electrical job offers real rental, VEU and STC forms with availab
   const f = fixture(); const response = await f.get(); assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.rentalModules.find((item) => item.id === 'minimum_standards').unavailableReason, '');
+  assert.ok(!body.rentalModules.some(item => ['electrical_safety_check', 'gas_safety_check'].includes(item.id)));
+  assert.deepEqual(body.rentalVisits.map(item => item.id), ['smoke_blinds_visit']);
   assert.ok(body.activities.some((item) => item.programCode === 'VEU' && !item.unavailableReason));
   assert.ok(body.programs.some((item) => item.label.includes('STC')));
   for (const activity of body.activities.filter((item) => !forms.activityFieldCatalogue().some((form) => form.activityTemplateId === item.id))) {
     assert.match(activity.unavailableReason, /not available/);
   }
 });
+
+for (const [moduleKey, presetKey, gate] of [
+  ['electrical_safety_check', 'electrical_smoke_blinds_visit', 'licensed_electrician'],
+  ['gas_safety_check', 'gas_smoke_blinds_visit', 'licensed_gasfitter'],
+]) {
+  test(`new ${moduleKey} and its visit cannot bypass the official form through direct API requests`, async () => {
+    const f = fixture(); qualifyVisit(f, gate);
+    for (const selection of [{ kind: 'rental', moduleKey }, { kind: 'rental_visit', presetKey }]) {
+      const response = await f.post(selection);
+      assert.equal(response.status, 409);
+      assert.match((await response.json()).error, /official electrical or gas safety check.*Forms/);
+      assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
+      assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 0);
+      assert.equal(f.database.prepare('SELECT count(*) n FROM trade_work_order_events').get().n, 0);
+      assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
+    }
+  });
+
+  test(`existing ${moduleKey} remains discoverable and an acknowledged add preserves its saved answers`, async () => {
+    const f = fixture();
+    assert.equal((await f.post({ kind: 'rental', moduleKey: 'minimum_standards' })).status, 200);
+    const inspection = f.database.prepare('SELECT * FROM trade_rental_inspections').get();
+    const template = rental.rentalAssessmentTemplateSnapshot([moduleKey]).modules[moduleKey];
+    const now = '2026-09-10T00:00:00.000Z';
+    f.database.prepare('UPDATE trade_rental_inspections SET selected_modules_snapshot=?,module_selection_snapshot=?')
+      .run(JSON.stringify(['minimum_standards', moduleKey]), JSON.stringify(['minimum_standards', moduleKey]));
+    f.database.prepare(`INSERT INTO trade_rental_inspection_modules
+      (id,inspection_id,firebase_uid,module_key,required,selected_required,status,template_version,template_name,
+       required_capability,template_snapshot,answers,created_at,updated_at)
+      VALUES(?,?,?, ?,0,1,'draft',?,?, ?,?, ?,?,?)`)
+      .run('historical-check', inspection.id, 'owner', moduleKey, template.templateVersion, template.title,
+        template.credentialGate, JSON.stringify(template), '{"savedFinding":"Historical recorded finding"}', now, now);
+    const before = f.database.prepare("SELECT * FROM trade_rental_inspection_modules WHERE id='historical-check'").get();
+    const catalogue = await (await f.get()).json();
+    assert.equal(catalogue.rentalModules.find(item => item.id === moduleKey).added, true);
+    assert.equal((await f.post({ kind: 'rental', moduleKey, expectedRevision: 5 })).status, 200);
+    assert.deepEqual(f.database.prepare("SELECT * FROM trade_rental_inspection_modules WHERE id='historical-check'").get(), before);
+    assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 5);
+    f.database.exec("UPDATE trade_work_orders SET stage='completed'");
+    assert.equal((await (await f.get()).json()).rentalModules.find(item => item.id === moduleKey).added, true);
+  });
+}
 
 for (const capability of ['minimum-rental-standards', 'rental-inspection']) {
   test(`assigned staff can attach minimum standards with the saved ${capability} service`, async () => {
@@ -157,13 +201,13 @@ test('office-only, unrelated and invalid saved staff services cannot attach rent
   }
 });
 
-test('canonical rental service still requires the current safety qualification and supporting document', async () => {
+test('canonical rental smoke service still requires the current safety qualification and supporting document', async () => {
   const f = fixture({ isOwner: false, actorUid: 'worker-uid' });
   f.database.prepare('UPDATE trade_team_members SET member_uid=?, capabilities=? WHERE id=?')
     .run('worker-uid', '["minimum-rental-standards"]', 'worker');
   const available = await (await f.get()).json();
-  assert.match(available.rentalModules.find((item) => item.id === 'electrical_safety_check').unavailableReason, /current matching qualification and supporting document/);
-  assert.equal((await f.post({ kind: 'rental', moduleKey: 'electrical_safety_check' })).status, 409);
+  assert.match(available.rentalModules.find((item) => item.id === 'smoke_alarm_check').unavailableReason, /current matching qualification and supporting document/);
+  assert.equal((await f.post({ kind: 'rental', moduleKey: 'smoke_alarm_check' })).status, 409);
   assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
 });
 
@@ -265,17 +309,17 @@ test('worker deactivated during attach cannot gain a new activity through a stal
   assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
 });
 
-test('licensed rental module requires a current credential and merges without changing existing answers', async () => {
+test('rental smoke module requires a current credential and merges without changing existing answers', async () => {
   const f = fixture(); assert.equal((await f.post({ kind: 'rental', moduleKey: 'minimum_standards' })).status, 200);
-  assert.equal((await f.post({ kind: 'rental', moduleKey: 'electrical_safety_check', expectedRevision: 5 })).status, 409);
+  assert.equal((await f.post({ kind: 'rental', moduleKey: 'smoke_alarm_check', expectedRevision: 5 })).status, 409);
   f.database.exec(`INSERT INTO trade_team_member_files VALUES('file','owner','worker','active','2099-01-01');
-    INSERT INTO trade_team_member_credentials VALUES('credential','owner','worker','file','licence','123456789','VIC','active','2099-01-01','licensed_electrician');
+    INSERT INTO trade_team_member_credentials VALUES('credential','owner','worker','file','training','123456789','VIC','active','2099-01-01','suitably_qualified_smoke_alarm_worker');
     UPDATE trade_rental_inspection_modules SET answers='{"occupancy":"occupied"}';`);
-  const result = await f.post({ kind: 'rental', moduleKey: 'electrical_safety_check', expectedRevision: 5 });
+  const result = await f.post({ kind: 'rental', moduleKey: 'smoke_alarm_check', expectedRevision: 5 });
   assert.equal(result.status, 200, JSON.stringify(await result.clone().json()));
   assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 2);
   assert.equal(f.database.prepare("SELECT answers FROM trade_rental_inspection_modules WHERE module_key='minimum_standards'").get().answers, '{"occupancy":"occupied"}');
-  assert.deepEqual(JSON.parse(f.database.prepare('SELECT selected_modules_snapshot FROM trade_rental_inspections').get().selected_modules_snapshot), ['minimum_standards', 'electrical_safety_check']);
+  assert.deepEqual(JSON.parse(f.database.prepare('SELECT selected_modules_snapshot FROM trade_rental_inspections').get().selected_modules_snapshot), ['minimum_standards', 'smoke_alarm_check']);
 });
 
 test('native entry exposes activities before supporting forms and uses the existing form runners', () => {
@@ -293,8 +337,7 @@ function qualifyVisit(f, gate = 'licensed_electrician') {
     INSERT INTO trade_team_member_credentials VALUES('smoke','owner','worker','smoke-file','training','TEST-2','VIC','active','2099-01-01','suitably_qualified_smoke_alarm_worker');`);
 }
 for (const [presetKey, gate, expectedKeys] of [
-  ['electrical_smoke_blinds_visit', 'licensed_electrician', ['electrical_safety_check', 'smoke_alarm_check']],
-  ['gas_smoke_blinds_visit', 'licensed_gasfitter', ['gas_safety_check', 'smoke_alarm_check']],
+  ['smoke_blinds_visit', 'suitably_qualified_smoke_alarm_worker', ['smoke_alarm_check']],
 ]) {
   test(`${presetKey} atomically attaches exactly this visit and replays without duplicates`, async () => {
     const f = fixture(); qualifyVisit(f, gate);
@@ -302,7 +345,7 @@ for (const [presetKey, gate, expectedKeys] of [
     assert.equal(result.status, 200, JSON.stringify(await result.clone().json()));
     assert.deepEqual(JSON.parse(f.database.prepare('SELECT selected_modules_snapshot FROM trade_rental_inspections').get().selected_modules_snapshot), expectedKeys);
     const modules = f.database.prepare('SELECT template_version, template_snapshot FROM trade_rental_inspection_modules').all();
-    assert.equal(modules.length, 2); assert.ok(modules.every((entry) => entry.template_version === 4));
+    assert.equal(modules.length, 1); assert.ok(modules.every((entry) => entry.template_version === 4));
     assert.ok(JSON.parse(modules.find((entry) => JSON.parse(entry.template_snapshot).key === 'smoke_alarm_check').template_snapshot).sections.some((section) => section.key === 'window_covering_cords'));
     assert.equal((await f.post({ kind: 'rental_visit', presetKey })).status, 200);
     assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 5);
@@ -314,7 +357,7 @@ test('a missing or concurrently revoked discipline prevents every module in the 
     const f = fixture(); qualifyVisit(f); await rentalGuards.ensureTradeRentalSchemaGuards(f.db);
     const revoke = () => f.database.exec("UPDATE trade_team_member_credentials SET status='revoked' WHERE id='smoke'");
     if (concurrent) f.beforeBatch(revoke); else revoke();
-    assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit' })).status, 409);
+    assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'smoke_blinds_visit' })).status, 409);
     assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspections').get().n, 0);
     assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 0);
     assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 4);
@@ -325,18 +368,18 @@ test('adding a visit retains existing answers and rejects an earlier frozen smok
   assert.equal((await f.post({ kind: 'rental', moduleKey: 'smoke_alarm_check' })).status, 200);
   f.database.exec(`UPDATE trade_rental_inspection_modules SET answers='{"workerName":"Saved worker"}'`);
   const frozen = f.database.prepare('SELECT template_snapshot FROM trade_rental_inspection_modules').get().template_snapshot;
-  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit', expectedRevision: 5 })).status, 200);
+  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'smoke_blinds_visit', expectedRevision: 5 })).status, 200);
   const saved = f.database.prepare("SELECT * FROM trade_rental_inspection_modules WHERE module_key='smoke_alarm_check'").get();
   assert.equal(saved.template_snapshot, frozen); assert.equal(saved.answers, '{"workerName":"Saved worker"}');
   f.database.exec("UPDATE trade_rental_inspection_modules SET template_version=3 WHERE module_key='smoke_alarm_check'");
-  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit', expectedRevision: 6 })).status, 409);
-  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 2);
+  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'smoke_blinds_visit', expectedRevision: 5 })).status, 409);
+  assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 1);
 });
 test('a concurrent inspection edit prevents partially attaching a bundle', async () => {
   const f = fixture(); qualifyVisit(f);
   assert.equal((await f.post({ kind: 'rental', moduleKey: 'minimum_standards' })).status, 200);
   f.beforeBatch(() => f.database.exec('UPDATE trade_rental_inspections SET revision=revision+1'));
-  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'electrical_smoke_blinds_visit', expectedRevision: 5 })).status, 409);
+  assert.equal((await f.post({ kind: 'rental_visit', presetKey: 'smoke_blinds_visit', expectedRevision: 5 })).status, 409);
   assert.equal(f.database.prepare('SELECT count(*) n FROM trade_rental_inspection_modules').get().n, 1);
   assert.equal(f.database.prepare('SELECT revision FROM trade_work_orders').get().revision, 5);
 });

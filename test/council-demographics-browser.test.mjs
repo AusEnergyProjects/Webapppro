@@ -18,7 +18,7 @@ const script=bundle.outputFiles.find(file=>file.path.endsWith(".js")).text;
 const css=bundle.outputFiles.find(file=>file.path.endsWith(".css")).text;
 
 test("Council Census layers and postcode comparisons work on desktop and mobile without page overflow",{skip:!browserPath},async()=>{
-  const browser=await chromium.launch({executablePath:browserPath,headless:true});
+  const browser=await chromium.launch({executablePath:browserPath,headless:true, args: ['--disable-gpu'] });
   try{
     for(const width of [1366,390]){
       const page=await browser.newPage({viewport:{width,height:950},hasTouch:width<500});

@@ -68,7 +68,7 @@ test("native Chrome rehearses greetings, repeated tasks, quiet recovery, navigat
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ["--mute-audio"] });
+    browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ["--mute-audio", '--disable-gpu'] });
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     const status = async expected => page.waitForFunction(value => value === "thinking"

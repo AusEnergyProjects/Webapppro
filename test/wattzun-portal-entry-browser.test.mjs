@@ -61,7 +61,7 @@ test("public portal entry links do not inherit a document's prohibited microphon
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: browserPath, headless: true, timeout: 10000 });
+    browser = await chromium.launch({ executablePath: browserPath, headless: true, timeout: 10000, args: ['--disable-gpu'] });
     const page = await browser.newPage();
     page.setDefaultTimeout(5000);
     const base = `http://127.0.0.1:${server.address().port}`;

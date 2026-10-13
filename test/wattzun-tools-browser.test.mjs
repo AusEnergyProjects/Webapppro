@@ -175,7 +175,7 @@ async function currentHat(tools, launcher, dialog, id) {
 }
 
 test('actual Tools, floating launcher and assistant share all 12 appearance choices and speed in desktop/mobile day/night layouts', { skip: !browserPath && 'No installed browser for layout checks' }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const scenario of [{ name: 'desktop-day', width: 1366, mode: 'day' }, { name: 'desktop-night', width: 1366, mode: 'night' }, { name: 'mobile-day', width: 390, mode: 'day' }, { name: 'mobile-night', width: 390, mode: 'night' }]) await t.test(scenario.name, async () => {
       const { page, tools, errors } = await fixturePage(browser, scenario);
@@ -249,7 +249,7 @@ test('actual Tools, floating launcher and assistant share all 12 appearance choi
 });
 
 test('all three portal Tools use personal scoped usage and deliberate draft/send/call controls', { skip: !browserPath && 'No installed browser for interaction checks' }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const portal of ['trade', 'council', 'creditex']) await t.test(portal, async () => {
       const { page, tools, errors } = await fixturePage(browser, { portal });
@@ -288,7 +288,7 @@ test('all three portal Tools use personal scoped usage and deliberate draft/send
 });
 
 test('loading/errors show no invented zero and deferred old workspace or actor usage cannot replace current figures', { skip: !browserPath && 'No installed browser for isolation checks' }, async () => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, tools, errors } = await fixturePage(browser, { multiple: true, usageModes: { 'user-one:trade:synthetic-trade-one': 'deferred' } });
     const usage = tools.getByRole('region', { name: 'Your Wattzun usage', exact: true });
@@ -363,7 +363,7 @@ test('loading/errors show no invented zero and deferred old workspace or actor u
 });
 
 test('revoked scope lookup shows no usage or callable Tools controls', { skip: !browserPath && 'No installed browser for access checks' }, async () => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, tools, errors } = await fixturePage(browser, { scopeFailure: true });
     await tools.getByRole('alert').getByText('Current workspace access is unavailable.', { exact: true }).waitFor();
@@ -376,7 +376,7 @@ test('revoked scope lookup shows no usage or callable Tools controls', { skip: !
 });
 
 test('blocked device storage preserves live Tools choices for late Message and first Call consumers without actor or scope bleed', { skip: !browserPath && 'No installed browser for storage checks' }, async () => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     const { page, tools, errors } = await fixturePage(browser, { multiple: true, blockedStorage: true, submitOnCall: true });
     const launcher = page.getByRole('button', { name: 'Open Wattzun AI chat', exact: true });
@@ -450,7 +450,7 @@ test('portal navigation renders the actual Tools workspace and excludes the Coun
 });
 
 test('business selection and sign-out stop a minimised call without trusting another actor or leaking its transcript', { skip: !browserPath && 'No installed browser for tenant boundary checks' }, async () => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     const {page,tools,errors}=await fixturePage(browser,{multiple:true,blockedStorage:true});
     await tools.getByRole('button',{name:'Message Wattzun',exact:true}).click();

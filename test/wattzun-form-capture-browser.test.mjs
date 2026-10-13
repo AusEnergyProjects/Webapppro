@@ -95,7 +95,7 @@ async function pick(page, file = photo) {
 }
 
 test("guided camera uses the actual question-bound browser control and canonical evidence commit", { skip: !browserPath, timeout: 45000 }, async t => {
-  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--disable-gpu'] });
   try {
     for (const rejectCommit of [false, true]) await t.test(`native declaration opens without filling it and only confirmed save resumes: rejected=${rejectCommit}`, async () => {
       const { page, errors } = await fixture(browser, { declaration: true, rejectCommit });

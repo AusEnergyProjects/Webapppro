@@ -205,10 +205,13 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
     LEFT JOIN trade_crm_service_sites ss ON ss.id = d.service_site_id AND ss.firebase_uid = w.firebase_uid AND ss.record_status = 'active'
     LEFT JOIN trade_crm_appointments a ON a.id = ? AND a.work_order_id = w.id AND a.firebase_uid = w.firebase_uid
     WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`).bind(selectedVisit?.id || "", workOrderId, firebaseUid).first<Record<string, unknown>>();
-  const [taskCount, formCount, assessmentCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount, workPackCount] = await Promise.all([
+  const [taskCount, formCount, assessmentCount, safetyCheckCount, issueCount, planCount, unsyncedCount, complianceCount, rentalReportCount, activityCount, workPackCount] = await Promise.all([
     db.prepare("SELECT COUNT(*) count FROM trade_work_order_tasks WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'done'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_job_forms WHERE work_order_id = ? AND firebase_uid = ? AND status <> 'complete'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare(`SELECT COUNT(*) count FROM trade_veu_electrical_assessments assessment
+      WHERE assessment.work_order_id = ? AND assessment.owner_uid = ?
+        AND NOT (${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
+    db.prepare(`SELECT COUNT(*) count FROM trade_safety_checks assessment
       WHERE assessment.work_order_id = ? AND assessment.owner_uid = ?
         AND NOT (${COMPLETED_ELECTRICAL_ASSESSMENT_SQL})`).bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
     db.prepare("SELECT COUNT(*) count FROM trade_crm_job_notes WHERE work_order_id = ? AND firebase_uid = ? AND note_type = 'issue' AND issue_status = 'open'").bind(workOrderId, firebaseUid).first<Record<string, unknown>>(),
@@ -226,7 +229,7 @@ async function payload(access: TeamAccess, workOrderId: string, selectedVisitId 
   const customerContext = job?.source_type !== "opportunity"
     && (job?.customer_source === "trade_owned" || job?.customer_source === "public_lead_released");
   const address = customerContext ? [job?.address_line_1, job?.address_line_2, job?.suburb, job?.address_state, job?.postcode].filter(Boolean).join(", ") : "";
-  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0), assessments: Number(assessmentCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0), rentalReports: Number(rentalReportCount?.count || 0) };
+  const counts = { tasks: Number(taskCount?.count || 0), forms: Number(formCount?.count || 0) + Number(safetyCheckCount?.count || 0), assessments: Number(assessmentCount?.count || 0), issues: Number(issueCount?.count || 0), plan: Number(planCount?.count || 0), unsynced: Number(unsyncedCount?.count || 0), compliance: Number(complianceCount?.count || 0), rentalReports: Number(rentalReportCount?.count || 0) };
   const blockers = [
     ...(counts.tasks ? [{ key: "tasks", label: `${counts.tasks} assigned task${counts.tasks === 1 ? " is" : "s are"} not complete`, target: "tasks" }] : []),
     ...(Number(workPackCount?.count || 0) ? [{ key: "work-packs", label: "Complete and sign every required activity work pack", target: "forms" }] : []),
