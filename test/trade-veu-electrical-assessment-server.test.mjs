@@ -10,6 +10,7 @@ import * as predicates from '../src/lib/trade-account-predicates.ts';
 import * as membership from '../src/lib/trade-job-collaboration.ts';
 import * as guardSql from '../src/lib/tlink-schema-guards.ts';
 import * as reminder from '../src/lib/service-reminder-delivery.ts';
+import * as safetyCheckEmail from '../src/lib/safety-check-email.ts';
 import { renderVeuElectricalSafetyPdf } from '../src/lib/veu-electrical-safety-pdf.ts';
 import { PDFDocument } from 'pdf-lib';
 
@@ -50,7 +51,7 @@ function fixture(t,realPdf=false) {
     CREATE TABLE trade_crew_members(owner_uid TEXT,member_id TEXT,crew_id TEXT);
     CREATE TABLE trade_crews(id TEXT,owner_uid TEXT,lead_member_id TEXT);
     CREATE TABLE trade_crm_appointments(work_order_id TEXT,firebase_uid TEXT,assignee_member_id TEXT,status TEXT);
-    CREATE TABLE trade_email_submissions(owner_uid TEXT,request_key TEXT,status TEXT,provider TEXT,provider_message_id TEXT,PRIMARY KEY(owner_uid,request_key));
+    CREATE TABLE trade_email_submissions(owner_uid TEXT,request_key TEXT,status TEXT,provider TEXT,provider_message_id TEXT,subject TEXT NOT NULL DEFAULT '',PRIMARY KEY(owner_uid,request_key));
     INSERT INTO trade_accounts VALUES('owner','office@example.com','Example Electrical','installer','active','approved','51824753556','51824753556','review','2026-10-01','admin');
     INSERT INTO trade_account_verification_reviews VALUES('review','owner','51824753556','Example Electrical','installer','approved','official_abr_lookup','admin','2026-10-01');
     INSERT INTO trade_work_orders VALUES('job','owner','J-001','installer','active','in_progress',1,'direct','worker');
@@ -85,13 +86,14 @@ function fixture(t,realPdf=false) {
   const objects = new Map(), renders = [], sends = [], progressCalls = [];
   let progressPending = false, completesJob = false;
   const bucket = { async put(key, bytes) { objects.set(key, new Uint8Array(bytes)); }, async get(key) { const bytes = objects.get(key); return bytes ? { async arrayBuffer() { return bytes.slice().buffer; } } : null; }, async delete(key) { objects.delete(key); } };
-  const journal = (key, status, id = '') => sql.prepare('INSERT OR REPLACE INTO trade_email_submissions VALUES(?,?,?,?,?)').run('owner', key, status, 'synthetic', id);
+  const journal = (key, status, id = '', subject = '') => sql.prepare('INSERT OR REPLACE INTO trade_email_submissions VALUES(?,?,?,?,?,?)').run('owner', key, status, 'synthetic', id, subject);
   const service = compile('../src/lib/trade-veu-electrical-assessment-server.ts', {
     'cloudflare:workers': { env: { EVIDENCE: bucket } }, '../../db': { getD1: () => db }, './trade-job-collaboration': membership,
     './trade-account-predicates': predicates, './trade-activity-forms': activity, './trade-activity-form-flow': flow,
     './veu-electrical-safety-form': form, './veu-electrical-assessment': types, './trade-veu-electrical-schema-guards': guards,
     './trade-veu-electrical-draft': draft,
     './service-reminder-delivery': reminder,
+    './safety-check-email': safetyCheckEmail,
     './trade-form-job-progress': { async reconcileTradeFormJobProgress(access, workOrderId, options) {
       const record = sql.prepare('SELECT status,pdf_object_key,pdf_sha256,pdf_size_bytes FROM trade_veu_electrical_assessments WHERE work_order_id=? AND owner_uid=?').get(workOrderId, access.ownerUid);
       assert.equal(record.status, 'complete'); assert.ok(record.pdf_object_key); assert.equal(record.pdf_sha256.length, 64); assert.ok(record.pdf_size_bytes > 4);
@@ -102,8 +104,8 @@ function fixture(t,realPdf=false) {
     } },
     './trade-email-server': { async sendTradeCustomerEmail(uid, actor, message, options) {
       assert.equal(uid, 'owner'); assert.ok(actor); await options.beforeSend();
-      if (mailFailure) return mailFailure(message, journal);
-      sends.push(message); journal(message.idempotencyKey, 'accepted', `message-${sends.length}`); return { provider: 'synthetic', providerMessageId: `message-${sends.length}` };
+      if (mailFailure) return mailFailure(message, (key, status, id = '') => journal(key, status, id, message.subject));
+      sends.push(message); journal(message.idempotencyKey, 'accepted', `message-${sends.length}`, message.subject); return { provider: 'synthetic', providerMessageId: `message-${sends.length}` };
     } },
     './veu-electrical-safety-pdf': { async renderVeuElectricalSafetyPdf(record,assets) { assert.equal(form.veuElectricalCompletion(record).ready, true); renders.push(structuredClone(record));
       return realPdf?renderVeuElectricalSafetyPdf(record,assets,{regular:fs.readFileSync(new URL('../public/fonts/LiberationSans-Regular.ttf',import.meta.url)),bold:fs.readFileSync(new URL('../public/fonts/LiberationSans-Bold.ttf',import.meta.url))}):new TextEncoder().encode(`%PDF-${activity.activityCanonical(record)}`); } },
