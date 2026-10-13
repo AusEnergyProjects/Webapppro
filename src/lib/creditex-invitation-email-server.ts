@@ -15,7 +15,7 @@ export type CreditexInvitationEmailDelivery = {
 
 type Row = Record<string, unknown>;
 type Runtime = Record<string, string | undefined>;
-type EmailInput = { displayName: string; email: string; workspaceName: string; expiresAt: string; origin: string };
+type EmailInput = { invitationId: string; displayName: string; email: string; workspaceName: string; expiresAt: string; origin: string };
 type DispatchOptions = { origin: string; runtime?: Runtime; fetchImpl?: typeof fetch };
 const REQUEST_EVENT = "membership.invitation_email_requested";
 const RESULT_EVENT = "membership.invitation_email_result";
@@ -35,22 +35,25 @@ function escapeHtml(value: string) {
 
 /** The invitation contains no login token, password or customer/work information. */
 export function creditexInvitationEmail(input: EmailInput) {
-  const url = new URL("/creditex/compliance", input.origin).href;
+  const setupUrl = new URL("/creditex/compliance", input.origin);
+  setupUrl.searchParams.set("invite", input.invitationId);
+  const url = setupUrl.href;
   const expires = new Intl.DateTimeFormat("en-AU", {
     dateStyle: "long", timeStyle: "short", timeZone: "Australia/Sydney",
   }).format(new Date(input.expiresAt));
   const expiry = `${expires} (Sydney time)`;
   const subject = `You're invited to ${input.workspaceName} on TLink`;
-  const body = `Hi ${input.displayName},\n\nYou've been invited to the ${input.workspaceName} workspace on TLink.\n\nOpen your workspace: ${url}\n\nSign in using ${input.email}. Use your existing TLink password or Continue with Google for this email address. Complete email verification and the security prompts when asked. Your access will appear after you sign in.\n\nIf you need help signing in, contact the person who invited you.\n\nAccept your invitation before ${expiry}.\n\nIf you weren't expecting this invitation, you can ignore this email.\n\nTLink | Australian Energy Assessments`;
+  const body = `Hi ${input.displayName},\n\nYou've been invited to join ${input.workspaceName} on TLink.\n\nAccept your invitation: ${url}\n\nYour invited email: ${input.email}\n\nNew to TLink? Choose Create account and enter a password. You'll be signed in automatically. Confirm your email using the verification link we send, then return to open Creditex.\n\nAlready use TLink? Choose Sign in and use your existing password, or Continue with Google using your invited email. Use Forgot password? to email yourself a reset link.\n\nAccept your invitation before ${expiry}.\n\nNeed help? Contact the person who invited you. If you weren't expecting this invitation, you can ignore this email.\n\nTLink | Australian Energy Assessments`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(subject)}</title></head><body style="margin:0;padding:0;background:#eef3f5;color:#183b42;font-family:Arial,Helvetica,sans-serif;">
-<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Your ${escapeHtml(input.workspaceName)} workspace is ready. Open TLink and sign in with your invited email.</div>
+<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">You've been invited to ${escapeHtml(input.workspaceName)}. Create an account or sign in.</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f5;"><tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;border-collapse:separate;background:#ffffff;border-radius:18px;overflow:hidden;">
-<tr><td style="padding:30px 32px;background:#082d37;border-top:5px solid #9368bc;color:#ffffff;"><div style="font-size:27px;font-weight:bold;letter-spacing:-1px;">TLink<span style="color:#74ddc4;">.</span></div><p style="margin:22px 0 10px;font-size:12px;font-weight:bold;letter-spacing:2px;color:#74ddc4;">YOU'RE INVITED</p><h1 style="margin:0;font-size:29px;line-height:1.2;color:#ffffff;">Your team. One workspace.</h1><p style="margin:14px 0 0;font-size:17px;line-height:1.6;color:#dcecf0;">Join ${escapeHtml(input.workspaceName)} on TLink.</p></td></tr>
-<tr><td style="padding:30px 32px;"><p style="margin:0 0 18px;font-size:18px;line-height:1.6;">Hi ${escapeHtml(input.displayName)},</p><p style="margin:0 0 24px;font-size:16px;line-height:1.7;">You've been invited to your team's workspace. Your access is ready when you sign in.</p>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" bgcolor="#087a68" style="border-radius:10px;"><a href="${escapeHtml(url)}" style="display:block;padding:18px 20px;font-size:17px;font-weight:bold;text-decoration:none;color:#ffffff;">Open ${escapeHtml(input.workspaceName)} workspace</a></td></tr></table>
+<tr><td style="padding:30px 32px;background:#082d37;border-top:5px solid #9368bc;color:#ffffff;"><div style="font-size:27px;font-weight:bold;letter-spacing:-1px;">TLink<span style="color:#74ddc4;">.</span></div><p style="margin:22px 0 10px;font-size:12px;font-weight:bold;letter-spacing:2px;color:#74ddc4;">YOU'RE INVITED</p><h1 style="margin:0;font-size:29px;line-height:1.2;color:#ffffff;">Your ${escapeHtml(input.workspaceName)} team is waiting.</h1><p style="margin:14px 0 0;font-size:17px;line-height:1.6;color:#dcecf0;">Join ${escapeHtml(input.workspaceName)} on TLink.</p></td></tr>
+<tr><td style="padding:30px 32px;"><p style="margin:0 0 18px;font-size:18px;line-height:1.6;">Hi ${escapeHtml(input.displayName)},</p><p style="margin:0 0 24px;font-size:16px;line-height:1.7;">You've been invited to your team's workspace. Open your invitation below to create an account or sign in.</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" bgcolor="#087a68" style="border-radius:10px;"><a href="${escapeHtml(url)}" style="display:block;padding:18px 20px;font-size:17px;font-weight:bold;text-decoration:none;color:#ffffff;">Accept your invitation</a></td></tr></table>
 <div style="margin:26px 0 22px;padding:18px 20px;background:#f2f8f7;border-left:4px solid #087a68;border-radius:8px;"><p style="margin:0 0 6px;font-size:13px;font-weight:bold;color:#42646a;">YOUR INVITED EMAIL</p><p style="margin:0;font-size:16px;font-weight:bold;overflow-wrap:anywhere;">${escapeHtml(input.email)}</p></div>
-<p style="margin:0 0 14px;font-size:15px;line-height:1.7;"><strong>Sign in with this email.</strong> Use your existing TLink password, or choose Continue with Google for the email above. Complete email verification and the security prompts when asked.</p><p style="margin:0 0 22px;font-size:15px;line-height:1.7;">Need help signing in? Contact the person who invited you.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.7;"><strong>New to TLink?</strong> Choose <strong>Create account</strong> and enter a password. You'll be signed in automatically. Confirm your email using the verification link we send, then return to open Creditex.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.7;"><strong>Already use TLink?</strong> Choose <strong>Sign in</strong> and use your existing password, or <strong>Continue with Google</strong> using your invited email.</p><p style="margin:0 0 22px;font-size:15px;line-height:1.7;">Use <strong>Forgot password?</strong> to email yourself a reset link. Need help? Contact the person who invited you.</p>
 <p style="margin:0;padding-top:20px;border-top:1px solid #e3ecee;font-size:14px;line-height:1.7;color:#526b71;">Accept before <strong>${escapeHtml(expiry)}</strong>.</p></td></tr>
 <tr><td style="padding:22px 32px;background:#f6f8fa;font-size:12px;line-height:1.7;color:#61757b;">If you weren't expecting this invitation, you can ignore this email.<br><br>Button not opening? Copy this link into your browser:<br><a href="${escapeHtml(url)}" style="color:#087a68;overflow-wrap:anywhere;">${escapeHtml(url)}</a><br><br><strong>TLink</strong> · Australian Energy Assessments</td></tr>
 </table></td></tr></table></body></html>`;
@@ -156,6 +159,7 @@ export async function sendCreditexInvitationEmail(database: D1Database, identity
       idempotencyKey, callbackUrl: "", messageType: "creditex_invitation" };
   } else {
     message = { channel: "email", recipient: String(invitation.email), ...creditexInvitationEmail({
+      invitationId: String(invitation.id),
       displayName: String(invitation.display_name), email: String(invitation.email),
       workspaceName: String(invitation.trading_name || invitation.legal_name), expiresAt: String(invitation.expires_at), origin: options.origin,
     }), idempotencyKey, callbackUrl: "", messageType: "creditex_invitation" };

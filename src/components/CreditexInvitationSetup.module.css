@@ -1,0 +1,59 @@
+.shell {
+  min-height: 100svh;
+  padding: clamp(20px, 5vw, 54px) 20px;
+  background: radial-gradient(ellipse at top left, #473167 0, transparent 55%), radial-gradient(ellipse at bottom right, #0c554e 0, transparent 55%), #092229;
+  color: #f3fbf9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  overflow-wrap: anywhere;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand > div { display: grid; gap: 3px; }
+.brand strong { font-size: 1.6rem; line-height: 1.1; }
+.brand span { color: #cbe6df; font-size: .875rem; }
+.card { width: 100%; max-width: 580px; padding: clamp(22px, 4vw, 38px); border-radius: 24px; border: 1px solid #c9ddd8; background: #ffffff; color: #153c3e; box-shadow: 0 24px 64px #00000038; }
+.card h1 { font-size: clamp(1.65rem, 5vw, 2.1rem); line-height: 1.15; margin: 8px 0 14px; color: #0c3035; letter-spacing: -.025em; }
+.card h2 { font-size: 1.25rem; line-height: 1.3; color: #0c3035; margin: 0 0 14px; }
+.card p { line-height: 1.55; }
+.card strong { color: inherit; }
+.eyebrow { color: #087057; font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.intro { color: #476165; margin: 0 0 24px; }
+.modeChoice { display: flex; gap: 4px; padding: 4px; margin-bottom: 22px; border-radius: 12px; background: #edf4f0; }
+.modeChoice button { min-height: 44px; flex: 1; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #415b60; font: inherit; font-weight: 700; }
+.modeChoice button[aria-pressed="true"] { background: #fff; border-color: #b4cec3; color: #076e57; box-shadow: 0 2px 5px #113c3012; }
+.form { display: grid; gap: 10px; }
+.form label { font-weight: 700; font-size: .875rem; }
+.form label:not(:first-of-type) { margin-top: 6px; }
+.form input { width: 100%; min-width: 0; min-height: 48px; border: 1px solid #a7c2bb; border-radius: 10px; padding: 12px 14px; background: #fff; color: #153c3e; font: inherit; }
+.form input[readonly] { background: #f1f7f4; color: #245550; }
+.form small { font-size: .8rem; line-height: 1.5; color: #52676b; }
+.passwordControl { display: flex; width: 100%; min-width: 0; position: relative; }
+.passwordControl input { padding-right: 68px; }
+.passwordControl button { position: absolute; right: 3px; top: 2px; bottom: 2px; border: 0; padding: 0 10px; border-radius: 8px; background: transparent; color: #086750; font-size: .8rem; font-weight: 700; min-width: 56px; }
+.card button, .card a { cursor: pointer; }
+.card button:disabled { cursor: wait; opacity: .65; }
+.primary, .secondary, .google { min-height: 48px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; border-radius: 10px; padding: 12px 16px; font: inherit; font-weight: 750; text-align: center; }
+.primary { background: #076e57; color: #fff; border: 1px solid #076e57; margin-top: 8px; }
+.primary:hover:not(:disabled) { background: #075940; }
+.secondary, .google { background: #fff; color: #173e43; border: 1px solid #a7c2bb; }
+.google > span { font-size: 1.25rem; color: #285c9d; }
+.divider { border-top: 1px solid #dae6e2; position: relative; text-align: center; margin: 26px 0; height: 1px; }
+.divider span { padding: 0 12px; background: #fff; color: #607678; position: relative; top: -.8em; font-size: .8rem; }
+.link { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; width: 100%; border: 0; background: transparent; padding: 12px 4px; margin-top: 4px; color: #076e57; font: inherit; font-size: .875rem; font-weight: 650; text-align: center; text-decoration: underline; text-underline-offset: 3px; }
+.accountState { display: grid; gap: 10px; }
+.accountState p { margin: 0 0 10px; color: #476165; }
+.notice { background: #edf7f2; border: 1px solid #b6d9ca; color: #155d46; border-radius: 12px; font-size: .875rem; padding: 14px; margin: 16px 0 0; }
+.error { background: #fff3ed; border-color: #dfb8a6; color: #853e27; }
+.footer { font-size: .8rem; color: #52676b; border-top: 1px solid #dae6e2; padding-top: 20px; margin: 22px 0 0; }
+.home { color: #cee8e1; font-size: .8rem; min-height: 44px; display: inline-flex; align-items: center; text-decoration: underline; text-underline-offset: 3px; }
+.shell :is(button, a, input):focus-visible { outline: 3px solid #06a17e; outline-offset: 3px; }
+
+@media (max-width: 440px) {
+  .shell { padding: 24px 14px; gap: 20px; }
+  .card { padding: 22px 18px; border-radius: 18px; }
+  .brand strong { font-size: 1.4rem; }
+  .form input { font-size: 16px; }
+}

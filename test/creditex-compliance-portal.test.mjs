@@ -98,7 +98,7 @@ test("registration guard detects executable provisioning and ignores explanatory
   ]) assert.equal(provisioningOperations(source).length, 1, source);
 });
 
-test("portal uses Firebase sign-in without public registration or bootstrap", () => {
+test("default portal uses Firebase sign-in, reserving account setup for a checked invitation", () => {
   for (const contract of [
     /onAuthStateChanged/,
     /signInWithEmailAndPassword/,
@@ -122,8 +122,9 @@ test("portal uses Firebase sign-in without public registration or bootstrap", ()
   );
   assert.match(
     portal,
-    /onAuthStateChanged[\s\S]*if \(nextUser\)[\s\S]*void loadWorkspace\(\)/,
+    /onAuthStateChanged[\s\S]*if \(nextUser && invitationEntry === null\)[\s\S]*void loadWorkspace\(\)/,
   );
+  assert.match(portal, /if \(invitationId !== null\) return <CreditexInvitationSetup/);
 });
 
 test("Creditex requests use the cached token first without forcing refresh", async () => {

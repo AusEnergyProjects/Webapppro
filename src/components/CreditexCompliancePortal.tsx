@@ -35,6 +35,7 @@ import { requestWithCreditexTokenRecovery } from "@/lib/creditex-auth-token";
 import { firebaseAuth } from "@/lib/firebase-client";
 import { requestTLinkPasswordReset, tlinkPasswordResetErrorMessage } from "@/lib/tlink-password-reset-client";
 import { FirebaseAccountSecurity, FirebaseMfaChallenge, useFirebaseMfaChallenge } from "./FirebaseMfa";
+import { CreditexInvitationSetup } from "./CreditexInvitationSetup";
 const CreditexEvidencePolicyGovernance = dynamic(() => import("./CreditexEvidencePolicyGovernance").then((module) => module.CreditexEvidencePolicyGovernance), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening evidence policies..." /> });
 const CreditexActivityWorkPackGovernance = dynamic(() => import("./CreditexActivityWorkPackGovernance").then((module) => module.CreditexActivityWorkPackGovernance), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening forms..." /> });
 const CreditexOnboardingReviewWorkspace = dynamic(() => import("./CreditexOnboardingReviewWorkspace").then((module) => module.CreditexOnboardingReviewWorkspace), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening onboarding reviews..." /> });
@@ -399,6 +400,7 @@ export function CreditexCompliancePortal() {
   const [governanceRefreshToken, setGovernanceRefreshToken] = useState(0);
   const [governanceProgramId, setGovernanceProgramId] = useState("");
   const [governanceActivityId, setGovernanceActivityId] = useState("");
+  const [invitationId, setInvitationId] = useState<string | null>(null);
   const canRequestPublication = canControlPublication(session);
   const canReviewTraining = Boolean(session?.governanceIdentityVerified && ["admin", "reviewer"].includes(session.role));
   // The editor endpoint also authorises internal operations editors. Let it resolve access.
@@ -632,6 +634,12 @@ export function CreditexCompliancePortal() {
   useEffect(
     () =>
       onAuthStateChanged(firebaseAuth, (nextUser) => {
+        // Resolve the invitation before cached Firebase auth can request a private
+        // session. Creating an account automatically signs it in, but setup still
+        // needs to verify its email before the existing membership/MFA gate.
+        const invitationEntries = new URLSearchParams(window.location.search).getAll("invite");
+        const invitationEntry = invitationEntries.length === 0 ? null : invitationEntries.length === 1 ? invitationEntries[0] : "";
+        setInvitationId(invitationEntry);
         const nextUid = nextUser?.uid || "";
         const identityChanged = authUidRef.current !== nextUid;
         authUidRef.current = nextUid;
@@ -654,7 +662,7 @@ export function CreditexCompliancePortal() {
         setUser(nextUser);
         if (!nextUser) setMfaRequired(false);
         setAuthReady(true);
-        if (nextUser) {
+        if (nextUser && invitationEntry === null) {
           setLoading(true);
           void loadWorkspace();
         }
@@ -664,6 +672,21 @@ export function CreditexCompliancePortal() {
       }),
     [loadWorkspace],
   );
+
+  const completeInvitationSetup = useCallback(async () => {
+    const activeUser = firebaseAuth.currentUser;
+    if (!activeUser?.emailVerified) throw new Error("Verify your invited email before opening Creditex.");
+    const activeUid = activeUser.uid;
+    await activeUser.getIdToken(true);
+    if (firebaseAuth.currentUser?.uid !== activeUid || !firebaseAuth.currentUser.emailVerified) {
+      throw new Error("The signed-in account changed. Sign in with your invited email to continue.");
+    }
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("invite");
+    window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    setInvitationId(null);
+    await loadWorkspace();
+  }, [loadWorkspace]);
 
   const selectedGovernanceProgram = useMemo(
     () =>
@@ -1028,6 +1051,8 @@ export function CreditexCompliancePortal() {
       document.getElementById(`creditex-tab-${nextTab}`)?.focus();
     });
   }
+
+  if (invitationId !== null) return <CreditexInvitationSetup invitationId={invitationId} onComplete={completeInvitationSetup} />;
 
   if (resolver) return <main className={styles.shell}><FirebaseMfaChallenge resolver={resolver} onCancel={clearMfaChallenge} onComplete={clearMfaChallenge} /></main>;
   if (user && mfaRequired) return <main className={styles.shell}><TLinkPortalSwitcher current="creditex" user={user} /><FirebaseAccountSecurity key={user.uid} user={user} onComplete={async () => { setMfaRequired(false); await loadWorkspace(); }} /><p style={{ textAlign: "center" }}><button type="button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></p></main>;

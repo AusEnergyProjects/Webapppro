@@ -79,18 +79,24 @@ function loadRoute(d1, fetchImpl) {
 
 const request = body => new Request("https://example.com/api/creditex/access", { method: "POST", headers: { origin: "https://example.com", "content-type": "application/json" }, body: JSON.stringify(body) });
 
-test("invitation email is polished, escaped, token-free and matches actual sign-in options", () => {
-  const email = creditexInvitationEmail({ displayName: '<img src=x onerror="attack">', email: "person@example.com", workspaceName: "Creditex & Team", expiresAt: "2026-10-20T00:00:00Z", origin: "https://example.com" });
+test("invitation email presents first-use setup with the saved opaque reference and existing-account alternatives", () => {
+  const id = "1fe1be51-6bc8-4b6d-8f5a-1812a12bbdab";
+  const email = creditexInvitationEmail({ invitationId: id, displayName: '<img src=x onerror="attack">', email: "person@example.com", workspaceName: "Creditex & Team", expiresAt: "2026-10-20T00:00:00Z", origin: "https://example.com" });
   assert.match(email.subject, /You're invited to Creditex & Team on TLink/);
   assert.match(email.html, /role="presentation"/);
   assert.match(email.html, /background:#082d37/);
-  assert.match(email.html, /Open Creditex &amp; Team workspace/);
+  assert.match(email.html, /Join Creditex &amp; Team on TLink/);
+  assert.equal((email.html.match(/Accept your invitation/g) || []).length, 1);
   assert.match(email.html, /&lt;img src=x onerror=&quot;attack&quot;&gt;/);
-  assert.doesNotMatch(email.html, /<img|Create account|token=|password=/);
+  assert.doesNotMatch(email.html, /<img|token=|password=|Use your existing TLink password|access is ready when you sign in/);
+  assert.match(email.body, /New to TLink\? Choose Create account and enter a password/);
+  assert.match(email.body, /signed in automatically.*Confirm your email using the verification link/);
+  assert.match(email.html, /<strong>Already use TLink\?<\/strong>/);
+  assert.match(email.body, /Forgot password\? to email yourself a reset link/);
   assert.match(email.body, /Continue with Google/);
   assert.match(email.body, /person@example.com/);
   assert.match(email.body, /20 October 2026.*Sydney time/);
-  assert.equal((email.html.match(/href="https:\/\/example.com\/creditex\/compliance"/g) || []).length, 2);
+  assert.equal((email.html.match(new RegExp(`href="https://example\\.com/creditex/compliance\\?invite=${id}"`, "g")) || []).length, 2);
 });
 
 test("new creation submits provider email after invitation commit and reused creation does not dispatch again", async t => {
@@ -103,6 +109,8 @@ test("new creation submits provider email after invitation commit and reused cre
   const response = await route.POST(request(body)); assert.equal(response.status, 201);
   const result = (await response.json()).result; assert.equal(result.delivery.status, "submitted"); assert.equal(result.reused, false);
   assert.equal(calls.length, 1); assert.equal(calls[0].body.to[0], body.email);
+  assert.match(calls[0].body.html, new RegExp(`\\?invite=${result.id}`));
+  assert.match(calls[0].body.html, /Choose <strong>Create account<\/strong> and enter a password/);
   const again = (await (await route.POST(request(body))).json()).result;
   assert.equal(again.id, result.id); assert.equal(again.reused, true); assert.equal(again.delivery.status, "submitted"); assert.equal(calls.length, 1);
 });
@@ -111,7 +119,8 @@ test("existing invitation endpoint dispatches stored recipient and exposes hones
   const { db, d1 } = fixture(t); const calls = []; const route = loadRoute(d1, provider(calls));
   const response = await route.POST(request({ action: "send_invitation_email", invitationId: "invite", email: "attacker@example.com" }));
   assert.equal(response.status, 201); assert.equal((await response.json()).result.delivery.status, "submitted");
-  assert.equal(calls[0].body.to[0], "person@example.com"); assert.match(calls[0].body.html, /Creditex workspace/);
+  assert.equal(calls[0].body.to[0], "person@example.com"); assert.match(calls[0].body.html, /Join Creditex on TLink/);
+  assert.match(calls[0].body.html, /\?invite=invite/);
   const get = await route.GET(new Request("https://example.com/api/creditex/access"));
   const invitation = (await get.json()).access.invitations.find(row => row.id === "invite");
   assert.equal(invitation.emailDelivery.status, "submitted"); assert.equal(invitation.lastAttemptAt, time);
