@@ -19,8 +19,11 @@ export function RentalComplianceNotice({ showAssessmentLink = true }: { showAsse
 export function RentalProgramExperience() {
   return <section className={styles.experience} aria-label="Rental portfolio services and program experience">
     <div className={styles.heading}><span>Assessments. Records. Ongoing support.</span><h2>Practical support for the changes ahead.</h2></div>
-    <p>Bring the new minimum-standards record requirements and 2027 upgrade planning into your portfolio&apos;s compliance schedule. We can work alongside your existing providers, with Australian Energy Assessments responsible for the assessments, reports and follow-up work you engage us to deliver.</p>
+    <p>Bring the new minimum-standards record requirements and 2027 upgrade planning into your portfolio&apos;s compliance schedule.</p>
+    <p>{AEA_RENTAL_UPDATES.teamExperience}</p>
     <p>{AEA_RENTAL_UPDATES.programWork}</p>
+    <p>{AEA_RENTAL_UPDATES.reportSupport}</p>
+    <p>We can work alongside your existing providers, with Australian Energy Assessments responsible for the assessments, reports and follow-up work you engage us to deliver.</p>
     <p>Where you need broader support, our services cover minimum standards assessments and smoke-alarm servicing. Our electrical and gas safety checks are carried out by our appropriately licensed or registered tradespeople. We can manage the appointments, records and due dates with your team, with scope and pricing confirmed upfront.</p>
     <p>Call James directly on <a className={styles.officialLink} href="tel:+61473378088">0473 378 088</a> to discuss the changes and how we can support your team. A de-identified rental compliance assessment report is available on request.</p>
     <a className={styles.action} href={CALENDLY_BOOKING_URL} target="_blank" rel="noopener noreferrer">Prefer a time that suits you? Book a call with Calendly <span aria-hidden="true">↗</span></a>
