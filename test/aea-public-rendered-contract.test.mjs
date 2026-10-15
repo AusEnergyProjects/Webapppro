@@ -56,7 +56,7 @@ for (const [id, pathName, total, area] of [
   ["smoke-alarm-blind-safety", "/services/smoke-alarm-blind-safety", "110.00", ["Victoria"]],
   ["gas-safety-check", "/services/gas-safety-check", "275.00", ["Victoria"]],
   ["electrical-safety-check", "/services/electrical-safety-check", "275.00", ["Victoria"]],
-  ["minimum-rental-standards", "/minimum-rental-standards", "187.00", ["Victoria"]],
+  ["minimum-rental-standards", "/minimum-rental-standards", "165.00", ["Victoria"]],
   ["nathers-new", "/nathers-for-new-homes", "330.00", ["Australia"]],
   ["nathers-existing", "/home-energy-rating-for-existing-homes", "330.00", ["NSW", "Victoria"]],
   ["onsite-energy-assessment", "/services/onsite-energy-assessment", "198.00", ["NSW", "Victoria"]],
@@ -99,7 +99,7 @@ test("rendered catalogue and bundles retain exact offer counts, two-year totals 
   const hub = renderToStaticMarkup(React.createElement(components.AeaServicesPage));
   const hubOffers = graph(hub).find((node) => node["@type"] === "OfferCatalog").itemListElement;
   assert.equal(hubOffers.length, 7);
-  assert.deepEqual(hubOffers.map((offer) => offer.price), ["110.00", "275.00", "275.00", "187.00", "330.00", "330.00", "198.00"]);
+  assert.deepEqual(hubOffers.map((offer) => offer.price), ["110.00", "275.00", "275.00", "165.00", "330.00", "330.00", "198.00"]);
   const offers = renderToStaticMarkup(React.createElement(components.AeaOffersPage));
   const packages = graph(offers).find((node) => node["@type"] === "OfferCatalog").itemListElement;
   assert.deepEqual(packages.map((offer) => offer.price), ["495.00", "770.00"]);

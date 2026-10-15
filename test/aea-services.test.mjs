@@ -24,7 +24,7 @@ test("legacy rental scope survives normalisation before trade routing", () => {
 test("AEA standalone prices retain the user-approved scope and GST totals", () => {
   assert.deepEqual(AEA_SERVICES.map(({ id, priceExGstCents }) => [id, priceExGstCents, gstInclusiveCents(priceExGstCents)]), [
     ["smoke-alarm-blind-safety", 10000, 11000], ["gas-safety-check", 25000, 27500],
-    ["electrical-safety-check", 25000, 27500], ["minimum-rental-standards", 17000, 18700],
+    ["electrical-safety-check", 25000, 27500], ["minimum-rental-standards", 15000, 16500],
     ["nathers-new", 30000, 33000], ["nathers-existing", 30000, 33000], ["onsite-energy-assessment", 18000, 19800],
   ]);
   assert.equal(new Set(AEA_SERVICES.map(({ path }) => path)).size, 7);

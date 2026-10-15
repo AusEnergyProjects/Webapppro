@@ -224,7 +224,7 @@ export const AEA_SERVICES = Object.freeze([
     faqs: [
       [
         "What does the assessment cost and include?",
-        "The onsite assessment is $170 + GST, or $187 including GST. We assess the applicable Victorian rental minimum standards, record the property's condition with photos and explain defects or missing evidence. The completed report is emailed with a secure shareable link and downloadable PDF."
+        "The onsite assessment is $150 + GST, or $165 including GST. We assess the applicable Victorian rental minimum standards, record the property's condition with photos and explain defects or missing evidence. The completed report is emailed with a secure shareable link and downloadable PDF."
       ],
       [
         "Which rental minimum standards are covered?",
@@ -505,7 +505,7 @@ export const AEA_BUNDLE_FAQS = Object.freeze([
   ],
   [
     "Is the rental minimum standards assessment included in a bundle?",
-    "The $170 + GST rental minimum standards assessment is a separate service. The bundles cover the listed smoke, blind, electrical and, where selected, gas checks. You can add minimum standards or an energy assessment to the same enquiry so Australian Energy Assessments can coordinate the additional work."
+    "The $150 + GST rental minimum standards assessment is a separate service. The bundles cover the listed smoke, blind, electrical and, where selected, gas checks. You can add minimum standards or an energy assessment to the same enquiry so Australian Energy Assessments can coordinate the additional work."
   ]
 ].map((faq) => Object.freeze(faq)));
 

@@ -31,7 +31,7 @@ export const AEA_SERVICE_IDENTITIES = Object.freeze({
   minimumRentalStandards: Object.freeze({
     "id": "minimum-rental-standards",
     "name": "Rental minimum standards",
-    "priceExGstCents": 17000,
+    "priceExGstCents": 15000,
     "path": "/minimum-rental-standards",
     "category": "Rental safety",
     "area": "Victoria",

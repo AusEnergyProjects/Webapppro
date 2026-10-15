@@ -12,7 +12,7 @@ const officialStandardsUrl = "https://www.consumer.vic.gov.au/resources-and-tool
 const existingStandardsUrl = "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/minimum-standards/minimum-standards-for-rental-properties";
 const regulationsUrl = "https://www.legislation.vic.gov.au/in-force/statutory-rules/residential-tenancies-regulations-2021/009";
 const title = "Rental Minimum Standards Assessment Victoria | Australian Energy Assessments";
-const description = "Onsite Victorian rental minimum standards assessments for $170 + GST ($187 including GST), with photo evidence and clear findings. Understand current standards and the 2027 to 2030 energy changes.";
+const description = "Onsite Victorian rental minimum standards assessments for $150 + GST ($165 including GST), with photo evidence and clear findings. Understand current standards and the 2027 to 2030 energy changes.";
 
 export const metadata = buildApexMetadata({ path, title, description });
 
@@ -71,7 +71,7 @@ const schema = {
       name: title,
       description,
       inLanguage: "en-AU",
-      dateModified: "2026-09-14",
+      dateModified: "2026-10-15",
       isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
       about: { "@id": `${canonical}#service` },
       citation: [officialStandardsUrl, existingStandardsUrl, regulationsUrl],
