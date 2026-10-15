@@ -3,6 +3,7 @@ import { SiteFooter, SiteHeader } from "./ComparatorChrome";
 import { QuickUpgradeEnquiry } from "./QuickUpgradeEnquiry";
 import { HomeHeroScene } from "./HomeHeroScene";
 import { SurgeOpenButton } from "./SurgeOpenButton";
+import { RentalComplianceNotice, RentalProgramExperience } from "./RentalComplianceNotice";
 import { PUBLIC_SITE } from "@/lib/public-site";
 import styles from "./GettingStarted.module.css";
 
@@ -15,6 +16,7 @@ const steps = [
 export function GettingStarted() {
   return <main className={`wrap ${styles.page}`}>
     <SiteHeader active="start" />
+    <RentalComplianceNotice />
     <section className={styles.hero} aria-labelledby="home-title">
       <HomeHeroScene>
         <div className={styles.heroCopy}>
@@ -54,6 +56,7 @@ export function GettingStarted() {
         </article>
       </div>
     </section>
+    <RentalProgramExperience />
     <section className={styles.tools} id="compare-energy-plans" aria-labelledby="home-tools-title">
       <div className={styles.wattzunFeature}>
         <picture className={styles.wattzunArtwork}><img src="/surge-ai-command-centre-4k.webp" alt="" width={3840} height={2160} loading="lazy" decoding="async" /></picture>

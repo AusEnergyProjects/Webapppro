@@ -5,12 +5,15 @@ import { JsonLd } from "@/components/JsonLd";
 import { PublicFaqList, type PublicFaq } from "@/components/PublicFaqList";
 import { PUBLIC_SITE, buildApexMetadata } from "@/lib/public-site";
 import { getAeaService, gstInclusiveCents } from "@/lib/aea-services.mjs";
+import { AEA_RENTAL_UPDATES } from "@/lib/aea-rental-updates.mjs";
+import { RentalComplianceNotice, RentalProgramExperience } from "@/components/RentalComplianceNotice";
 
 const path = "/minimum-rental-standards";
 const canonical = `${PUBLIC_SITE.apexUrl}${path}`;
 const officialStandardsUrl = "https://www.consumer.vic.gov.au/resources-and-tools/legislation/public-consultations-and-reviews/new-minimum-energy-efficiency-standards";
 const existingStandardsUrl = "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/minimum-standards/minimum-standards-for-rental-properties";
-const regulationsUrl = "https://www.legislation.vic.gov.au/in-force/statutory-rules/residential-tenancies-regulations-2021/009";
+const regulationsUrl = "https://www.legislation.vic.gov.au/in-force/statutory-rules/residential-tenancies-regulations-2021";
+const gasSafetyUrl = "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/gas-electrical-and-water-safety-standards/rental-providers-gas-and-electrical-safety";
 const title = "Rental Minimum Standards Assessment Victoria | Australian Energy Assessments";
 const description = "Onsite Victorian rental minimum standards assessments for $150 + GST ($165 including GST), with photo evidence and clear findings. Understand current standards and the 2027 to 2030 energy changes.";
 
@@ -33,7 +36,7 @@ const faqs: readonly PublicFaq[] = [
   },
   {
     question: "Can draughtproofing begin as soon as gaps are found?",
-    answer: "Not where the property has gas appliances. A licensed plumber must complete a gas safety check before the work starts, and the check must be less than six months old when the work is completed. If unsafe unflued or open-flued appliances are identified, the draughtproofing must not proceed.",
+    answer: "If the property has gas appliances, fixtures or fittings, a licensed or registered gasfitter must complete a pre-draughtproofing gas safety check within six months before the work starts. The check must identify ventilation requirements and areas that must not be draughtproofed. This is separate from the two-yearly check, although one visit can meet both requirements if its timing and scope are suitable.",
   },
   {
     question: "Does a Home Energy Rating prove that the rental complies?",
@@ -74,7 +77,7 @@ const schema = {
       dateModified: "2026-10-15",
       isPartOf: { "@id": PUBLIC_SITE.apexWebsiteId },
       about: { "@id": `${canonical}#service` },
-      citation: [officialStandardsUrl, existingStandardsUrl, regulationsUrl],
+      citation: [AEA_RENTAL_UPDATES.url, officialStandardsUrl, existingStandardsUrl, gasSafetyUrl, regulationsUrl],
       breadcrumb: { "@id": `${canonical}#breadcrumb` },
     },
     {
@@ -103,17 +106,19 @@ export default function MinimumRentalStandardsPage() {
     active="assessments"
     label="Victorian rental homes"
     title="Rental minimum standards assessments"
-    introduction="Understand what your Victorian rental property needs to meet today's minimum standards. Get an onsite assessment with photo evidence and clear findings, then prepare for the energy requirements that begin in stages from 2027."
+    introduction="Support your rental portfolio with clear assessments, useful records and a practical plan for the new requirements. We work alongside your existing providers and can look after wider compliance needs where your team needs support."
   >
     <JsonLd data={schema} />
+    <RentalComplianceNotice showAssessmentLink={false} />
     <AeaServicePricePanel serviceId="minimum-rental-standards" />
+    <RentalProgramExperience />
     <GuideSection eyebrow="Your onsite assessment" title="The current minimum standards we review">
       <p>We review the applicable requirements across locks, vermin-proof bins, toilets, bathrooms, kitchens, laundry facilities, structural soundness, mould and damp, electrical safety, window coverings, windows, lighting, ventilation, heating and window-covering cord anchors.</p>
       <p>Findings identify what meets the inspected requirement, what needs attention and what could not be verified. Photographs and limitations are kept with the report. Licensed testing and specialist investigations remain separate where needed.</p>
     </GuideSection>
     <div className="assessment-asat">
-      <strong>Official Consumer Affairs Victoria guidance checked 2 September 2026</strong>
-      <span>The government page was last updated 17 August 2026. Check it again before ordering work because technical details and compliance guidance can change.</span>
+      <strong>Official Consumer Affairs Victoria guidance checked 15 October 2026</strong>
+      <span>The rental-law changes page was updated 14 October 2026. Check the current guidance before ordering work because technical details and requirements can change.</span>
     </div>
 
     <GuideSection eyebrow="First boundary" title="Current standards still apply now">
@@ -142,7 +147,8 @@ export default function MinimumRentalStandardsPage() {
     </GuideSection>
 
     <GuideSection eyebrow="Safety" title="Gas appliances change the draughtproofing process">
-      <div className="guide-note"><strong>Do not seal first and check later</strong><p>If the property has gas appliances, a licensed plumber must complete a gas safety check before any draughtproofing work begins. The check must be less than six months old when the work is completed. If the check identifies unsafe unflued or open-flued appliances, draughtproofing must not proceed.</p></div>
+      <div className="guide-note"><strong>Check gas safety before sealing</strong><p>If the property has gas appliances, fixtures or fittings, a licensed or registered gasfitter must complete a pre-draughtproofing gas safety check within six months before work starts. The gasfitter identifies ventilation requirements and areas that must not be draughtproofed. A two-yearly gas check can cover both purposes only when it meets both sets of timing and information requirements.</p></div>
+      <div className="guide-source-links"><a href={gasSafetyUrl} target="_blank" rel="noreferrer">CAV pre-draughtproofing gas safety requirements</a></div>
     </GuideSection>
 
     <GuideSection eyebrow="Assessment boundary" title="A rating helps with planning, but it is not a compliance certificate">
@@ -155,6 +161,7 @@ export default function MinimumRentalStandardsPage() {
 
     <GuideSection eyebrow="Official sources" title="Check the rule that applies to the property">
       <div className="guide-source-links">
+        <a href={AEA_RENTAL_UPDATES.url} target="_blank" rel="noreferrer">Official Victorian rental law changes</a>
         <a href={officialStandardsUrl} target="_blank" rel="noreferrer">Consumer Affairs Victoria new energy standards</a>
         <a href={existingStandardsUrl} target="_blank" rel="noreferrer">Current rental minimum standards</a>
         <a href={regulationsUrl} target="_blank" rel="noreferrer">Residential Tenancies Regulations 2021</a>
@@ -166,6 +173,6 @@ export default function MinimumRentalStandardsPage() {
       <PublicFaqList faqs={faqs} />
     </GuideSection>
 
-    <section className="guide-callout guide-callout-primary"><div><h2>Start with a property review</h2><p>The request form starts a scope review. It does not book work or promise a compliance certificate. Rental minimum standards are included, while electrical, gas and smoke-alarm checks remain separate unless requested.</p></div><Link href="/rental-assessment/request">Request a rental assessment</Link></section>
+    <section className="guide-callout guide-callout-primary"><div><h2>Plan the next steps for your rental portfolio</h2><p>Talk through the new requirements, your existing arrangements and where your team needs support. We will confirm the assessments, safety checks and ongoing schedule that fit your properties, with each service clearly scoped and priced.</p><p>For an individual property, you can also <Link href="/rental-assessment/request">request a rental assessment</Link>.</p></div><Link href="/book-an-assessment">Discuss your portfolio</Link></section>
   </GuideShell>;
 }

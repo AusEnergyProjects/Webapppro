@@ -1,0 +1,10 @@
+.notice, .experience { position: relative; z-index: 1; margin: 24px 0; padding: clamp(22px, 3vw, 36px); border: 1px solid #467c70; border-radius: 18px; background: #0b302e; color: #effbf6; }
+.experience { margin: 36px 0; background: #102c3b; border-color: #416675; }
+.heading > span { display: block; color: #a8e8cf; font-size: .75rem; line-height: 1.5; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.heading h2 { color: #f2fff9; font-size: clamp(1.4rem, 2.5vw, 2rem); line-height: 1.2; letter-spacing: -.025em; margin: 9px 0 16px; }
+.notice p, .experience p { color: #d1e4df; font-size: 1rem; line-height: 1.65; max-width: 1000px; margin: 12px 0; }
+.officialLink, .action { display: inline-block; color: #b8ffe0; font-weight: 700; line-height: 1.5; text-underline-offset: 4px; padding: 8px 0; overflow-wrap: anywhere; }
+.officialLink { margin-bottom: 4px; }
+.action { margin-top: 7px; }
+.officialLink:hover, .action:hover { color: #fff; }
+.officialLink:focus-visible, .action:focus-visible { outline: 2px solid #b8ffe0; outline-offset: 5px; border-radius: 2px; }

@@ -1,10 +1,12 @@
 import { AEA_SERVICE_IDENTITIES, AEA_BUNDLE_IDENTITIES } from "./aea-service-identity.mjs";
+import { AEA_RENTAL_UPDATES, MINIMUM_STANDARDS_BLIND_ADD_ON } from "./aea-rental-updates.mjs";
 export { AEA_RESERVED_SERVICE_IDS, isAeaReservedService, requiresAeaDelivery } from "./aea-service-identity.mjs";
 
 // Australian Energy Assessments's service and commercial catalogue. Prices are fixed AUD cents excluding GST.
 // Customer offers and schema derive GST-inclusive totals from this single source.
 export const AEA_SERVICE_REVIEW_DATE = "2026-09-14";
 const sources = {
+  rentalChanges: { label: "Consumer Affairs Victoria: new rental law changes", url: AEA_RENTAL_UPDATES.url },
   smoke: { label: "Consumer Affairs Victoria: smoke alarms", url: "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/keeping-the-property-safe/smoke-alarms-and-fire-safety" },
   safety: { label: "Consumer Affairs Victoria: gas and electrical safety", url: "https://www.consumer.vic.gov.au/housing/renting/repairs-alterations-safety-and-pets/gas-electrical-and-water-safety-standards/rental-providers-gas-and-electrical-safety" },
   electrical: { label: "Energy Safe Victoria: residential tenancy electrical checks", url: "https://www.energysafe.vic.gov.au/industry-guidance/electrical/electricians-toolkit/residential-tenancy" },
@@ -100,7 +102,7 @@ export const AEA_SERVICES = Object.freeze([
       "Secure shareable report link and downloadable PDF"
     ],
     scope: "No extra charge for additional gas appliances. The fixed inspection price is per property. Repairs, replacement parts and appliance replacement are explained and authorised separately.",
-    legal: "For tenancies covered by Victoria's gas safety-check requirements, checks are required every two years where gas is supplied. Servicing must follow the applicable AS 4575 requirements. A complete service record and the required regulatory submission are separate obligations; a simple inspection summary does not replace them.",
+    legal: "From 13 October 2026, two-yearly gas safety checks apply to all Victorian rental agreements where the property has gas appliances, fixtures or fittings. Servicing must follow the applicable AS 4575 requirements. A complete service record and the required regulatory submission are separate obligations; a simple inspection summary does not replace them.",
     faqs: [
       [
         "What does a gas safety check cost, and are extra appliances included?",
@@ -116,11 +118,11 @@ export const AEA_SERVICES = Object.freeze([
       ],
       [
         "How often is a gas safety check required?",
-        "Victorian rental gas safety checks are required every two years for covered tenancies where gas is supplied. Send us the last report so the next appointment can follow the actual due date. An overdue or unknown check should be arranged promptly, including when you select a two-year bundle."
+        "From 13 October 2026, a gas safety check is required every two years for all Victorian rental agreements where the property has gas appliances, fixtures or fittings. Send us the last report so the next appointment can follow the actual due date. An overdue or unknown check should be arranged promptly, including when you select a two-year bundle."
       ],
       [
         "Do all-electric properties need a gas check?",
-        "A property with no gas supply does not need this gas safety service. The electrical, smoke and blind bundle is the appropriate option for an all-electric property. If the property still has a gas connection or disconnected appliances and you are unsure of the scope, tell us when enquiring so the gasfitter can confirm what needs checking."
+        "A property with no gas appliances, fixtures or fittings does not need this gas safety service. The electrical, smoke and blind bundle suits an all-electric property. If a gas connection, fittings or disconnected appliances remain, tell us when enquiring so the gasfitter can confirm the required scope."
       ],
       [
         "How should the property be prepared?",
@@ -142,7 +144,7 @@ export const AEA_SERVICES = Object.freeze([
         "Does gas safety testing replace the rental minimum standards assessment?",
         "No. The gas report records the gas work and its findings. It does not assess every rental minimum standard, the electrical installation or the home's energy rating. Those services can be selected with your enquiry so Australian Energy Assessments can coordinate the required scope."
       ]
-    ], sources: [sources.safety, sources.gas, sources.gasForm],
+    ], sources: [sources.rentalChanges, sources.safety, sources.gas, sources.gasForm],
   },
   {
     ...AEA_SERVICE_IDENTITIES.electricalSafety,
@@ -160,7 +162,7 @@ export const AEA_SERVICES = Object.freeze([
       "Secure shareable report link and downloadable PDF"
     ],
     scope: "The fixed price covers the safety inspection, testing and report. Repairs, switchboard upgrades and replacement equipment are quoted and authorised separately.",
-    legal: "For tenancies covered by Victoria's electrical safety-check requirements, checks are required every two years. Energy Safe Victoria specifies section 4 of AS/NZS 3019:2022. Electrical repair or maintenance work requires a Certificate of Electrical Safety; the safety-check report is not a substitute for that certificate.",
+    legal: "From 13 October 2026, electrical safety checks are required every two years for all Victorian rental agreements. Energy Safe Victoria specifies section 4 of AS/NZS 3019:2022. Electrical repair or maintenance work requires a Certificate of Electrical Safety; the safety-check report is not a substitute for that certificate.",
     faqs: [
       [
         "What is included in the $250 + GST price?",
@@ -172,7 +174,7 @@ export const AEA_SERVICES = Object.freeze([
       ],
       [
         "How often is an electrical safety check required?",
-        "Victorian rental requirements specify a check every two years for covered tenancies. Give us the latest report so we can work from the actual due date. If the last check is unknown or overdue, arrange the check promptly instead of waiting for the next annual smoke alarm visit."
+        "From 13 October 2026, Victorian rental requirements specify an electrical safety check every two years for all rental agreements. Give us the latest report so we can work from the actual due date. If the last check is unknown or overdue, arrange the check promptly instead of waiting for the next annual smoke alarm visit."
       ],
       [
         "Is this a Certificate of Electrical Safety?",
@@ -202,7 +204,7 @@ export const AEA_SERVICES = Object.freeze([
         "Does a satisfactory report guarantee the property stays safe for two years?",
         "The report records the installation's condition and the testing completed on the inspection date. New faults, damage or alterations can occur afterwards and must be addressed when identified. Keep the report available and arrange qualified attention for a new electrical fault rather than waiting for the next scheduled check."
       ]
-    ], sources: [sources.electrical, sources.safety, sources.electricalChecklist, sources.electricalExample],
+    ], sources: [sources.rentalChanges, sources.electrical, sources.safety, sources.electricalChecklist, sources.electricalExample],
   },
   {
     ...AEA_SERVICE_IDENTITIES.minimumRentalStandards,
@@ -219,12 +221,12 @@ export const AEA_SERVICES = Object.freeze([
       "Same-day email of your completed assessment report",
       "Secure shareable report link and downloadable PDF"
     ],
-    scope: "This assessment includes visual observations of structural soundness and weatherproofing against the rental minimum standards. Specialist structural engineering, pest and asbestos investigations are separate. Licensed electrical and gas safety testing and the annual smoke service are only included when selected.",
-    legal: "Victorian rental properties must meet the applicable minimum standards before they are advertised for rent. Requirements include window-covering cord anchors, and further energy-efficiency standards are being phased in. The assessment uses the requirements applicable to the property and inspection date; an inspection report cannot guarantee future compliance.",
+    scope: `This assessment includes visual observations of structural soundness and weatherproofing against the rental minimum standards. Specialist structural engineering, pest and asbestos investigations are separate. Licensed electrical and gas safety testing and annual smoke servicing are separately quoted when selected. ${MINIMUM_STANDARDS_BLIND_ADD_ON}`,
+    legal: "Victorian rental properties must meet the applicable minimum standards before they are advertised for rent. From 13 October 2026, rental providers and agents must retain records showing compliance before advertising, offering the property for rent or a renter moving in, and provide them to Consumer Affairs Victoria on request. The assessment records the inspected condition; it cannot guarantee future compliance. Additional energy-efficiency standards phase in from 1 March 2027 with different triggers.",
     faqs: [
       [
         "What does the assessment cost and include?",
-        "The onsite assessment is $150 + GST, or $165 including GST. We assess the applicable Victorian rental minimum standards, record the property's condition with photos and explain defects or missing evidence. The completed report is emailed with a secure shareable link and downloadable PDF."
+        `The onsite assessment is $150 + GST, or $165 including GST. We assess the applicable Victorian rental minimum standards, record the property's condition with photos and explain defects or missing evidence. The completed report is emailed with a secure shareable link and downloadable PDF. ${MINIMUM_STANDARDS_BLIND_ADD_ON}`
       ],
       [
         "Which rental minimum standards are covered?",
@@ -244,11 +246,11 @@ export const AEA_SERVICES = Object.freeze([
       ],
       [
         "What happens if the property does not meet a standard?",
-        "The report identifies the affected item, evidence and practical next action. Some findings need repairs; others need a licensed trade or specialist assessment before a conclusion can be reached. Repairs are separate from this assessment. An unresolved item is not marked compliant simply because a report has been issued."
+        "The report identifies the affected item, evidence and practical next action. Some findings need repairs; others need a licensed trade or specialist assessment before a conclusion can be reached. Repairs are separate from the assessment price, with basic blind-cord anchors and labels available through the optional $20 + GST add-on. An unresolved item is not marked compliant simply because a report has been issued."
       ],
       [
         "Is this a government compliance certificate?",
-        "No. You receive a dated assessment report with observed findings, supporting evidence and limitations. It is not a government-issued certificate, a structural engineering report or a guarantee about hidden defects or future condition. Separate professional reports remain necessary where the particular standard requires them."
+        "No. You receive a dated assessment report with observed findings, supporting evidence and limitations. It is not a government-issued certificate, a structural engineering report or a guarantee about hidden defects or future condition. Separate professional reports remain necessary where the particular standard requires them. Ask us for a de-identified example of the rental compliance assessment report before engaging our team."
       ],
       [
         "When will I receive the report?",
@@ -262,7 +264,7 @@ export const AEA_SERVICES = Object.freeze([
         "Do I need another assessment every year?",
         "This is a dated assessment rather than an annual certification programme. Rental providers must keep the property compliant, and changes to its condition, tenancy circumstances or applicable rules can require further checking. Annual smoke alarm servicing and the applicable two-year electrical and gas checks have their own schedules."
       ]
-    ], sources: [sources.minimum, sources.minimumChecklist, sources.minimumFuture],
+    ], sources: [sources.rentalChanges, sources.minimum, sources.minimumChecklist, sources.minimumFuture],
   },
   {
     ...AEA_SERVICE_IDENTITIES.nathersNew,
