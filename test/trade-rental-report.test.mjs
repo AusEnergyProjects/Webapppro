@@ -243,7 +243,7 @@ test("structured assessment measurements print their units in both finding and c
   }
 });
 
-test("ceiling joist spacing prints its millimetre label and saved value in the finding and full assessment", async () => {
+test("ceiling joist spacing and eave depth print their millimetre labels and saved values in the finding and full assessment", async () => {
   const snapshot = reportSnapshot();
   const section = snapshot.modules[0].sections[0];
   section.key = "ceiling_insulation";
@@ -252,7 +252,7 @@ test("ceiling joist spacing prints its millimetre label and saved value in the f
   Object.assign(section.items[0], {
     checkKey: "ceiling_2027_readiness", prompt: "Is insulation present throughout this accessible ceiling area?",
     locationLabel: "Accessible ceiling area", publicNotes: "No insulation is visible in this accessible area.",
-    response: { joistClearWidthMm: "430", areaSquareMetres: "24.5", insulationRating: "None" },
+    response: { joistClearWidthMm: "430", eaveDepthMm: "475", areaSquareMetres: "24.5", insulationRating: "None" },
   });
   Object.assign(snapshot.findings[0], {
     title: "Plan ceiling insulation", description: "No insulation is visible in the accessible ceiling area.",
@@ -265,12 +265,17 @@ test("ceiling joist spacing prints its millimetre label and saved value in the f
   assert.equal((content.match(/Clear gap between ceiling/g) || []).length, 2, "The measured gap label must appear in the linked finding and the complete assessment");
   assert.equal((content.match(/joists \(mm\)/g) || []).length, 2, "The long label must wrap within the label column");
   assert.equal((content.match(/^430 Tj$/gm) || []).length, 2, "The saved millimetre value must appear exactly once in each section");
+  assert.equal((content.match(/Eave depth \(mm\)/g) || []).length, 2);
+  assert.equal((content.match(/^475 Tj$/gm) || []).length, 2, "The recorded eave depth appears in both sections without a default value");
   const joistPositions = [...content.matchAll(/1 0 0 1 ([\d.]+) [\d.]+ Tm\s*430 Tj/g)].map((match) => Number(match[1]));
   const areaPositions = [...content.matchAll(/1 0 0 1 ([\d.]+) [\d.]+ Tm\s*24\.5 Tj/g)].map((match) => Number(match[1]));
   assert.equal(joistPositions.length, 2);
   assert.deepEqual(joistPositions, areaPositions, "Joist and area measurements must start in the same value column");
-  assert.doesNotMatch(content, /Joist Clear Width|joistClearWidthMm/);
+  assert.doesNotMatch(content, /Joist Clear Width|joistClearWidthMm|eaveDepthMm/);
   assert.deepEqual(snapshot, original);
+  delete section.items[0].response.eaveDepthMm;
+  const unmeasured = decodedPageContent(await PDFDocument.load(await createRentalAssessmentPdfBytes(snapshot)));
+  assert.doesNotMatch(unmeasured, /Eave depth \(mm\)/, "An older assessment without an eave measurement has no fabricated value");
 });
 
 test("rental assessment PDF rejects an incomplete report snapshot", async () => {

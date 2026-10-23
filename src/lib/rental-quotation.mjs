@@ -21,7 +21,7 @@ export const RENTAL_OBSERVATION_NUMBER_FIELDS = Object.freeze({
   roomLengthMetres: "m", roomWidthMetres: "m", roomHeightMetres: "m", widthMm: "mm", heightMm: "mm", depthMm: "mm",
   areaSquareMetres: "m2", sealLengthMetres: "m", flowLitresPerMinute: "L/min", collectedLitres: "L", flowSeconds: "seconds",
   count: "", workingBurners: "", insulationDepthMm: "mm", hatchWidthMm: "mm", accessWidthMm: "mm",
-  cabinetWidthMm: "mm", cabinetHeightMm: "mm", cabinetDepthMm: "mm", joistClearWidthMm: "mm",
+  cabinetWidthMm: "mm", cabinetHeightMm: "mm", cabinetDepthMm: "mm", joistClearWidthMm: "mm", eaveDepthMm: "mm",
   hotWaterCableRunMetres: "m", airconTotalCableMetres: "m", airconSwitchboardToOutdoorMetres: "m", airconOutdoorToIndoorMetres: "m", cooktopCableRunMetres: "m", nonIc4DownlightCount: "",
 });
 // A practical input bound for a clear joist gap, not a compliance threshold.
@@ -51,7 +51,7 @@ export function rentalObservationResponseLabel(key, checkKey = "") {
     if (key === "ventType") return "Wall vent type";
     if (key === "count") return "Number of wall vents needing sealing";
   }
-  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Total insulation area required", sealLengthMetres: "Total draughtproofing length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", joistClearWidthMm: "Clear gap between ceiling joists", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
+  const names = { roomLengthMetres: "Room length", roomWidthMetres: "Room width", roomHeightMetres: "Ceiling height", widthMm: "Width", heightMm: "Height", depthMm: "Depth", areaSquareMetres: "Total insulation area required", sealLengthMetres: "Total draughtproofing length", flowLitresPerMinute: "Water flow", collectedLitres: "Water collected", flowSeconds: "Collection time", count: "Count", workingBurners: "Working burners", insulationDepthMm: "Insulation depth", hatchWidthMm: "Hatch width", accessWidthMm: "Clear access width", cabinetWidthMm: "Cabinet opening width", cabinetHeightMm: "Cabinet opening height", cabinetDepthMm: "Cabinet opening depth", joistClearWidthMm: "Clear gap between ceiling joists", eaveDepthMm: "Eave depth", model: "Equipment and labels", measurement: "Measurements", limitationReason: "Observation limitation" };
   const quotationNames = { hotWaterCableRunMetres: "Hot-water system to switchboard cable run", airconTotalCableMetres: "Earlier combined RCAC cable run", airconSwitchboardToOutdoorMetres: "Switchboard to proposed outdoor RCAC unit cable run", airconOutdoorToIndoorMetres: "Proposed outdoor RCAC unit to indoor unit distance", cooktopCableRunMetres: "Cooktop to switchboard cable run", cableMeasurementStatus: "Cable length basis", cableRouteBasis: "Cable route and measurement basis", cableLimitationReason: "Cable measurement limitation", nonIc4DownlightCount: "Confirmed non-IC4 downlight count", downlightCountStatus: "Non-IC4 downlight count status", downlightEvidence: "Downlight label / count evidence", downlightCountLimitation: "Downlight count limitation" };
   for (const mode of ["heating", "cooling"]) {
     const title = mode === "heating" ? "Heating" : "Cooling";
@@ -189,7 +189,7 @@ export function rentalObservationFields(checkKey) {
       ...[numberField("cabinetWidthMm", "Cabinet opening width, if safely visible"), numberField("cabinetHeightMm", "Cabinet opening height, if safely visible"), numberField("cabinetDepthMm", "Cabinet opening depth, if safely visible")]
         .map((field) => ({ ...field, showForOutcomes: ["does_not_meet"], requiredForAdverse: false })),
       ...[numberField("widthMm", "Earlier oven width"), numberField("heightMm", "Earlier oven height"), numberField("depthMm", "Earlier oven depth")].map((field) => ({ ...field, legacy: true, requiredForAdverse: false }))],
-    ceiling_2027_readiness: [selectField("insulationRating", "Existing roof insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationRating), numberField("areaSquareMetres", "Total insulation required (square metres)"), { ...numberField("joistClearWidthMm", "Clear gap between ceiling joists"), ...joistClearWidthRange, requiredForAdverse: false }, shortText("model", "Product / R-value label, if readable")],
+    ceiling_2027_readiness: [selectField("insulationRating", "Existing roof insulation", RENTAL_OBSERVATION_SELECT_OPTIONS.insulationRating), numberField("areaSquareMetres", "Total insulation required (square metres)"), { ...numberField("joistClearWidthMm", "Clear gap between ceiling joists"), ...joistClearWidthRange, requiredForAdverse: false }, { ...numberField("eaveDepthMm", "Eave depth"), requiredForAdverse: false, help: "Enter 0 if there are no eaves. Leave blank if it could not be measured safely." }, shortText("model", "Product / R-value label, if readable")],
     windows_2027_readiness: [{ ...numberField("sealLengthMetres", "Total window draughtproofing length (metres)"), showForOutcomes: ["does_not_meet"] }],
     doors_2027_readiness: [numberField("count", "Total doors needing seals"), numberField("sealLengthMetres", "Total door draughtproofing length (metres)")].map((field) => ({ ...field, showForOutcomes: ["does_not_meet"] })),
     vents_2027_readiness: [selectField("ventType", "Wall vent type", RENTAL_OBSERVATION_SELECT_OPTIONS.ventType, { showForOutcomes: ["meets", "does_not_meet", "specialist_verification_required"] }), { ...numberField("count", "Total wall vents needing sealing"), showForOutcomes: ["does_not_meet", "specialist_verification_required"] }],
@@ -280,7 +280,7 @@ export function rentalObservationBlockers({ checkKey, outcome, response, finding
   const measurementNeeded = outcome === "does_not_meet"
     && numericFields.some((field) => field.requiredForAdverse);
   if (measurementNeeded && !String(response?.measurement || "").trim()
-    // The optional joist gap is quoting information, not a substitute for the existing area observation.
+    // Optional roof measurements are quoting information, not a substitute for the existing area observation.
     && !numericValues.some((field) => field.requiredForAdverse && validNumber(field))
     && !String(response?.limitationReason || "").trim()
     && !(recordedResponse.limitationStatus === undefined && String(recordedResponse.limitationReason || "").trim())

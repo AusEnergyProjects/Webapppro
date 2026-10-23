@@ -426,6 +426,33 @@ test("joist measurements use whole millimetres within the practical bound and pr
   }
 });
 
+test("eave depth is an optional ceiling quote measurement with no default or new completion requirement", () => {
+  const template = rentalAssessmentTemplateSnapshot(["minimum_standards"]).modules.minimum_standards;
+  const check = template.sections.find((section) => section.key === "ceiling_insulation").checks[0];
+  for (const templateVersion of [1, 3, 4]) {
+    const fields = rentalAssessorFields(check, { templateVersion });
+    const depth = fields.find((field) => field.key === "eaveDepthMm");
+    assert.equal(depth.label, "Eave depth");
+    assert.equal(depth.unit, "mm");
+    assert.equal(depth.input, "number");
+    assert.equal(depth.required, false);
+    assert.equal(depth.requiredForAdverse, false);
+    assert.equal(fields.indexOf(depth), fields.findIndex((field) => field.key === "joistClearWidthMm") + 1);
+    assert.equal(Object.hasOwn(depth, "defaultValue"), false);
+  }
+  assert.equal(rentalObservationResponseLabel("eaveDepthMm"), "Eave depth (mm)");
+  for (const value of [undefined, null, "", "  ", 0, "0", "450", "450.5"]) {
+    assert.equal(quotationModule.rentalObservationNumberIsValid(value, "eaveDepthMm"), true);
+  }
+  for (const value of [-1, "-1", "1e3", "450 mm", "Infinity", true, {}, []]) {
+    assert.equal(quotationModule.rentalObservationNumberIsValid(value, "eaveDepthMm"), false);
+  }
+  const input = { checkKey: check.key, outcome: "does_not_meet", finding: {} };
+  assert.deepEqual(rentalObservationBlockers({ ...input, response: { areaSquareMetres: "24" } }), []);
+  assert.deepEqual(rentalObservationBlockers({ ...input, response: { areaSquareMetres: "24", eaveDepthMm: "0" } }), []);
+  assert.match(rentalObservationBlockers({ ...input, response: { eaveDepthMm: "450" } }).join(" "), /basic measurements/);
+});
+
 test("heater identity is captured once, including skipped optional fields, while results remain independent", () => {
   const target = { moduleId: "module", sectionKey: "heating", checkKey: "heating_2027_readiness", instanceKey: "property", locationLabel: "" };
   const source = { ...target, checkKey: "main_living_heater", outcome: "meets", response: { applianceType: "Gas heater", model: "Older readable label text", credentialNumber: "PRIVATE", testResult: "PASS", limitationReason: "Only this check was obstructed", outcome: "meets" } };
@@ -564,6 +591,11 @@ test("web markup uses compact controls and removes already captured equipment fi
   assert.ok(gapInput, "The ceiling answer renders the joist measurement");
   for (const attribute of ['type="number"', 'inputMode="numeric"', 'min="1"', 'max="5000"', 'step="1"']) assert.ok(gapInput.includes(attribute), attribute);
   assert.doesNotMatch(gapInput, /required/);
+  const eaveInput = ceiling.match(/<input[^>]*name="eaveDepthMm"[^>]*>/)?.[0];
+  assert.ok(eaveInput, "The ceiling answer renders the optional eave measurement");
+  for (const attribute of ['type="number"', 'inputMode="decimal"', 'min="0"', 'step="any"', 'value=""']) assert.ok(eaveInput.includes(attribute), attribute);
+  assert.doesNotMatch(eaveInput, /required/);
+  assert.match(ceiling, /Eave depth \(mm\)/);
   assert.match(ceiling, /Clear gap between ceiling joists \(mm\)/);
   assert.match(ceiling, /inside faces of adjacent ceiling joists/);
   assert.match(ceiling, /<input[^>]*name="limitationReason"[^>]*value="Locked hatch"/);

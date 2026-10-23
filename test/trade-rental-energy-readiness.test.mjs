@@ -719,6 +719,23 @@ test("ceiling joist gaps persist as whole millimetres at both input bounds", asy
   }
 });
 
+test("ceiling eave depth round-trips zero and measured values while absent measurements stay absent", async () => {
+  for (const eaveDepthMm of [0, "0", "450", "450.5", undefined, "", "  "]) {
+    const fixture = databaseFixture();
+    try {
+      const response = await post(loadRoute(fixture), { action: "save_item", moduleId: "module", expectedModuleRevision: 1, expectedItemRevision: 0,
+        sectionKey: "ceiling_insulation", checkKey: "ceiling_2027_readiness", outcome: "meets",
+        response: { insulationRating: "R5 or above", eaveDepthMm } });
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      const expected = { insulationRating: "R5 or above", ...(String(eaveDepthMm ?? "").trim() ? { eaveDepthMm: String(eaveDepthMm) } : {}) };
+      const row = fixture.sql.prepare("SELECT response_json FROM trade_rental_inspection_items WHERE check_key = 'ceiling_2027_readiness'").get();
+      assert.deepEqual(JSON.parse(row.response_json), expected);
+      const payload = await response.json();
+      assert.deepEqual(payload.items.find((item) => item.checkKey === "ceiling_2027_readiness").response, expected);
+    } finally { fixture.sql.close(); }
+  }
+});
+
 test("ceiling observations remain valid without a joist gap and retain safe-access limitations", async () => {
   const observations = [
     { outcome: "meets", response: { insulationRating: "R5 or above" } },
@@ -767,6 +784,7 @@ test("invalid structured measurements and choices are rejected before saving obs
     const numberKey = Object.keys(quotation.RENTAL_OBSERVATION_NUMBER_FIELDS)[0];
     const invalidResponses = [
       ...[-1, "-0.5", "Infinity", "NaN", "0x10", "12 mm", "9".repeat(501), {}, [], true].map((value) => ({ [numberKey]: value })),
+      ...[-1, "-0.5", "Infinity", "1e3", "450 mm", {}, [], true].map((value) => ({ eaveDepthMm: value })),
       ...Object.keys(quotation.RENTAL_OBSERVATION_SELECT_OPTIONS).flatMap((key) => [{ [key]: "made-up-option" }, { [key]: true }]),
     ];
     for (const value of invalidResponses) {

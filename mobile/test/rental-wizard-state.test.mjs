@@ -726,9 +726,12 @@ test('native reviewed switchboard Next requires its photo and permits both resul
   }
 });
 
-test('phone saves the optional ceiling gap or an honest safe-access limitation in the durable answer', async () => {
+test('phone saves optional ceiling gap and eave depth or an honest safe-access limitation in the durable answer', async () => {
   for (const response of [
     { areaSquareMetres: '24', joistClearWidthMm: '430' },
+    { areaSquareMetres: '24', joistClearWidthMm: '430', eaveDepthMm: '450' },
+    { areaSquareMetres: '24', eaveDepthMm: '0' },
+    { areaSquareMetres: '24', eaveDepthMm: '' },
     { areaSquareMetres: '24' },
     { limitationStatus: 'Not accessible', limitationReason: 'Roof hatch is locked' },
     { limitationStatus: 'Unsafe to measure', limitationReason: 'No safe access to joists' },
@@ -742,6 +745,17 @@ test('phone saves the optional ceiling gap or an honest safe-access limitation i
     assert.equal(env.advanced, true);
     assert.deepEqual(queued.body.response, response);
     if (response.limitationStatus) assert.equal(Object.hasOwn(queued.body.response, 'joistClearWidthMm'), false);
+  }
+});
+
+test('phone rejects invalid eave depths before queuing and retains the answer for correction', async () => {
+  for (const value of ['-1', '450 mm', 'Infinity', 'unknown']) {
+    const env = saveEnvironment(); env.check.key = 'ceiling_2027_readiness';
+    env.draft.response.eaveDepthMm = value;
+    env.enqueueRentalSave = () => { throw new Error('Invalid eave depth must not enter queue'); };
+    await assert.rejects(mountedSaveAnswer(env), /Enter a zero or positive number for eave depth/);
+    assert.equal(env.cacheRef.current.drafts.draft.response.eaveDepthMm, value);
+    assert.equal(env.advanced, false);
   }
 });
 
