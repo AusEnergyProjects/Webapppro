@@ -74,7 +74,7 @@ function loadRoute(f, options = {}) {
     "@/lib/trade-rental-report-email-server": {
       rentalReportDeliveryRecipient: async () => null, rentalReportDeliveryState: async () => null,
       rentalReportDeliveryReview: async () => options.review === undefined ? heldReview : options.review,
-      emailRentalAssessmentReport: async () => { calls.email++; return { status: "accepted" }; },
+      emailRentalAssessmentReport: async (input) => { calls.email++; return options.email ? options.email(input) : { status: "accepted" }; },
     },
     "@/lib/trade-rental-report-server": {
       ownerRentalReportPresentation: async () => {
@@ -119,6 +119,41 @@ function deferred() {
   const promise = new Promise((resolvePromise, rejectPromise) => { resolve = resolvePromise; reject = rejectPromise; });
   return { promise, resolve, reject };
 }
+
+test("report delivery retains its provider receipt after the requesting phone disconnects", async () => {
+  const f = fixture();
+  try {
+    const sending = deferred();
+    const registered = deferred();
+    const controller = new AbortController();
+    const route = loadRoute(f, { review: null, email: () => sending.promise, onWaitUntil: () => registered.resolve() });
+    const response = post(route, { workOrderId: "job", action: "email_report", reportId: "report-r2", expectedRecipientEmail: "hello@example.test" }, controller.signal);
+    await registered.promise;
+    controller.abort();
+    assert.equal(route.calls.email, 1);
+    assert.equal(route.calls.lifetime.length, 1);
+    const receipt = { status: "accepted", reportId: "report-r2", message: "Accepted for delivery." };
+    sending.resolve(receipt);
+    assert.deepEqual(await route.calls.lifetime[0], receipt);
+    const result = await response;
+    assert.equal(result.status, 200);
+    assert.deepEqual((await result.json()).reportDelivery, receipt);
+    assert.equal(route.calls.email, 1);
+  } finally { f.sql.close(); }
+});
+
+test("retained report delivery exposes an uncertain provider result without claiming success", async () => {
+  const f = fixture();
+  try {
+    const receipt = { status: "reconciliation_required", reportId: "report-r2", message: "Check delivery before retrying." };
+    const route = loadRoute(f, { review: null, email: async () => receipt });
+    const response = await post(route, { workOrderId: "job", action: "email_report", reportId: "report-r2", expectedRecipientEmail: "hello@example.test" });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).ok, false);
+    assert.deepEqual(await route.calls.lifetime[0], receipt);
+    assert.equal(route.calls.email, 1);
+  } finally { f.sql.close(); }
+});
 
 test("formatting correction is an owner report action without reopening the completed assessment or sending email", async () => {
   const f = fixture();

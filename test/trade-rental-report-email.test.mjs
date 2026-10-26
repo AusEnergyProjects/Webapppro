@@ -96,7 +96,7 @@ function loadTypescriptModule(path, mocks = {}) {
 
 
 
-function fixture({ failSend=false, largeReport=false, linkStatus="active", provider="resend", configured=true, indeterminate=false, pdfSize=0 }={}) {
+function fixture({ failSend=false, largeReport=false, linkStatus="active", provider="resend", configured=true, indeterminate=false, pdfSize=0, pdfBytes=null }={}) {
  const database=new DatabaseSync(':memory:');
  database.exec(`CREATE TABLE trade_work_orders(id text,firebase_uid text,partner_type text,record_status text,source_type text);
  CREATE TABLE trade_crm_job_details(work_order_id text,firebase_uid text,crm_customer_id text,customer_source text);
@@ -110,11 +110,12 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active", provi
  INSERT INTO trade_rental_reports VALUES('report','owner','inspection','issued','RMS-123','hash');`);
  const migration = read('../drizzle/0160_trade_rental_inspections.sql');
  database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
+ database.exec(read('../drizzle/0196_trade_outgoing_email.sql').replaceAll('--> statement-breakpoint', ''));
  const db=testD1(database);const sent=[];const sendOptions=[];const hooks={beforePdf:null,beforeSend:null};const assignedCalls=[];let shouldFail=failSend;
  const api=loadTypescriptModule('../src/lib/trade-rental-report-email-server.ts',{
  './rental-report-email-template.mjs':{rentalReportEmailDraft},
  '../../db':{getD1:()=>db},'@/lib/trade-team-server':{assignedJob:async(access,workOrderId)=>{assignedCalls.push({access,workOrderId});const job=database.prepare("SELECT id FROM trade_work_orders WHERE id=? AND firebase_uid=? AND record_status='active'").get(workOrderId,access.ownerUid);if(!job)throw new Error('JOB_NOT_FOUND');return job;}},
- '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>{await hooks.beforePdf?.();return{bytes:largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : pdfSize ? new Uint8Array(pdfSize) : new Uint8Array([37,80,68,70,45]),reportNumber:'RMS-123'};},ownerRentalReportPresentation:async()=>[{id:'report',link:linkStatus ? {status:linkStatus,shareUrl:'https://example.test/rental-report/secure-test-link'} : null}]},
+ '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>{await hooks.beforePdf?.();return{bytes:pdfBytes || (largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : pdfSize ? new Uint8Array(pdfSize) : new Uint8Array([37,80,68,70,45])),reportNumber:'RMS-123'};},ownerRentalReportPresentation:async()=>[{id:'report',link:linkStatus ? {status:linkStatus,shareUrl:'https://example.test/rental-report/secure-test-link'} : null}]},
  '@/lib/service-reminder-delivery':{reminderProviderFailureOutcome,sendServiceReminderProviderMessage:async()=>{throw new Error('Platform sender must not be called');}},
  '@/lib/trade-email-server':{tradeCustomerEmailReadiness:async(ownerUid)=>{assert.equal(ownerUid,'owner');return{configured,provider,from:'team@trade.example'};},sendTradeCustomerEmail:async(ownerUid,actorUid,input,options)=>{assert.equal(ownerUid,'owner');assert.equal(actorUid,'actor');sent.push(input);sendOptions.push(options);await hooks.beforeSend?.();if(shouldFail)throw indeterminate ? new ReminderProviderDeliveryError('indeterminate','unknown') : new Error('rejected');return{provider,providerMessageId:'message'};}},
  });
@@ -122,6 +123,126 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active", provi
  const reviewInput={access:{...input.access,isOwner:true,actorUid:'owner'},workOrderId:'job',inspectionId:'inspection',hold:true,expectedInspectionRevision:1};
  return{database,db,sent,sendOptions,hooks,assignedCalls,input,reviewInput,api,send:()=>api.emailRentalAssessmentReport(input),allowSend:()=>{shouldFail=false;},hold:(hold=true)=>api.setRentalReportDeliveryReview({...reviewInput,hold})};
 }
+
+function interruptedAttempt(f, { status=null, age=120_000, owner='owner' }={}) {
+ const hash=value=>createHash('sha256').update(value).digest('hex');
+ const recipientSha256=hash('jane@example.test');
+ const key=hash(`rental-report-email|owner|report|hash|${recipientSha256}`);
+ const createdAt=new Date(Date.now()-age).toISOString();
+ f.database.prepare(`INSERT INTO trade_rental_inspection_events
+   (id,inspection_id,report_id,firebase_uid,event_type,request_id,metadata,created_at)
+   VALUES('interrupted','inspection','report','owner','report_email_requested',?,?,?)`)
+  .run(`report-email:${key}:1`,JSON.stringify({recipientSha256}),createdAt);
+ if(status) f.database.prepare(`INSERT INTO trade_email_submissions
+  (id,owner_uid,actor_uid,connection_id,request_key,content_hash,sender_email,recipient_email,subject,provider,status,provider_message_id,error_code,created_at,updated_at)
+  VALUES('submission',?,'actor','platform',?,'hash','service@example.test','jane@example.test','Report','resend',?,'provider-receipt','email_preflight_not_sent',?,?)`)
+  .run(owner,key,status,createdAt,createdAt);
+ return key;
+}
+
+test('10.3 MB evidence PDF reaches the sender as an exact attachment',async()=>{
+ const pdfBytes=new Uint8Array(Math.ceil(10.3*1024*1024));
+ for(let i=0;i<pdfBytes.length;i++)pdfBytes[i]=i%251;
+ const f=fixture({pdfBytes});
+ assert.equal((await f.send()).status,'accepted');
+ const decoded=Buffer.from(f.sent[0].attachments[0].content,'base64');
+ assert.equal(decoded.length,pdfBytes.length);
+ assert.equal(createHash('sha256').update(decoded).digest('hex'),createHash('sha256').update(pdfBytes).digest('hex'));
+});
+
+test('recent email preparation remains sending and cannot be claimed twice',async()=>{
+ const f=fixture();interruptedAttempt(f,{age:1000});
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'sending');
+ assert.equal((await f.send()).status,'sending');assert.equal(f.sent.length,0);
+});
+
+test('stale platform preparation exposes a safe retry using the original provider key',async()=>{
+ const f=fixture();const key=interruptedAttempt(f);
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'failed');
+ assert.equal((await f.send()).status,'accepted');
+ assert.equal(f.sent.length,1);assert.equal(f.sent[0].idempotencyKey,key);
+ assert.equal(f.sendOptions[0].previouslyAttempted,true);
+ assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,1);
+});
+
+for(const provider of ['google','microsoft'])test(`stale unjournalled ${provider} email still requires reconciliation`,async()=>{
+ const f=fixture({provider});interruptedAttempt(f);
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'reconciliation_required');
+});
+
+test('stale preparation beyond the deduplication window cannot imply a safe retry',async()=>{
+ const f=fixture();interruptedAttempt(f,{age:24*60*60*1000});
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'reconciliation_required');
+ assert.equal((await f.send()).status,'reconciliation_required');assert.equal(f.sent.length,0);
+});
+
+test('durable acceptance repairs a lost report receipt without submitting again even after 24 hours',async()=>{
+ const f=fixture();interruptedAttempt(f,{status:'accepted',age:24*60*60*1000});
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'accepted');
+ assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,0);
+ const receipt=f.database.prepare("SELECT metadata FROM trade_rental_inspection_events WHERE event_type='report_email_accepted'").get();
+ assert.equal(JSON.parse(receipt.metadata).providerMessageId,'provider-receipt');
+});
+
+test('durable acceptance supersedes an indeterminate assessment event without sending again',async()=>{
+ const f=fixture();interruptedAttempt(f,{status:'accepted'});
+ f.database.exec("UPDATE trade_rental_inspection_events SET event_type='report_email_failed',request_id=request_id||':failed',metadata=json_set(metadata,'$.outcome','indeterminate')");
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'accepted');
+ // Retain the original requested event as the delivery history does in production.
+ f.database.exec("INSERT INTO trade_rental_inspection_events (id,inspection_id,report_id,firebase_uid,event_type,request_id,metadata,created_at) SELECT 'original',inspection_id,report_id,firebase_uid,'report_email_requested',replace(request_id,':failed',''),metadata,created_at FROM trade_rental_inspection_events WHERE id='interrupted'");
+ assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,0);
+});
+
+for(const invalidTime of ['future','invalid'])test(`${invalidTime} request timestamp cannot leave a send active or permit a retry`,async()=>{
+ const f=fixture();interruptedAttempt(f,{age:invalidTime==='future'?-120_000:120_000});
+ if(invalidTime==='invalid'){
+  f.database.exec('PRAGMA ignore_check_constraints=ON');
+  f.database.exec("UPDATE trade_rental_inspection_events SET created_at='invalid'");
+ }
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'reconciliation_required');
+ assert.equal((await f.send()).status,'reconciliation_required');assert.equal(f.sent.length,0);
+});
+
+for(const status of ['sending','uncertain'])test(`stale provider ${status} record never permits another submission`,async()=>{
+ const f=fixture();interruptedAttempt(f,{status});
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'reconciliation_required');
+ assert.equal((await f.send()).status,'reconciliation_required');assert.equal(f.sent.length,0);
+});
+
+test('durable failed preflight remains safely retryable after the provider deduplication window',async()=>{
+ const f=fixture();interruptedAttempt(f,{status:'failed',age:24*60*60*1000});
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'failed');
+ assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,1);
+});
+
+test('another workspace submission cannot change this report delivery state',async()=>{
+ const f=fixture();interruptedAttempt(f,{status:'accepted',owner:'other-owner'});
+ assert.equal((await f.api.rentalReportDeliveryState('owner','inspection')).status,'failed');
+ assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,1);
+});
+
+test('verified admin can send the exact support job and preserves the real actor in the journal',async()=>{
+ for(const role of ['owner','admin']){
+  const f=fixture();f.input.access.memberId='';f.input.access.supportWorkOrderId='job';f.input.admin={uid:'actor',role};
+  assert.equal((await f.send()).status,'accepted');
+  const events=f.database.prepare('SELECT actor_type,actor_uid FROM trade_rental_inspection_events').all();
+  assert.ok(events.length>0);assert.ok(events.every(row=>row.actor_type==='system'&&row.actor_uid==='actor'));
+ }
+});
+
+test('read-only support and mismatched admin authorization cannot send',async()=>{
+ for(const kind of ['read-only','support-role','wrong-actor','wrong-job','no-job-scope','no-report-permission']){
+  const f=fixture();f.input.access.supportWorkOrderId='job';
+  if(kind!=='read-only')f.input.admin={uid:'actor',role:'admin'};
+  if(kind==='support-role')f.input.admin.role='support';
+  if(kind==='wrong-actor')f.input.admin.uid='other-admin';
+  if(kind==='wrong-job')f.input.access.supportWorkOrderId='another-job';
+  if(kind==='no-job-scope')delete f.input.access.supportWorkOrderId;
+  if(kind==='no-report-permission')f.input.access.canRunReports=false;
+  await assert.rejects(f.send,/REPORT_PERMISSION_REQUIRED/);
+  assert.equal(f.sent.length,0);assert.equal(f.database.prepare('SELECT COUNT(*) n FROM trade_rental_inspection_events').get().n,0);
+ }
+});
 
 test('owner review holds this inspection durably without changing or sending its completed report',async()=>{
  const f=fixture();assert.equal(await f.api.rentalReportDeliveryReview('owner','inspection'),null);

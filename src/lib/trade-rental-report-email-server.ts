@@ -1,4 +1,5 @@
 import { getD1 } from '../../db';
+import type { AdminIdentity } from '@/lib/admin-server';
 import { assignedJob, type TeamAccess } from '@/lib/trade-team-server';
 import { authenticatedRentalReportPdf, ownerRentalReportPresentation } from '@/lib/trade-rental-report-server';
 import { reminderProviderFailureOutcome } from '@/lib/service-reminder-delivery';
@@ -6,12 +7,21 @@ import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from '@/lib/trade
 import { rentalReportEmailDraft } from './rental-report-email-template.mjs';
 
 type Row = Record<string, unknown>;
-type Input = { access: TeamAccess; workOrderId: string; inspectionId: string; reportId: string; expectedRecipientEmail: string; origin: string };
+type Input = { access: TeamAccess; workOrderId: string; inspectionId: string; reportId: string; expectedRecipientEmail: string; origin: string; admin?: Pick<AdminIdentity, 'uid' | 'role'> };
 type ReviewInput = { access: TeamAccess; workOrderId: string; inspectionId: string; hold: boolean; expectedInspectionRevision: number };
 type ReviewState = { status: 'held' | 'released'; message: string; at: string };
 const REVIEW_HELD_MESSAGE = 'The business owner is reviewing this report. The completed report is saved; email will wait for their approval.';
 const sha256 = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), byte => byte.toString(16).padStart(2,'0')).join('');
 const object = (value: unknown): Row => { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } };
+const EMAIL_ATTEMPT_ACTIVE_MS = 90_000;
+const EMAIL_RETRY_WINDOW_MS = 23 * 60 * 60 * 1000;
+const isAdminDelivery = (input: Input) => Boolean(input.admin && ['owner', 'admin'].includes(input.admin.role)
+  && input.admin.uid === input.access.actorUid && input.access.supportWorkOrderId === input.workOrderId);
+
+async function emailSubmission(ownerUid: string, key: string) {
+  return getD1().prepare('SELECT status, provider, provider_message_id FROM trade_email_submissions WHERE owner_uid = ? AND request_key = ?')
+    .bind(ownerUid, key).first<Row>();
+}
 
 export async function rentalReportDeliveryReview(ownerUid: string, inspectionId: string): Promise<ReviewState | null> {
   const row = await getD1().prepare(`SELECT event.event_type, event.created_at FROM trade_rental_inspection_events event
@@ -87,7 +97,7 @@ export async function rentalReportDeliveryRecipient(ownerUid: string, workOrderI
 }
 
 export async function rentalReportDeliveryState(ownerUid: string, inspectionId: string) {
-  const row = await getD1().prepare(`SELECT event.event_type, event.report_id, event.metadata, event.created_at FROM trade_rental_inspection_events event
+  const row = await getD1().prepare(`SELECT event.event_type, event.report_id, event.request_id, event.metadata, event.created_at FROM trade_rental_inspection_events event
     JOIN trade_rental_inspections inspection ON inspection.id = event.inspection_id AND inspection.firebase_uid = event.firebase_uid
       AND inspection.issued_report_id = event.report_id AND inspection.status = 'issued'
     WHERE event.firebase_uid = ? AND event.inspection_id = ? AND event.event_type IN ('report_email_requested', 'report_email_accepted', 'report_email_failed')
@@ -95,8 +105,27 @@ export async function rentalReportDeliveryState(ownerUid: string, inspectionId: 
     .bind(ownerUid, inspectionId).first<Row>();
   if (!row) return null;
   const meta = object(row.metadata);
-  const status = row.event_type === 'report_email_accepted' ? 'accepted'
+  let status = row.event_type === 'report_email_accepted' ? 'accepted'
     : meta.outcome === 'indeterminate' ? 'reconciliation_required' : row.event_type === 'report_email_failed' ? 'failed' : 'sending';
+  const age = Date.now() - Date.parse(String(row.created_at));
+  if (status !== 'accepted' && (status !== 'sending' || !Number.isFinite(age) || age < 0 || age >= EMAIL_ATTEMPT_ACTIVE_MS)) {
+    const key = /^report-email:([a-f0-9]{64}):\d+(?::failed)?$/.exec(String(row.request_id))?.[1];
+    const submission = key ? await emailSubmission(ownerUid, key) : null;
+    if (submission?.status === 'accepted') status = 'accepted';
+    else if (status === 'sending') {
+      status = submission?.status === 'failed' ? 'failed' : 'reconciliation_required';
+      if (key && !submission && Number.isFinite(age) && age >= 0) {
+        const first = await getD1().prepare(`SELECT MIN(created_at) AS created_at FROM trade_rental_inspection_events
+          WHERE firebase_uid = ? AND inspection_id = ? AND report_id = ? AND event_type = 'report_email_requested'
+            AND request_id >= ? AND request_id < ?`)
+          .bind(ownerUid, inspectionId, row.report_id, `report-email:${key}:`, `report-email:${key};`).first<Row>();
+        // Only the platform provider has a deduplication key for unjournalled legacy attempts.
+        const email = await tradeCustomerEmailReadiness(ownerUid, getD1());
+        const firstAge = first ? Date.now() - Date.parse(String(first.created_at)) : NaN;
+        if (email.provider === 'resend' && firstAge >= 0 && firstAge < EMAIL_RETRY_WINDOW_MS) status = 'failed';
+      }
+    }
+  }
   return { status, reportId: String(row.report_id || ''), recipientSha256: /^[a-f0-9]{64}$/.test(String(meta.recipientSha256 || '')) ? String(meta.recipientSha256) : '',
     message: status === 'accepted' ? 'The report email was accepted for delivery.'
     : status === 'reconciliation_required' ? 'Check the outgoing mailbox before sending this report again.'
@@ -108,13 +137,15 @@ async function event(input: Input, eventType: string, requestId: string, metadat
     (id, inspection_id, report_id, firebase_uid, actor_type, actor_uid, event_type, request_id, summary, metadata, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), input.inspectionId, input.reportId, input.access.ownerUid,
-      input.access.isOwner ? 'owner' : 'assessor', input.access.actorUid, eventType, requestId,
-      eventType === 'report_email_accepted' ? 'Report email accepted by the delivery provider.' : eventType === 'report_email_failed' ? 'Report email delivery attempt failed.' : 'Report email requested by the assessor.',
+      isAdminDelivery(input) ? 'system' : input.access.isOwner ? 'owner' : 'assessor', input.access.actorUid, eventType, requestId,
+      eventType === 'report_email_accepted' ? 'Report email accepted by the delivery provider.' : eventType === 'report_email_failed' ? 'Report email delivery attempt failed.' : isAdminDelivery(input) ? 'Report email requested by admin support.' : 'Report email requested by the assessor.',
       JSON.stringify({ reportId: input.reportId, ...metadata }), now).run();
 }
 
 export async function emailRentalAssessmentReport(input: Input) {
   if (!input.access.canRunReports) throw new Error('REPORT_PERMISSION_REQUIRED');
+  const adminDelivery = isAdminDelivery(input);
+  if ((input.access.supportWorkOrderId || input.admin) && !adminDelivery) throw new Error('REPORT_PERMISSION_REQUIRED');
   await assignedJob(input.access, input.workOrderId);
   const db = getD1();
   const report = await db.prepare(`SELECT r.report_number, r.pdf_sha256, i.assessor_member_id
@@ -123,7 +154,7 @@ export async function emailRentalAssessmentReport(input: Input) {
       AND i.work_order_id = ? AND i.status = 'issued' AND i.issued_report_id = r.id`)
     .bind(input.reportId, input.access.ownerUid, input.inspectionId, input.workOrderId).first<Row>();
   if (!report) throw new Error('RENTAL_REPORT_LINK_NOT_FOUND');
-  if (!input.access.isOwner && String(report.assessor_member_id || '') !== input.access.memberId) throw new Error('ASSESSOR_REQUIRED');
+  if (!adminDelivery && !input.access.isOwner && String(report.assessor_member_id || '') !== input.access.memberId) throw new Error('ASSESSOR_REQUIRED');
   if ((await rentalReportDeliveryReview(input.access.ownerUid, input.inspectionId))?.status === 'held') {
     return { status: 'held', reportId: input.reportId, message: REVIEW_HELD_MESSAGE };
   }
@@ -139,14 +170,23 @@ export async function emailRentalAssessmentReport(input: Input) {
       AND request_id >= ? AND request_id < ? ORDER BY created_at, request_id`)
     .bind(input.inspectionId, input.access.ownerUid, input.reportId, `${prefix}:`, `${prefix};`).all<Row>();
   if (events.results.some(row => row.event_type === 'report_email_accepted')) return { status: 'accepted', reportId: input.reportId, message: 'The report email was already accepted for delivery.' };
-  if (events.results.some(row => object(row.metadata).outcome === 'indeterminate')) return { status: 'reconciliation_required', reportId: input.reportId, message: 'Check the outgoing mailbox before sending this report again. Delivery could not be confirmed.' };
   const requests = events.results.filter(row => row.event_type === 'report_email_requested');
+  const submission = requests.length ? await emailSubmission(input.access.ownerUid, key) : null;
+  if (submission?.status === 'accepted') {
+    await event(input, 'report_email_accepted', `${prefix}:accepted`, { recipientSha256: recipientHash, provider: submission.provider, providerMessageId: submission.provider_message_id });
+    return { status: 'accepted', reportId: input.reportId, message: 'The report email was already accepted for delivery.' };
+  }
+  if (submission && submission.status !== 'failed') return { status: 'reconciliation_required', reportId: input.reportId, message: 'Check the outgoing mailbox before sending this report again. Delivery could not be confirmed.' };
+  if (events.results.some(row => object(row.metadata).outcome === 'indeterminate')) return { status: 'reconciliation_required', reportId: input.reportId, message: 'Check the outgoing mailbox before sending this report again. Delivery could not be confirmed.' };
   const last = requests.at(-1);
-  if (last && Date.now() - Date.parse(String(requests[0].created_at)) > 23 * 60 * 60 * 1000) {
+  const firstAge = requests.length ? Date.now() - Date.parse(String(requests[0].created_at)) : 0;
+  const lastAge = last ? Date.now() - Date.parse(String(last.created_at)) : 0;
+  if (last && (!Number.isFinite(firstAge) || firstAge < 0 || !Number.isFinite(lastAge) || lastAge < 0
+    || (!submission && firstAge > EMAIL_RETRY_WINDOW_MS))) {
     return { status: 'reconciliation_required', reportId: input.reportId, message: 'Check the previous email delivery before sending again. It may already have reached the client.' };
   }
   if (last && !events.results.some(row => row.request_id === `${last.request_id}:failed`)
-    && Date.now() - Date.parse(String(last.created_at)) < 90_000) return { status: 'sending', reportId: input.reportId, message: 'The report email is being sent.' };
+    && lastAge < EMAIL_ATTEMPT_ACTIVE_MS) return { status: 'sending', reportId: input.reportId, message: 'The report email is being sent.' };
   const email = await tradeCustomerEmailReadiness(input.access.ownerUid, db);
   if (!email.configured) return { status: 'failed', reportId: input.reportId, message: 'Email delivery is not configured. The completed report is saved.' };
   const pdf = await authenticatedRentalReportPdf({ access: input.access, workOrderId: input.workOrderId, reportId: input.reportId });
@@ -166,8 +206,8 @@ export async function emailRentalAssessmentReport(input: Input) {
       AND COALESCE((SELECT review.event_type FROM trade_rental_inspection_events review
         WHERE review.inspection_id = inspection.id AND review.firebase_uid = inspection.firebase_uid
           AND review.event_type IN ('report_email_review_held', 'report_email_review_released') ORDER BY review.rowid DESC LIMIT 1), '') <> 'report_email_review_held'`)
-    .bind(crypto.randomUUID(), input.access.isOwner ? 'owner' : 'assessor', input.access.actorUid, attempt,
-      'Report email requested by the assessor.', JSON.stringify({ reportId: input.reportId, recipientSha256: recipientHash }), new Date().toISOString(),
+    .bind(crypto.randomUUID(), adminDelivery ? 'system' : input.access.isOwner ? 'owner' : 'assessor', input.access.actorUid, attempt,
+      adminDelivery ? 'Report email requested by admin support.' : 'Report email requested by the assessor.', JSON.stringify({ reportId: input.reportId, recipientSha256: recipientHash }), new Date().toISOString(),
       input.inspectionId, input.access.ownerUid, input.workOrderId, input.reportId).run();
   if (!claim.meta.changes) {
     if ((await rentalReportDeliveryReview(input.access.ownerUid, input.inspectionId))?.status === 'held') {
@@ -179,7 +219,9 @@ export async function emailRentalAssessmentReport(input: Input) {
     const attachments = [];
     const attachmentLimit = email.provider === 'resend' ? 18 * 1024 * 1024 : 1.5 * 1024 * 1024;
     if (pdf.bytes.length <= attachmentLimit) {
-      let binary = ''; for (const byte of pdf.bytes) binary += String.fromCharCode(byte);
+      // Avoid millions of one-character allocations for evidence-heavy PDFs in the Worker.
+      let binary = '';
+      for (let offset = 0; offset < pdf.bytes.length; offset += 0x8000) binary += String.fromCharCode(...pdf.bytes.subarray(offset, offset + 0x8000));
       attachments.push({ filename: `${pdf.reportNumber.replace(/[^a-zA-Z0-9-]/g, '-')}.pdf`, content: btoa(binary), contentType: 'application/pdf' });
     }
     const draft = rentalReportEmailDraft({ recipientName: recipient.name, reportNumber: pdf.reportNumber,

@@ -11,6 +11,7 @@ import {AdminCertificateJobActions} from "./AdminCertificateJobActions";
 import {CreditexJobAuditDesk} from "./CreditexJobAuditDesk";
 import {TRADE_JOB_LIFECYCLE_STATUSES,tradeJobLifecycleLabel} from "@/lib/trade-job-lifecycle";
 import { AdminJobSupportWorkspace } from "./AdminJobSupportWorkspace";
+import { AdminRentalReportEmail } from "./AdminRentalReportEmail";
 
 const columns = [
   {key:"workNumber",label:"Job ID"}, {key:"createdAt",label:"Created"},
@@ -96,6 +97,7 @@ export function AdminJobDirectory({ api,user,canAudit = true,onAuditDirtyChange,
   }
   if (auditIntent && user) return <CreditexJobAuditDesk key={auditIntent} user={user} intentId={auditIntent} actorMode="admin" onClose={()=>{setAuditIntent("");onAuditDirtyChange?.(false);}} onChanged={()=>setRevision(value=>value+1)} onDirtyChange={onAuditDirtyChange} />;
   if (selectedJob && user && selectedJob.recordStatus !== "archived") return <>
+    {canAudit && <AdminRentalReportEmail key={selectedJob.id} user={user} workOrderId={selectedJob.id} />}
     <AdminJobSupportWorkspace user={user} job={selectedJob} onBack={closeDetails} />
     {canAudit && <details className={styles.adminActions}><summary>Admin certificate actions</summary><AdminCertificateJobActions user={user} workOrderId={selectedJob.id} api={api} onAudit={setAuditIntent} onChanged={()=>{closeDetails();setRevision(value=>value+1);setActionMessage("Job updated. Deleted certificate jobs can be restored from the Bin.");}} /></details>}
   </>;

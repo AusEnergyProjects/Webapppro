@@ -1211,9 +1211,12 @@ export async function POST(request: Request) {
     }
     if (action === "email_report") {
       try {
-        const reportDelivery = await emailRentalAssessmentReport({ access, workOrderId,
+        const delivery = emailRentalAssessmentReport({ access, workOrderId,
           inspectionId: String(context.inspection.id), reportId: cleanAdminText(body.reportId, 180),
           expectedRecipientEmail: cleanAdminText(body.expectedRecipientEmail, 180), origin: new URL(request.url).origin });
+        // Keep the provider submission and its receipt alive if the phone disconnects.
+        waitUntil(delivery);
+        const reportDelivery = await delivery;
         if (reportDelivery.status !== 'accepted') return adminJson({ ok: false, code: reportDelivery.status === 'reconciliation_required' ? 'REPORT_DELIVERY_REVIEW_REQUIRED' : 'REPORT_EMAIL_PENDING',
           error: reportDelivery.message, reportDelivery }, reportDelivery.status === 'reconciliation_required' ? 409 : 503);
         return adminJson({ ok: true, ...(await assessmentPayload(context, new URL(request.url).origin)), reportDelivery });
