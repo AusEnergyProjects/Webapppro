@@ -7,6 +7,7 @@ import { BoundedJsonRequestError, readBoundedJsonRequest } from "../src/lib/boun
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from "../src/lib/firebase-mfa.ts";
 import { isJobMember } from "../src/lib/trade-job-collaboration.ts";
 import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
+import { adminJobReadError } from '../src/lib/admin-job-read-error.ts';
 
 function functions(file, names, dependencies = {}) {
   const source = ts.createSourceFile(file, readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
@@ -18,7 +19,7 @@ function functions(file, names, dependencies = {}) {
   return new Function("exports", ...Object.keys(dependencies), `${compiled}\nreturn {${names.join(",")}};`)({}, ...Object.values(dependencies));
 }
 const admin = functions("src/lib/admin-server.ts", ["adminJson", "sameOrigin", "mfaErrorResponse"],
-  { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL });
+  { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL, adminJobReadError });
 const source = readFileSync(new URL("../src/app/api/trade-businesses/restore-cache/route.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 

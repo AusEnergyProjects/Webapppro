@@ -57,7 +57,7 @@ function complianceScope(actor: JobLifecycleActor, permission: CreditexPermissio
 }
 
 async function context(db: D1Database, actor: JobLifecycleActor, intentId: string, permission: CreditexPermission = "jobs") {
-  await ensureCreditexJobLifecycleSchemaGuards(db);
+  if (!(actor.kind === "trade" && actor.access.supportWorkOrderId)) await ensureCreditexJobLifecycleSchemaGuards(db);
   const readScope = complianceScope(actor, permission), mutationScope = complianceScope(actor, "payouts");
   const correctionScope = complianceScope(actor, "corrections", { work: "work.id", owner: "work.firebase_uid" });
   const lifecycleScope = complianceScope(actor, "job_lifecycle", { work: "work.id", owner: "work.firebase_uid" });
@@ -74,6 +74,9 @@ async function context(db: D1Database, actor: JobLifecycleActor, intentId: strin
     .bind(...mutationScope.bindings, ...correctionScope.bindings, ...lifecycleScope.bindings, intentId,
       actor.kind === "trade" ? actor.access.ownerUid : actor.organisationId, ...readScope.bindings).first<ContextRow>();
   if (!row) return fail("JOB_LIFECYCLE_NOT_FOUND", "This activity is not available in your workspace.", 404);
+  if (actor.kind === "trade" && actor.access.supportWorkOrderId && row.work_order_id !== actor.access.supportWorkOrderId) {
+    return fail("JOB_LIFECYCLE_NOT_FOUND", "This activity is not attached to the selected support job.", 404);
+  }
   if (actor.kind === "trade" && !actor.access.isOwner && actor.access.jobScope !== "team"
     && row.assignee_member_id !== actor.access.memberId
     && !await isJobMember(db, actor.access.ownerUid, row.work_order_id, actor.access.memberId)) {
@@ -245,7 +248,8 @@ type Delivery = {id:string;event_id:string;recipient_email:string;subject:string
   last_error:string;attempts:number;first_attempt_at:string;last_attempt_at:string};
 
 async function jobReviewRows(db:D1Database,actor:JobLifecycleActor,workOrderId:string,permission:CreditexPermission="jobs") {
-  if(!permissions(actor).correction) return fail("JOB_REVIEW_PERMISSION","Authorised review access is required.",403);
+  const supportRead = actor.kind === "trade" && actor.access.supportWorkOrderId === workOrderId && permission === "jobs";
+  if(!permissions(actor).correction && !supportRead) return fail("JOB_REVIEW_PERMISSION","Authorised review access is required.",403);
   const intents=await db.prepare(`SELECT intent.id FROM trade_work_order_compliance_intents intent
     JOIN trade_work_orders work ON work.id=intent.work_order_id AND work.firebase_uid=intent.installer_uid
     WHERE work.id=? AND ${actor.kind==="trade"?"work.firebase_uid=?":"intent.compliance_organisation_id=?"} AND intent.status IN ('planned','case_linked') ORDER BY intent.id`)
@@ -282,7 +286,7 @@ export async function loadTradeJobReview(db:D1Database,actor:JobLifecycleActor,w
   const lodged=await everLodged(db,rows), allComplete=rows.every(r=>completed(r.completion_snapshot));
   const active=rows.every(r=>r.record_status==="active"&&!["cancelled","imported"].includes(r.stage));
   return {workOrderId,revision:rows[0].revision,sourceSha256:hash(reviewIdentity(rows)),
-    canReview:active&&allComplete&&!lodged,reviewed:reviews.every(r=>r.reviewed),
+    canReview:!(actor.kind==="trade"&&actor.access.supportWorkOrderId)&&active&&allComplete&&!lodged,reviewed:reviews.every(r=>r.reviewed),
     reason:rows.some(r=>r.stage==="imported")?"Imported history is not completed work in TLink.":!active?"Restore an active job before review.":lodged?"Submission has started or needs reconciliation. Resolve it before changing this review.":!allComplete?"The technician must complete all activity forms before review.":"",
     activities:rows.map((r,index)=>({intentId:r.intent_id,complete:completed(r.completion_snapshot),reviewed:reviews[index].reviewed,
       records:(JSON.parse(r.completion_snapshot) as {records:Array<{kind:string;id:string}>}).records})),

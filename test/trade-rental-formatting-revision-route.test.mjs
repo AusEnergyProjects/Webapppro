@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as templates from "../src/lib/trade-rental-assessment.mjs";
 import * as evidence from "../src/lib/trade-rental-evidence.mjs";
 import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
@@ -51,6 +52,7 @@ function loadRoute(f, options = {}) {
     canManageFieldEvidence: true, canViewFieldEvidence: true, canRunReports: true, ...options.permissions };
   const calls = { correction: [], coolingCorrection: [], email: 0, issuance: 0, reconcile: 0, lifetime: [] };
   const dependencies = {
+    "@/lib/admin-job-read-access": adminJobRead,
     "cloudflare:workers": { waitUntil: (promise) => { calls.lifetime.push(promise); options.onWaitUntil?.(promise); } },
     "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: async () => { calls.reconcile++; return { stage: "completed" }; } },
     "../../../../db": { getD1: () => f.d1 },

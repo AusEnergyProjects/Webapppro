@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { rejectAdminJobAccess } from "./admin-job-read-access";
 import { isJobMember } from "./trade-job-collaboration";
 import { requireFirebaseIdentity, type FirebaseIdentity } from "./firebase-server";
 import { requireTradeMyobSecondFactor } from "./trade-mfa-server";
@@ -15,6 +16,7 @@ import { isFieldSessionRequest, requireFieldSessionAccess } from "./trade-field-
 
 export type TeamScope = "own" | "team";
 export type TeamAccess = {
+  supportWorkOrderId?: string;
   identity?: FirebaseIdentity;
   ownerUid: string;
   actorUid: string;
@@ -120,6 +122,7 @@ export async function ensureOwnerTeamMember(ownerUid: string, email: string, dis
 }
 
 export async function requireInstallerTeamAccess(request: Request): Promise<TeamAccess> {
+  rejectAdminJobAccess(request);
   if (isFieldSessionRequest(request)) {
     const access = await requireFieldSessionAccess(request);
     const requested = requestedTradeBusiness(request);
@@ -262,6 +265,7 @@ export type AssignedTradeJob = { id: string; source_type: string; source_referen
 
 /** Shared with selected-form batch reads; scope and assignment remain canonical. */
 export function assignedJobStatement(access: TeamAccess, workOrderId: string) {
+  if (access.supportWorkOrderId && access.supportWorkOrderId !== workOrderId) throw new Error("JOB_NOT_ASSIGNED");
   return getD1().prepare(`SELECT work.id, work.source_type, work.source_reference,
       work.assignee_member_id, work.assignee_label, work.stage, work.service_category,
       work.revision, details.customer_source
@@ -274,6 +278,7 @@ export function assignedJobStatement(access: TeamAccess, workOrderId: string) {
 }
 
 export async function requireAssignedJob(access: TeamAccess, workOrderId: string, row: AssignedTradeJob | null) {
+  if (access.supportWorkOrderId && access.supportWorkOrderId !== workOrderId) throw new Error("JOB_NOT_ASSIGNED");
   if (!row) throw new Error("JOB_NOT_FOUND");
   if (!access.isOwner && access.jobScope === "own" && row.assignee_member_id !== access.memberId
     && !(await isJobMember(getD1(), access.ownerUid, workOrderId, access.memberId))) {

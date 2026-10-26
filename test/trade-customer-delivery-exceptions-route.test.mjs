@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 import * as policy from '../src/lib/trade-customer-delivery-exceptions.ts';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 
 const source = fs.readFileSync(new URL('../src/app/api/trade-customer-delivery-exceptions/route.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 function fixture(access, { origin = true, authError } = {}) {
   const calls = [], exports = {};
   const services = {
+    '@/lib/admin-job-read-access': adminJobRead,
     '../../../../db': { getD1: () => 'database' },
     '@/lib/admin-server': { sameOrigin: () => origin, adminJson: (body, status = 200) => Response.json(body, { status }) },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async request => { calls.push(['auth', request]); if (authError) throw authError; return access; } },

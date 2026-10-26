@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
 import * as payload from "../src/lib/admin-notification-delivery-payload.mjs";
+import * as adminJobReadError from '../src/lib/admin-job-read-error.ts';
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
@@ -49,6 +50,7 @@ function fixture(t) {
     } catch (error) { sql.exec("ROLLBACK"); throw error; }
   } };
   const realAdmin = load("../src/lib/admin-server.ts", {
+    './admin-job-read-error': adminJobReadError,
     "../../db": { getD1: () => db }, "@/lib/firebase-server": {},
     "@/lib/firebase-mfa": { FirebaseMfaRequiredError: class extends Error {} },
     "@/lib/myob-security-audit": {},

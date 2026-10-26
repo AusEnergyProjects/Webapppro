@@ -10,6 +10,7 @@ import type {User} from "firebase/auth";
 import {AdminCertificateJobActions} from "./AdminCertificateJobActions";
 import {CreditexJobAuditDesk} from "./CreditexJobAuditDesk";
 import {TRADE_JOB_LIFECYCLE_STATUSES,tradeJobLifecycleLabel} from "@/lib/trade-job-lifecycle";
+import { AdminJobSupportWorkspace } from "./AdminJobSupportWorkspace";
 
 const columns = [
   {key:"workNumber",label:"Job ID"}, {key:"createdAt",label:"Created"},
@@ -26,7 +27,7 @@ function dateTime(value: string) {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toLocaleString("en-AU",{dateStyle:"medium",timeStyle:"short"}) : value;
 }
-export function AdminJobDirectory({ api,user,onAuditDirtyChange,initialSearch = "" }: { initialSearch?:string; api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;user?:User;onAuditDirtyChange?:(dirty:boolean)=>void }) {
+export function AdminJobDirectory({ api,user,canAudit = true,onAuditDirtyChange,initialSearch = "" }: { initialSearch?:string; api: (path: string, init?: RequestInit) => Promise<Record<string, unknown>>;user?:User;canAudit?:boolean;onAuditDirtyChange?:(dirty:boolean)=>void }) {
   const [filters,setFilters] = useState(() => ({ ...emptyFilters, q: initialSearch }));
   const [sort,setSort] = useState("updated-desc");
   const [page,setPage] = useState(1);
@@ -43,12 +44,18 @@ export function AdminJobDirectory({ api,user,onAuditDirtyChange,initialSearch = 
   const [view,setView]=useState<"active"|"bin">("active");
   const detailRef = useRef<HTMLDialogElement>(null);
   const detailLauncherRef = useRef<HTMLElement | null>(null);
+  const returnJobRef = useRef("");
   const { menu, openMenu, closeMenu } = useJobRowMenu();
   useEffect(() => {
-    if (selectedJob) detailRef.current?.showModal();
-  }, [selectedJob]);
+    if (selectedJob && (!user || selectedJob.recordStatus === "archived")) detailRef.current?.showModal();
+    if (!selectedJob && returnJobRef.current) {
+      document.querySelector<HTMLElement>(`[data-admin-job-id="${CSS.escape(returnJobRef.current)}"]`)?.focus({ preventScroll: true });
+      returnJobRef.current = "";
+    }
+  }, [selectedJob, user]);
   function viewDetails(job: AdminJobRow, launcher: HTMLElement) { detailLauncherRef.current = launcher; setSelectedJob(job); }
   function closeDetails() {
+    returnJobRef.current = selectedJob?.id || "";
     detailRef.current?.close(); setSelectedJob(null);
     if (detailLauncherRef.current?.isConnected) detailLauncherRef.current.focus({ preventScroll: true });
   }
@@ -88,6 +95,10 @@ export function AdminJobDirectory({ api,user,onAuditDirtyChange,initialSearch = 
     return job[key]||"Not supplied";
   }
   if (auditIntent && user) return <CreditexJobAuditDesk key={auditIntent} user={user} intentId={auditIntent} actorMode="admin" onClose={()=>{setAuditIntent("");onAuditDirtyChange?.(false);}} onChanged={()=>setRevision(value=>value+1)} onDirtyChange={onAuditDirtyChange} />;
+  if (selectedJob && user && selectedJob.recordStatus !== "archived") return <>
+    <AdminJobSupportWorkspace user={user} job={selectedJob} onBack={closeDetails} />
+    {canAudit && <details className={styles.adminActions}><summary>Admin certificate actions</summary><AdminCertificateJobActions user={user} workOrderId={selectedJob.id} api={api} onAudit={setAuditIntent} onChanged={()=>{closeDetails();setRevision(value=>value+1);setActionMessage("Job updated. Deleted certificate jobs can be restored from the Bin.");}} /></details>}
+  </>;
   return <section className={`admin-job-directory ${styles.directory}`}>
     <header className="admin-register-heading"><div><span>Daily work</span><h1>Jobs</h1><p>Find a job, check its progress and see who is responsible.</p></div>
       <button type="button" onClick={()=>setRevision(current=>current+1)} disabled={loading}>Refresh</button></header>
@@ -114,14 +125,14 @@ export function AdminJobDirectory({ api,user,onAuditDirtyChange,initialSearch = 
     <div className="admin-register-toolbar"><p role="status">{loading?"Loading jobs...":error?"Jobs unavailable":pagination.total+' matching '+(pagination.total===1?'job':'jobs')}</p>
       <WorkspaceTableTools columns={[...columns]} visibleKeys={visibleColumns} onVisibleKeys={setVisibleColumns} noun="jobs" exportDisabled={!jobs.length||loading||Boolean(error)}
         onExport={()=>downloadWorkspaceCsv('tlink-admin-jobs-page-'+page+'.csv',selectedColumns,jobs.map(job=>Object.fromEntries(selectedColumns.map(column=>[column.key,cell(job,column.key)]))))} /></div>
-    <p className={styles.hint}>Click a job to open its details and audit certificate work. Creation dates use Sydney time.</p>
+    <p className={styles.hint}>Click a job ID to open its full support view. Creation dates use Sydney time.</p>
     {actionMessage && <p className={styles.hint} role="status">{actionMessage}</p>}
     {error?<div className="admin-register-empty" role="alert"><h2>Jobs could not be loaded</h2><p>{error}</p><button type="button" onClick={()=>setRevision(value=>value+1)}>Try again</button></div>
       :<div className={`admin-register-table ${styles.table}`} aria-busy={loading} tabIndex={0} role="region" aria-label="Scrollable jobs register"><table><caption className="sr-only">Jobs matching the selected filters</caption>
         <thead><tr><th scope="col" className={styles.actionsColumn}><span className="sr-only">Job options</span></th>{selectedColumns.map(column=><th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
         <tbody>{!loading&&jobs.map(job=><tr key={job.id} onContextMenu={event=>openMenu(event,`admin-job-menu-${job.id}`,job.workNumber,launcher=>actions(job,launcher))}>
           <td className={styles.actionsColumn}><JobActionsButton label={job.workNumber} menuId={`admin-job-menu-${job.id}`} expanded={menu?.id===`admin-job-menu-${job.id}`} onClick={event=>openMenu(event,`admin-job-menu-${job.id}`,job.workNumber,launcher=>actions(job,launcher))} /></td>
-          {selectedColumns.map(column=><td key={column.key} data-column={column.key}>{column.key==="workNumber"?<button type="button" className={styles.jobLink} onClick={event=>viewDetails(job,event.currentTarget)}>{job.workNumber}</button>:column.key==="stage"?<span className="admin-job-status">{cell(job,column.key)}</span>:cell(job,column.key)}{column.key==="customerFirstName"&&job.customerBusinessName&&<small className={styles.business}>Business: {job.customerBusinessName}</small>}</td>)}</tr>)}</tbody>
+          {selectedColumns.map(column=><td key={column.key} data-column={column.key}>{column.key==="workNumber"?<button type="button" className={styles.jobLink} data-admin-job-id={job.id} onClick={event=>viewDetails(job,event.currentTarget)}>{job.workNumber}</button>:column.key==="stage"?<span className="admin-job-status">{cell(job,column.key)}</span>:cell(job,column.key)}{column.key==="customerFirstName"&&job.customerBusinessName&&<small className={styles.business}>Business: {job.customerBusinessName}</small>}</td>)}</tr>)}</tbody>
       </table>{!loading&&!jobs.length&&<div className="admin-register-empty"><h2>No matching jobs</h2><p>Clear a filter or try a different search.</p></div>}
     </div>}
     <div className="admin-register-pagination"><span>Page {page}{!loading&&!error?' · '+jobs.length+' shown':''}</span><div>
@@ -131,7 +142,7 @@ export function AdminJobDirectory({ api,user,onAuditDirtyChange,initialSearch = 
     {selectedJob && <dialog ref={detailRef} className={styles.details} aria-labelledby="admin-job-detail-title" onCancel={event=>{event.preventDefault();closeDetails();}}>
       <header><div><span>Job details</span><h2 id="admin-job-detail-title">{selectedJob.workNumber}</h2></div><button type="button" onClick={closeDetails} autoFocus>Close</button></header>
       <dl>{columns.map(column=><div key={column.key}><dt>{column.label}</dt><dd>{cell(selectedJob,column.key)}</dd></div>)}{selectedJob.customerBusinessName&&<div><dt>Customer business</dt><dd>{selectedJob.customerBusinessName}</dd></div>}</dl>
-      {user&&<AdminCertificateJobActions user={user} workOrderId={selectedJob.id} api={api} onAudit={intentId=>{closeDetails();setAuditIntent(intentId);}} onChanged={()=>{closeDetails();setRevision(value=>value+1);setActionMessage("Job updated. Deleted certificate jobs can be restored from the Bin.");}}/>}
+      {user&&canAudit&&<AdminCertificateJobActions user={user} workOrderId={selectedJob.id} api={api} onAudit={intentId=>{closeDetails();setAuditIntent(intentId);}} onChanged={()=>{closeDetails();setRevision(value=>value+1);setActionMessage("Job updated. Deleted certificate jobs can be restored from the Bin.");}}/>}
     </dialog>}
   </section>;
 }

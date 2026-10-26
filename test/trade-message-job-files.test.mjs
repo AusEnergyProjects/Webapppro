@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as boundedBody from "../src/lib/bounded-request-body.mjs";
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -79,6 +80,21 @@ test("save retains an independent file copy, safe link and authoritative provena
     assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_work_order_events").get().n, 2);
     assert.equal(f.sqlite.prepare("SELECT revision FROM trade_work_orders WHERE id='job-a'").get().revision, 3);
     assert.equal(f.sqlite.prepare("SELECT COUNT(*) n FROM trade_team_sync_changes").get().n, 4);
+  } finally { f.close(); }
+});
+
+test("admin support can read only files already saved to its selected job without joining team chat", async () => {
+  const f = fixture();
+  try {
+    await server.saveMessageToJob(f.db, f.bucket, jane, input);
+    const support = { ...jane, actorUid: "support-admin", memberId: "", supportWorkOrderId: "job-a", canManageFieldEvidence: false };
+    const changes = f.sqlite.prepare("SELECT total_changes() count").get().count;
+    const files = await server.listSavedMessageJobFiles(f.db, support, "job-a");
+    assert.equal(files.length, 2);
+    await assert.rejects(server.listSavedMessageJobFiles(f.db, support, "job-b"), /do not have access/);
+    await assert.rejects(server.listSavedMessageJobFiles(f.db, support, "job-x"), /do not have access/);
+    await assert.rejects(server.saveMessageToJob(f.db, f.bucket, support, input), /does not allow saving/);
+    assert.equal(f.sqlite.prepare("SELECT total_changes() count").get().count, changes);
   } finally { f.close(); }
 });
 
@@ -190,6 +206,7 @@ function routeFixture({ denied = false } = {}) {
   const calls = [];
   class TradeAccessError extends Error {}
   const route = load("../src/app/api/trade-message-job-files/route.ts", {
+    "@/lib/admin-job-read-access": adminJobRead,
     "../../../../db": { getD1: () => ({}) },
     "@/lib/admin-server": { adminJson: (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } }),
       mfaErrorResponse: () => null, sameOrigin: request => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin },

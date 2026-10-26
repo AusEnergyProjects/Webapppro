@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 import ts from 'typescript';
 import * as sms from '../src/lib/trade-sms.ts';
 import * as reminders from '../src/lib/service-reminder-delivery.ts';
@@ -72,6 +73,7 @@ function fixture() {
     './trade-sms-wallet-server': {}, './trade-sms-environment': {}, './trade-integration-crypto': {},
   });
   const api = load('../src/app/api/trade-sms/route.ts', {
+    '@/lib/admin-job-read-access': adminJobRead,
     '@/lib/admin-server': { sameOrigin: input => !input.headers.get('origin') || input.headers.get('origin') === new URL(input.url).origin,
       mfaErrorResponse: () => null, adminJson: (body, status = 200) => Response.json(body, { status }) },
     '@/lib/trade-access-server': { TradeAccessError: class extends Error {} },

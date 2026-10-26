@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../../db";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { requireFirebaseIdentity } from "@/lib/firebase-server";
 import { HANDOVER_DOCUMENT_CATEGORIES } from "@/lib/trade-handover.mjs";
 import { requireAdminIdentity, writeAdminAudit } from "@/lib/admin-server";
@@ -29,6 +30,7 @@ type DocumentAccessRecord = {
   pack_status: string;
   handover_pack_id: string;
   owner_uid: string;
+  work_order_id: string;
 };
 
 function json(body: object, status = 200) {
@@ -67,16 +69,22 @@ async function editableInstallerPack(request: Request, workOrderId: string) {
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  let support: Awaited<ReturnType<typeof requireAdminJobReadAccess>>;
+  try { support = await requireAdminJobReadAccess(request); }
+  catch (error) { const response = adminJobReadError(error); if (response) return response; throw error; }
   const identity = await identityOrResponse(request);
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
   const documentId = new URL(request.url).searchParams.get("download") || "";
   if (!documentId) return json({ ok: false, error: "Choose a handover document." }, 400);
   const record = await getD1().prepare(`SELECT d.id, d.file_name, d.content_type, d.object_key,
-    d.customer_visible, p.status pack_status, p.id handover_pack_id, p.firebase_uid owner_uid
+    d.customer_visible, p.status pack_status, p.id handover_pack_id, p.firebase_uid owner_uid, p.work_order_id
     FROM trade_handover_documents d
     JOIN trade_handover_packs p ON p.id = d.handover_pack_id
     WHERE d.id = ?`).bind(documentId).first<DocumentAccessRecord>();
   if (!record) return json({ ok: false, error: "Handover document not found." }, 404);
+  if (support && (record.owner_uid !== support.ownerUid || record.work_order_id !== support.supportWorkOrderId)) {
+    return json({ ok: false, error: "This document does not belong to the selected job." }, 403);
+  }
   let ownerAccess = false;
   if (record.owner_uid === identity.uid) {
     try {
@@ -88,8 +96,8 @@ export async function GET(request: Request) {
   }
   const customerAccess = record.pack_status === "published" && Boolean(record.customer_visible)
     && await canCustomerAccessHandover(identity.uid, record.handover_pack_id);
-  let adminAccess = false;
-  if (!ownerAccess && !customerAccess) {
+  let adminAccess = Boolean(support);
+  if (!ownerAccess && !customerAccess && !adminAccess) {
     try {
       const admin = await requireAdminIdentity(request);
       adminAccess = true;
@@ -114,6 +122,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  try { rejectAdminJobMutation(request); }
+  catch (error) { const response = adminJobReadError(error); if (response) return response; throw error; }
   const identity = await identityOrResponse(request);
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
   let form: FormData;
@@ -182,6 +192,8 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return json({ ok: false, error: "Request origin was not accepted." }, 403);
+  try { rejectAdminJobMutation(request); }
+  catch (error) { const response = adminJobReadError(error); if (response) return response; throw error; }
   const identity = await identityOrResponse(request);
   if (!identity) return json({ ok: false, error: "Sign in to continue." }, 401);
   const url = new URL(request.url);

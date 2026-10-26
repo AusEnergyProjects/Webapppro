@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch, useTradeSupportReadOnly } from "./TradeBusinessProvider";
 
 import {
   type FormEvent,
@@ -762,6 +762,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
   onChanged?: () => Promise<void>;
 }) {
   const fetch = useTradeBusinessFetch();
+  const supportReadOnly = useTradeSupportReadOnly();
   const [data, setData] = useState<AssessmentResult>({ modules: [], items: [], findings: [], evidence: [], completion: {} });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -1085,6 +1086,12 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
 
   async function saveSectionAndContinue() {
     if (!activeSection) return;
+    if (!canEdit) {
+      const currentIndex = workflow.groups.findIndex(section => section.key === activeSection.key);
+      setActiveSectionKey(workflow.groups[currentIndex + 1]?.key || "");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setBusy("section-continue");
     setStatus(dirtyItems.size > 0 ? "Saving every changed answer in this section..." : "Confirming saved section progress...");
     let savedCount = 0;
@@ -1235,8 +1242,8 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
         })}
         <div className={styles.sectionActions}>
           <button type="button" onClick={returnToSectionOverview}>Back to all sections</button>
-          <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void saveSectionAndContinue()}>{busy === "section-continue" ? "Saving section..." : workflow.groups.findIndex((section) => section.key === activeSection.key) < workflow.groups.length - 1 ? "Save section and continue" : "Save section and return"}</button>
-          <small>This saves every changed answer on the screen before moving forward. The smaller Save button remains available when you want to save one answer immediately.</small>
+          <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void saveSectionAndContinue()}>{!canEdit ? workflow.groups.findIndex(section => section.key === activeSection.key) < workflow.groups.length - 1 ? "Next section" : "Return to all sections" : busy === "section-continue" ? "Saving section..." : workflow.groups.findIndex((section) => section.key === activeSection.key) < workflow.groups.length - 1 ? "Save section and continue" : "Save section and return"}</button>
+          {canEdit && <small>This saves every changed answer on the screen before moving forward. The smaller Save button remains available when you want to save one answer immediately.</small>}
         </div>
       </main>}
     </div>
@@ -1256,12 +1263,13 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
       <header><div><span>Final assessor issue</span><h4>{latestReport ? latestReport.reportNumber : "Issue the complete rental report"}</h4></div><strong>{latestReport ? "Issued" : allModulesComplete ? "Ready" : "Waiting"}</strong></header>
       {data.deliveryReview?.status === "held" && <p role="status">Email paused for owner review. The completed PDF can be saved and opened before it is emailed.</p>}
       {data.formattingRevisionPending && <p role="status">The corrected PDF is being prepared. Refresh shortly to open it. Email remains paused.</p>}
-      {data.permissions?.canManageDeliveryReview && <div className={styles.reportActions}>
+      {supportReadOnly && <><p>{data.reportDelivery?.message || "No report email delivery is recorded."}</p>{data.deliveryRecipient && <p>Customer email: {data.deliveryRecipient.email}</p>}</>}
+      {!readOnly && data.permissions?.canManageDeliveryReview && <div className={styles.reportActions}>
         {data.deliveryReview?.status === "held"
           ? <button type="button" disabled={Boolean(busy) || !latestReport || data.formattingRevisionPending} onClick={() => void changeDeliveryReview(false)}>{busy === "delivery-review" ? "Saving..." : "Approve report email"}</button>
           : <button type="button" disabled={Boolean(busy)} onClick={() => void changeDeliveryReview(true)}>{busy === "delivery-review" ? "Saving..." : "Pause email for my review"}</button>}
       </div>}
-      {data.permissions?.canManageDeliveryReview && latestReport && <div className={styles.reportActions}>
+      {!readOnly && data.permissions?.canManageDeliveryReview && latestReport && <div className={styles.reportActions}>
         {data.reportDelivery?.reportId === latestReport.id && <p role="status">{data.reportDelivery.message}{data.reportDelivery.at && ` ${dateLabel(data.reportDelivery.at)}`}</p>}
         {data.deliveryRecipient ? <small>Customer email: {data.deliveryRecipient.email}</small> : <small>Add the customer&apos;s email to the job before sending this report.</small>}
         <button type="button" className={styles.primaryButton} disabled={Boolean(busy) || deliveryCheckRequired || !data.deliveryRecipient
@@ -1270,7 +1278,7 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
           onClick={() => void emailReport()}>{busy === "email-report" ? "Sending report..." : data.reportDelivery?.reportId === latestReport.id && data.reportDelivery.status === "accepted" ? "Email accepted for delivery" : "Email report to customer"}</button>
         <button type="button" disabled={Boolean(busy)} onClick={() => void load().catch(() => setStatus("Email status could not be refreshed. Try again when connected."))}>Refresh email status</button>
       </div>}
-      {data.permissions?.canCorrectReportFormatting && latestReport && data.deliveryReview?.status === "held" && <div className={styles.reportActions}>
+      {!readOnly && data.permissions?.canCorrectReportFormatting && latestReport && data.deliveryReview?.status === "held" && <div className={styles.reportActions}>
         <button type="button" disabled={Boolean(busy)} onClick={() => void correctReportFormatting()}>{busy === "correct-report-formatting" ? "Preparing corrected PDF..." : "Correct report formatting"}</button>
         <small>Creates a new PDF revision from the saved assessment. The original report and assessor&apos;s answers are retained.</small>
         {(data.items || []).some((item) => item.checkKey === "cooling_2027_readiness" && item.response.accessStatus === "Not accessed") && <>
@@ -1278,22 +1286,22 @@ export function TradeRentalInspectionPanel({ user, workOrderId, readOnly = false
           <small>Changes the cooling access answer from Not accessed to Clear access in a new revision. The original report is retained and the owner correction is recorded.</small>
         </>}
       </div>}
-      {latestReport?.link?.status === "active" && latestReport.link.shareUrl ? <>
+      {!supportReadOnly && latestReport?.link?.status === "active" && latestReport.link.shareUrl ? <>
         <p>The immutable PDF and quick-view report contain all issued details and evidence, except internal notes. The no-account link expires {dateLabel(latestReport.link.expiresAt)}.</p>
         <div className={styles.shareRow}><input aria-label="Secure rental report link" readOnly value={latestReport.link.shareUrl} /><button type="button" onClick={() => void copyReportLink()}>Copy link</button><a href={latestReport.link.shareUrl} target="_blank" rel="noreferrer">Open report</a></div>
-        <div className={styles.reportActions}>{latestReport.internalPdfUrl && <button type="button" disabled={Boolean(busy)} onClick={() => void downloadIssuedReport()}>{busy === "download-report" ? "Downloading..." : "Download issued PDF"}</button>}<small>{latestReport.link.viewCount} public views | {latestReport.link.downloadCount} public PDF downloads</small>{data.permissions?.canRevokeLink && <button type="button" disabled={Boolean(busy)} onClick={() => void revokeReportLink()}>{busy === "revoke-report-link" ? "Stopping access..." : "Stop sharing"}</button>}</div>
+        <div className={styles.reportActions}>{latestReport.internalPdfUrl && <button type="button" disabled={Boolean(busy)} onClick={() => void downloadIssuedReport()}>{busy === "download-report" ? "Downloading..." : "Download issued PDF"}</button>}<small>{latestReport.link.viewCount} public views | {latestReport.link.downloadCount} public PDF downloads</small>{!readOnly && data.permissions?.canRevokeLink && <button type="button" disabled={Boolean(busy)} onClick={() => void revokeReportLink()}>{busy === "revoke-report-link" ? "Stopping access..." : "Stop sharing"}</button>}</div>
       </> : <>
-        <p>{latestReport
+        <p>{supportReadOnly && latestReport ? "The saved report is available through this authenticated support view." : latestReport
           ? latestReport.link?.status === "active"
             ? "The issued report is available, but only the owner or assigned assessor can reveal its secure sharing link."
             : `The issued report is retained, but its public link is ${latestReport.link?.status || "not active"}.`
           : allModulesComplete
             ? "The assigned assessor can now create the immutable PDF and the no-account 60-day quick-view link."
             : "Complete and lock every selected module before issuing. The server will recheck every answer, evidence requirement, finding, trade scope and credential declaration."}</p>
-        {!data.permissions?.isAssignedAssessor && <small>Only the assigned assessor can issue the final report.</small>}
-        {!latestReport && data.permissions?.canIssue && <button type="button" className={styles.primaryButton} disabled={Boolean(busy) || !allModulesComplete} onClick={() => void issueReport()}>{busy === "issue-report" ? "Creating and verifying report..." : "Issue report and create 60-day link"}</button>}
+        {!supportReadOnly && !data.permissions?.isAssignedAssessor && <small>Only the assigned assessor can issue the final report.</small>}
+        {!readOnly && !latestReport && data.permissions?.canIssue && <button type="button" className={styles.primaryButton} disabled={Boolean(busy) || !allModulesComplete} onClick={() => void issueReport()}>{busy === "issue-report" ? "Creating and verifying report..." : "Issue report and create 60-day link"}</button>}
         {latestReport?.internalPdfUrl && <button type="button" className={styles.secondaryButton} disabled={Boolean(busy)} onClick={() => void downloadIssuedReport()}>{busy === "download-report" ? "Downloading..." : "Download issued PDF"}</button>}
-        {latestReport && data.permissions?.canRevokeLink && latestReport.link?.status !== "active" && <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void renewReportLink()}>{busy === "renew-report-link" ? "Creating link..." : "Create a new 60-day link"}</button>}
+        {!readOnly && latestReport && data.permissions?.canRevokeLink && latestReport.link?.status !== "active" && <button type="button" className={styles.primaryButton} disabled={Boolean(busy)} onClick={() => void renewReportLink()}>{busy === "renew-report-link" ? "Creating link..." : "Create a new 60-day link"}</button>}
       </>}
       <small>Evidence package: {bytesLabel(data.evidenceBudget?.usedBytes || 0)} of {bytesLabel(data.evidenceBudget?.maxBytes || 32 * 1024 * 1024)}. Large browser photos are reduced before upload so the issued PDF remains reliable.</small>
     </section></>}

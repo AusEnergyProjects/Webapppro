@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import ts from "typescript";
 import * as templates from "../src/lib/trade-rental-assessment.mjs";
 import * as credentials from "../src/lib/trade-rental-credentials.ts";
@@ -151,6 +152,7 @@ function loadRoute(fixture, permissions = {}, reportApi = {}, runtime = {}) {
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleRecord = { exports: {} };
   const dependencies = {
+    "@/lib/admin-job-read-access": adminJobRead,
     "cloudflare:workers": { waitUntil: runtime.waitUntil || ((promise) => { void promise.catch(() => {}); }) },
     "@/lib/trade-form-job-progress": { reconcileTradeFormJobProgress: runtime.reconcileTradeFormJobProgress || (async () => ({changed:false,stage:"in_progress",blockers:[]})) },
     "../../../../db": { getD1: () => fixture.d1 },

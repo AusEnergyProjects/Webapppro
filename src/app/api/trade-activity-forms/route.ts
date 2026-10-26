@@ -3,6 +3,7 @@ import { CreditexComplianceError, creditexMutationConflict } from "@/lib/credite
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, requireAdminIdentity, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireAdminJobReadAccess, rejectAdminJobAccess, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { requireComplianceAccess } from "@/lib/compliance-access-server";
 import { canEditCreditexFieldMasters } from "@/lib/creditex-field-master-access";
 import { resolveActiveCreditexOfficialSourceOrganisation } from "@/lib/creditex-official-source-custody-server";
@@ -54,6 +55,7 @@ const errorMessages: Record<string, [number, string]> = {
   ACTIVITY_REPORT_NOT_READY: [409, "This completed report is not ready yet."],
   ACTIVITY_REPORT_UNAVAILABLE: [404, "This completed report could not be found."],
   ACTIVITY_REPORT_INTEGRITY_FAILED: [409, "This completed report failed its integrity check."],
+  ACTIVITY_REPORT_STORAGE_MISSING: [409, "The saved report file is unavailable. Read-only support cannot regenerate it."],
   ACTIVITY_CORRECTION_SOURCE_CHANGED: [409, "This correction relates to a previous form revision. Refresh the job to open the current correction draft."],
   ACTIVITY_STORAGE_UNAVAILABLE: [503, "The secure file store is temporarily unavailable."],
   INVALID_ACTIVITY_FILE: [400, "Choose a JPEG, PNG or PDF file up to 8 MB. Photo questions require an image."],
@@ -374,6 +376,9 @@ const escape = (value: unknown) => String(value).replaceAll("&", "&amp;").replac
 export async function GET(request: Request) {
   try {
     const query = new URL(request.url).searchParams; const token = query.get("reportToken") || "";
+    const support = await requireAdminJobReadAccess(request);
+    if (support && (token || query.has("actorMode") || query.has("draftId")
+      || !["", "pdf", "evidence"].includes(query.get("view") || ""))) rejectAdminJobAccess(request);
     // A share token is the read-only bearer credential for this one immutable
     // report. Validate it before the browser-origin gate so a customer can open
     // the link from email or another site without needing a TLink session.
@@ -404,7 +409,7 @@ export async function GET(request: Request) {
         .bind(actor.organisationId, templateId, builtIn.variantId).first<{ form_json: string; version: number }>();
       return adminJson({ ok: true, form: applyDefaultActivityFormPolicy(saved ? JSON.parse(saved.form_json) : builtIn, builtIn), expectedVersion: saved?.version || 0 });
     }
-    const access = await requireInstallerTeamAccess(request); const id = query.get("recordId") || ""; const view = query.get("view") || "";
+    const access = support ?? await requireInstallerTeamAccess(request); const id = query.get("recordId") || ""; const view = query.get("view") || "";
     if (id || view === "official_products") {
       if (!id) throw new Error("INVALID_ACTIVITY_REQUEST");
       const record = await loadActivityRecord(access, id);
@@ -424,7 +429,7 @@ export async function GET(request: Request) {
           models: mergeApprovedProductOptions(results, "models"),
         });
       }
-      if (view === "pdf") return bytesResponse(await readActivityPdf(record));
+      if (view === "pdf") return bytesResponse(await readActivityPdf(record, { readOnly: Boolean(access.supportWorkOrderId) }));
       if (view === "evidence") return bytesResponse(await readActivityEvidence(record, query.get("evidenceId") || ""));
       return adminJson({ ok: true, record: activityPresentation(record, record.signerDefaults.technician ? undefined : await activitySigningProfileSetup(access, record)) });
     }
@@ -445,6 +450,7 @@ async function boundedFormData(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     if (request.headers.get("content-type")?.includes("multipart/form-data")) {
       const access = await requireInstallerTeamAccess(request); const data = await boundedFormData(request); const file = data.get("file");
       if (!(file instanceof File)) throw new Error("INVALID_ACTIVITY_FILE");

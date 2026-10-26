@@ -18,6 +18,7 @@ function identifier(value: unknown): string {
 }
 
 function jobGuard(actor: TeamAccess, write: boolean) {
+  if (actor.supportWorkOrderId) return { sql: "work.id = ? AND work.firebase_uid = ? AND work.partner_type = 'installer' AND work.work_type = 'job' AND work.record_status = 'active' AND ? = 0", values: [actor.supportWorkOrderId, actor.ownerUid, write ? 1 : 0] };
   const active = messageActorGuard(actor);
   // Match assignedJob's owner/business/assignment scope and check current permissions at every write.
   return { sql: `${active.sql} AND work.firebase_uid = ? AND work.partner_type = 'installer' AND work.work_type = 'job'

@@ -111,9 +111,11 @@ function SafetyChecks({ user, workOrderId, readOnly, canManageDelivery, refreshK
   }
 
   return <section className={styles.panel} aria-label="Official safety checks">
-    <header className={styles.heading}><div><span className={styles.eyebrow}>OFFICIAL FORMS · YOUR BUSINESS</span><h4>Electrical and gas safety checks</h4><p>Fill the government form, sign it and send the PDF with its photo evidence.</p></div></header>
+    <header className={styles.heading}><div><span className={styles.eyebrow}>OFFICIAL FORMS · YOUR BUSINESS</span><h4>Electrical and gas safety checks</h4><p>{readOnly ? "Saved safety checks, signatures and evidence for this job." : "Fill the government form, sign it and send the PDF with its photo evidence."}</p></div></header>
+    {readOnly && !records.length && !busy && <p>No safety checks have been added to this job.</p>}
     <div className={styles.choices}>{(['electrical', 'gas'] as const).map(kind => {
       const attached = records.find(item => item.kind === kind);
+      if (readOnly && !attached) return null;
       return <button key={kind} type="button" disabled={Boolean(busy) || !attached && (!canManage || readOnly)} onClick={() => void run(kind, () => attached ? open(attached) : start(kind))}>
         <strong>{kind === 'electrical' ? 'Electrical safety check' : 'Gas safety check'}</strong><span>{attached ? `${attached.status === 'complete' ? 'Completed PDF' : 'Continue form'} · ${attached.recordNumber}` : 'Add official form to this job'}</span>
       </button>;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
-import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusiness, useTradeBusinessFetch, useTradeSupportReadOnly } from "./TradeBusinessProvider";
 import { canReviewCustomerDeliveries, type CustomerDeliveryExceptions, type CustomerDeliveryPermissions, type CustomerDeliveryTab } from "@/lib/trade-customer-delivery-exceptions";
 import { TradeTasksWorkspace } from "./TradeTasksWorkspace";
 import styles from "./TradeCustomerDeliveryExceptions.module.css";
@@ -17,9 +17,10 @@ export function TradeCustomerDeliveryExceptions({ user, workOrderId = "", permis
   onOpenJob: (id: string, tab: CustomerDeliveryTab) => void;
 }) {
   const fetch = useTradeBusinessFetch();
+  const readOnly = useTradeSupportReadOnly();
   const business = useTradeBusiness();
   const scopeKey = JSON.stringify([user.uid, business?.ownerUid, business?.memberId, workOrderId, permissions]);
-  const allowed = canReviewCustomerDeliveries(permissions);
+  const allowed = readOnly || canReviewCustomerDeliveries(permissions);
   const [paging, setPaging] = useState({ key: "", page: 1 });
   const page = paging.key === scopeKey ? paging.page : 1;
   const setPage = (value: number) => setPaging({ key: scopeKey, page: value });
@@ -69,10 +70,10 @@ export function TradeCustomerDeliveryExceptions({ user, workOrderId = "", permis
       {response.data.items?.length ? <ul>{response.data.items.map(item => <li key={item.id}>
         <div><strong>{item.label}</strong><span>{item.workNumber} · {item.jobTitle}</span><p>{item.message}</p></div>
         <div className={styles.actions}><button type="button" onClick={() => onOpenJob(item.workOrderId, item.tab)}>{reviewLabel(item.tab)}</button>
-          {assigned.includes(`${scopeKey}:${item.id}`) ? <span role="status">Follow-up task added</span> : <button type="button" className={styles.secondary} aria-expanded={selected?.id === item.id} onClick={() => setHandover(selected?.id === item.id ? { key: "", id: "" } : { key: requestKey, id: item.id })}>Assign follow-up</button>}
+          {!readOnly && (assigned.includes(`${scopeKey}:${item.id}`) ? <span role="status">Follow-up task added</span> : <button type="button" className={styles.secondary} aria-expanded={selected?.id === item.id} onClick={() => setHandover(selected?.id === item.id ? { key: "", id: "" } : { key: requestKey, id: item.id })}>Assign follow-up</button>)}
         </div>
       </li>)}</ul> : <p className={styles.empty}>No failed or uncertain emails in the delivery records available to you.</p>}
-      {selected && <div className={styles.handover}>
+      {!readOnly && selected && <div className={styles.handover}>
         <p>Assign someone to check {selected.workNumber}. Their existing job access still applies. The delivery issue stays here until its source record is resolved.</p>
         <TradeTasksWorkspace user={user} compact draft={{ key: `${scopeKey}:${selected.id}`, title: `Review ${selected.label.toLowerCase()} for ${selected.workNumber}`.slice(0, 180),
           detail: `${selected.workNumber}: ${selected.label}. ${selected.message}\nOpen the job and review its ${selected.tab === "schedule" ? "booking" : selected.tab} delivery before sending another copy. Complete this task after checking the source record.\nJob: /direct-trade/dashboard?${new URLSearchParams({ workspace: "work", jobId: selected.workOrderId, jobTab: selected.tab, business: business?.ownerUid || user.uid })}` }}

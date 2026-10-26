@@ -1,4 +1,5 @@
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { mfaErrorResponse, adminJson, cleanAdminText, parseJsonList, sameOrigin } from "@/lib/admin-server";
 import { ENERGY_SERVICE_LABELS } from "@/lib/energy-service-catalogue.mjs";
 import {
@@ -80,7 +81,7 @@ function stagedQuoteError(code: string, stage: string) {
 }
 
 async function installerAccess(request: Request, permission: "view" | "manage" | "send") {
-  const access = await requireInstallerTeamAccess(request);
+  const access = permission === "view" ? await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request) : await requireInstallerTeamAccess(request);
   if (permission === "view" && !canViewQuotes(access)) throw new Error("QUOTE_VIEW_REQUIRED");
   if (permission === "manage" && !canManageQuotes(access)) throw new Error("QUOTE_MANAGEMENT_REQUIRED");
   if (permission === "send" && !canSendQuotes(access)) throw new Error("QUOTE_SEND_REQUIRED");
@@ -151,6 +152,7 @@ async function revokeOwnedQuoteLink(
 }
 
 function errorResponse(error: unknown) {
+  const supportError = adminJobReadError(error); if (supportError) return supportError;
   if(error instanceof Error && error.message.includes('CUSTOMER_HUB_CLOSED'))return adminJson({ok:false,error:'The customer is no longer accepting quotes or questions. Existing issued quotes remain available.'},409);
   if (error instanceof Error && /^(PRODUCT_DOCUMENT_|QUOTE_PRODUCT_DOCUMENTS_)/.test(error.message)) return adminJson({ ok: false, error: error.message.includes("LIMIT") ? "The quote's product PDFs are too large. Use smaller documents or fewer pages in the price book." : "A product PDF could not be verified. Check the product documents in your price book, then save the draft again." }, 400);
   const mfa = mfaErrorResponse(error);
@@ -346,7 +348,7 @@ function itemPayload(item: Row, includeInternal: boolean) {
   return payload;
 }
 
-async function quotePayload(ownerUid: string, workOrderId: string, includeInternal = true, origin = "") {
+async function quotePayload(ownerUid: string, workOrderId: string, includeInternal = true, origin = "", supportReadOnly = false) {
   const db = getD1();
   const quote = await db.prepare(`SELECT * FROM trade_crm_quotes WHERE work_order_id = ? AND firebase_uid = ?`).bind(workOrderId, ownerUid).first<Row>();
   if (!quote) return null;
@@ -361,7 +363,7 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
   let link = currentVersion ? await db.prepare("SELECT * FROM trade_crm_quote_links WHERE quote_version_id = ? AND firebase_uid = ?").bind(currentVersion.id, ownerUid).first<Row>() : null;
   if (link && link.status === "active" && String(link.expires_at) <= new Date().toISOString()) {
     const expiredAt = new Date().toISOString();
-    await db.batch([
+    if (!supportReadOnly) await db.batch([
       db.prepare("UPDATE trade_crm_quote_links SET status = 'expired', token_hash = '', encrypted_token = '', updated_at = ? WHERE id = ? AND firebase_uid = ? AND status = 'active'")
         .bind(expiredAt, link.id, ownerUid),
       db.prepare(`INSERT OR IGNORE INTO trade_crm_quote_events (id, quote_link_id, quote_id, quote_version_id, work_order_id, firebase_uid, event_type, actor_type, summary, evidence_key, occurred_at)
@@ -376,7 +378,7 @@ async function quotePayload(ownerUid: string, workOrderId: string, includeIntern
     db.prepare("SELECT id, channel, provider, status, recipient_preview, attempts, provider_status, last_error, sent_at, delivered_at, next_attempt_at, failure_code, retry_of_delivery_id, delivery_generation, updated_at, created_at FROM trade_crm_quote_deliveries WHERE quote_version_id = ? AND firebase_uid = ? ORDER BY delivery_generation DESC, created_at DESC, id DESC").bind(currentVersion.id, ownerUid).all<Row>(),
   ]) : [{ results: [] as Row[] }, { results: [] as Row[] }, { results: [] as Row[] }];
   let shareUrl = ""; let pdfUrl = "";
-  if (link && link.status === "active" && link.token_hash && origin) {
+  if (!supportReadOnly && link && link.status === "active" && link.token_hash && origin) {
     try {
       const secret = await recoverQuoteLinkSecret(String(link.encrypted_token), String(link.id), Number(link.token_issue), String(link.token_hash));
       const token = encodeURIComponent(`${String(link.id)}.${secret}`);
@@ -477,7 +479,7 @@ function quoteAccessPayload(access: TeamAccess) {
     canSendQuotes: access.isOwner || access.canSendQuotes,
     canManageCustomers: access.isOwner || access.canManageCustomers,
     canViewPriceBook: access.isOwner || access.canViewPriceBook,
-    canViewInternal: access.isOwner || access.canViewPriceBook,
+    canViewInternal: Boolean(access.supportWorkOrderId) || access.isOwner || access.canViewPriceBook,
     canApplyDiscounts: access.isOwner || access.canApplyDiscounts,
   };
 }
@@ -501,7 +503,7 @@ export async function GET(request: Request) {
         : parseTradeQuoteDocumentSnapshot(version.document_snapshot_json);
       if (!snapshot || snapshot.work.id !== workOrderId || snapshot.quoteVersionId !== versionId) throw new Error("QUOTE_DOCUMENT_INVALID");
       const bytes = version.status === "draft" ? await renderQuotePdfOrThrow(snapshot, url.origin, "draft_pdf_preview")
-        : (await issuedTradeQuotePdf({ ownerUid: access.ownerUid, quoteVersionId: versionId, snapshot, origin: url.origin })).bytes;
+        : (await issuedTradeQuotePdf({ ownerUid: access.ownerUid, quoteVersionId: versionId, snapshot, origin: url.origin, allowBackfill: !access.supportWorkOrderId })).bytes;
       return new Response(new Uint8Array(bytes).buffer, { headers: {
         "Content-Type": "application/pdf", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
         "Content-Disposition": `inline; filename="${await quotePdfFilename(snapshot)}"`, "Cross-Origin-Resource-Policy": "same-origin",
@@ -538,7 +540,7 @@ export async function GET(request: Request) {
       } });
     }
     const serviceCategories = parseJsonList(job.service_categories);
-    const canViewInternal = access.isOwner || access.canViewPriceBook;
+    const canViewInternal = Boolean(access.supportWorkOrderId) || access.isOwner || access.canViewPriceBook;
     return adminJson({ ok: true, access: quoteAccessPayload(access), job: {
       customerId: String(job.crm_customer_id), workNumber: job.work_number, title: job.title,
       customerNumber: job.customer_number,
@@ -555,15 +557,16 @@ export async function GET(request: Request) {
         quoteEmailIntro: String(business?.quote_email_intro || "Thank you for the opportunity to quote for your project. Review the scope, choices and total below."),
         quoteDefaultTerms: String(business?.quote_default_terms || "") },
       authorisedEmails: emails,
-      priceBookItems: canViewInternal ? await priceBookItemsForQuote(access.ownerUid) : [],
-      jobPackets: canViewInternal ? await jobPacketsForQuote(access.ownerUid) : [],
-      quote: await quotePayload(access.ownerUid, workOrderId, canViewInternal, new URL(request.url).origin) });
+      priceBookItems: canViewInternal && !access.supportWorkOrderId ? await priceBookItemsForQuote(access.ownerUid) : [],
+      jobPackets: canViewInternal && !access.supportWorkOrderId ? await jobPacketsForQuote(access.ownerUid) : [],
+      quote: await quotePayload(access.ownerUid, workOrderId, canViewInternal, new URL(request.url).origin, Boolean(access.supportWorkOrderId)) });
   } catch (error) { return errorResponse(error); }
 }
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const access = await requireInstallerTeamAccess(request); const body = await request.json() as Row;
     const action = cleanAdminText(body.action, 40); const workOrderId = cleanAdminText(body.workOrderId, 180);
     if (["issue_quote", "send_quote", "retry_quote_delivery"].includes(action)) {

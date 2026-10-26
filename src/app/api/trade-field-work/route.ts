@@ -2,6 +2,7 @@ import { fieldCompletionGuard, photoFinishState, UNSATISFIED_COMPLIANCE_REQUIREM
 import { CreditexComplianceError, creditexMutationConflict, creditexWriteGuard } from "@/lib/creditex-onboarding-server";
 import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { assertCertificateJobEligibility, certificateJobEligibilityGuards } from "@/lib/trade-certificate-eligibility";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
@@ -150,6 +151,7 @@ type FieldVisit = { id: string; revision: number; assignee_member_id: string; as
   status: string; starts_at: string; ends_at: string; notes: string };
 const activeVisit = (visit: FieldVisit) => ACTIVE_VISIT_STATUSES.some(status => status === visit.status);
 function controlsVisit(access: TeamAccess, visit: FieldVisit, leadMemberId: string) {
+  if (access.supportWorkOrderId) return false;
   return access.isOwner || (access.canManageJobs && access.jobScope === "team")
     || visit.assignee_member_id === access.memberId || (!visit.assignee_member_id && leadMemberId === access.memberId);
 }
@@ -392,7 +394,7 @@ async function advanceFieldJob(access: TeamAccess, job: Record<string, unknown>,
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     const url = new URL(request.url);
     const downloadId = cleanAdminText(url.searchParams.get("download"), 180);

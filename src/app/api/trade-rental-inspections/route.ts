@@ -1,4 +1,5 @@
 import { waitUntil } from "cloudflare:workers";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
@@ -254,7 +255,7 @@ function inspectionError(error: unknown) {
 
 async function contextFor(access: TeamAccess, workOrderId: string): Promise<InspectionContext> {
   if (!workOrderId) throw new Error("RENTAL_INSPECTION_NOT_FOUND");
-  await ensureTradeRentalSchemaGuards(getD1());
+  if (!access.supportWorkOrderId) await ensureTradeRentalSchemaGuards(getD1());
   const job = await assignedJob(access, workOrderId);
   const inspection = await getD1().prepare(`SELECT * FROM trade_rental_inspections
     WHERE work_order_id = ? AND firebase_uid = ? LIMIT 1`)
@@ -409,6 +410,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
       origin,
       includeSecret: context.access.canRunReports
         && (context.access.isOwner || context.access.memberId === String(context.inspection.assessor_member_id || "")),
+      includeInternalPdf: Boolean(context.access.supportWorkOrderId),
     }),
   ]);
   const modules = await Promise.all(moduleRows.results.map(async (row) => {
@@ -466,9 +468,9 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
     completion,
     reports,
     formattingRevisionPending: reports.some((report) => report.status === "staged"),
-    deliveryRecipient: context.access.canRunReports ? await rentalReportDeliveryRecipient(context.access.ownerUid, context.workOrderId) : null,
-    reportDelivery: context.access.canRunReports ? await rentalReportDeliveryState(context.access.ownerUid, inspectionId) : null,
-    deliveryReview: context.access.canRunReports ? await rentalReportDeliveryReview(context.access.ownerUid, inspectionId) : null,
+    deliveryRecipient: context.access.canRunReports || context.access.supportWorkOrderId ? await rentalReportDeliveryRecipient(context.access.ownerUid, context.workOrderId) : null,
+    reportDelivery: context.access.canRunReports || context.access.supportWorkOrderId ? await rentalReportDeliveryState(context.access.ownerUid, inspectionId) : null,
+    deliveryReview: context.access.canRunReports || context.access.supportWorkOrderId ? await rentalReportDeliveryReview(context.access.ownerUid, inspectionId) : null,
     permissions: {
       canCorrectReportFormatting: context.access.isOwner && context.access.actorUid === context.access.ownerUid
         && context.access.canRunReports && context.access.canManageFieldEvidence
@@ -484,7 +486,7 @@ async function assessmentPayload(context: InspectionContext, origin = "") {
           context.access.memberId === String(context.inspection.assessor_member_id || "")
           && context.access.memberId === String(context.job.assignee_member_id || "")
         )),
-      isAssignedAssessor: context.access.memberId === String(context.inspection.assessor_member_id || "")
+      isAssignedAssessor: !context.access.supportWorkOrderId && context.access.memberId === String(context.inspection.assessor_member_id || "")
         && context.access.memberId === String(context.job.assignee_member_id || ""),
     },
   };
@@ -1133,11 +1135,11 @@ async function reopenModule(context: InspectionContext, body: Row) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     if (!access.canViewFieldEvidence) throw new Error("FIELD_EVIDENCE_VIEW_REQUIRED");
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     let context = await contextFor(access, workOrderId);
-    if (String(context.inspection.status) === "issuing" && access.canRunReports
+    if (!access.supportWorkOrderId && String(context.inspection.status) === "issuing" && access.canRunReports
       && access.memberId === String(context.inspection.assessor_member_id || "")
       && access.memberId === String(context.job.assignee_member_id || "")) {
       const recovery = recoverRentalAssessmentReport({ access, workOrderId });

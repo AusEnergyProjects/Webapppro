@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
 import * as mfa from "../src/lib/firebase-mfa.ts";
 import * as audit from "../src/lib/myob-security-audit.ts";
+import * as adminJobReadError from '../src/lib/admin-job-read-error.ts';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const compile = (path) => ts.transpileModule(read(path), {
@@ -56,6 +57,7 @@ function fixture(t, options = {}) {
     integrationCallbackUri: (request, provider) => `${new URL(request.url).origin}/api/trade-integrations/callback/${provider}`,
   };
   const dependencies = (id) => {
+    if (id === './admin-job-read-error') return adminJobReadError;
     if (id.endsWith("/db")) return { getD1: () => db };
     if (id === "@/lib/firebase-server") return { requireFirebaseIdentity: async () => identity };
     if (id === "@/lib/firebase-mfa") return mfa;

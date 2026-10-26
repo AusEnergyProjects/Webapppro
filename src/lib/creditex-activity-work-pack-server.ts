@@ -2088,6 +2088,7 @@ export type CreditexWorkPackTradeScope = Readonly<{
   actorUid: string;
   actorMemberId: string;
   scope: "own" | "team";
+  supportWorkOrderId?: string;
 }>;
 
 export type CreditexActivityWorkPackSignatureProjection = Readonly<{
@@ -2639,7 +2640,8 @@ async function assignedInstanceRow(
   instanceId: string,
   mutate = false,
 ) {
-  await ensureCreditexWorkPackSchemaGuards(database);
+  if (mutate && scope.supportWorkOrderId) return fail("ADMIN_JOB_READ_ONLY", 403, "Admin job support is read only.");
+  if (!scope.supportWorkOrderId) await ensureCreditexWorkPackSchemaGuards(database);
   const row = await database.prepare(`SELECT instance.*,
       compliance_case.activity_version_id,
       compliance_case.revision case_revision,
@@ -2692,6 +2694,9 @@ async function assignedInstanceRow(
       404,
       "The current assigned activity work pack was not found.",
     );
+  }
+  if (scope.supportWorkOrderId && row.work_order_id !== scope.supportWorkOrderId) {
+    return fail("ADMIN_JOB_SCOPE_REQUIRED", 404, "This work pack is not attached to the selected support job.");
   }
   if (mutate && row.work_order_stage === "imported") return fail("IMPORTED_JOB_INACTIVE", 409, "Start this imported job in TLink before recording work-pack activity.");
   return row;
@@ -3206,8 +3211,9 @@ async function projectAssignedInstance(
   database: D1Database,
   row: WorkPackInstanceRecord,
   actorUid: string,
+  readOnly = false,
 ): Promise<CreditexAssignedActivityWorkPackProjection> {
-  await ensureCreditexWorkPackSchemaGuards(database);
+  if (!readOnly) await ensureCreditexWorkPackSchemaGuards(database);
   const resolved = await resolvePinnedCreditexActivityWorkPack(database, {
     organisationId: row.organisation_id,
     workPackVersionId: row.work_pack_version_id,
@@ -3395,17 +3401,20 @@ export async function loadAssignedCreditexActivityWorkPack(
       "Work-pack instance",
     ),
   );
-  return projectAssignedInstance(database, row, input.actorUid);
+  return projectAssignedInstance(database, row, input.actorUid, Boolean(input.supportWorkOrderId));
 }
 
 export async function listAssignedCreditexActivityWorkPacks(
   database: D1Database,
   input: CreditexWorkPackTradeScope & { workOrderIds?: readonly string[] },
 ) {
-  await ensureCreditexWorkPackSchemaGuards(database);
+  if (!input.supportWorkOrderId) await ensureCreditexWorkPackSchemaGuards(database);
   const workOrderIds = [...new Set((input.workOrderIds || [])
     .map((item) => optionalText(item, 180))
     .filter(Boolean))];
+  if (input.supportWorkOrderId && (workOrderIds.length !== 1 || workOrderIds[0] !== input.supportWorkOrderId)) {
+    return fail("ADMIN_JOB_SCOPE_REQUIRED", 403, "Choose the selected support job to load its work packs.");
+  }
   if (workOrderIds.length > 500) {
     return fail(
       "WORK_PACK_LIST_TOO_LARGE",
@@ -3473,7 +3482,7 @@ export async function listAssignedCreditexActivityWorkPacks(
   }
   const projections: CreditexAssignedActivityWorkPackProjection[] = [];
   for (const row of rows.results) {
-    projections.push(await projectAssignedInstance(database, row, input.actorUid));
+    projections.push(await projectAssignedInstance(database, row, input.actorUid, Boolean(input.supportWorkOrderId)));
   }
   return Object.freeze(projections);
 }

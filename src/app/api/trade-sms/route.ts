@@ -1,4 +1,5 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { requireTeamCommunicationIdentity } from "@/lib/trade-communications-access";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { connectSms, disconnectSms, linkSmsReply, recordSmsConsent, sendTradeSms, smsWorkspace } from "@/lib/trade-sms-server";
@@ -63,7 +64,7 @@ async function requestBody(request: Request) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireTeamCommunicationIdentity(request);
+    const actor = await requireAdminJobReadAccess(request) ?? await requireTeamCommunicationIdentity(request);
     const params = new URL(request.url).searchParams;
     return adminJson({ ok: true, ...await smsWorkspace(actor, params.get("customerId") || "", params.get("workOrderId") || "") });
   } catch (error) { return smsError(error); }

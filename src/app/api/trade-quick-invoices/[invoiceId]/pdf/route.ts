@@ -1,4 +1,5 @@
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
+import { requireAdminJobReadAccess, adminJobReadError } from "@/lib/admin-job-read-access";
 import { getD1 } from "../../../../../../db";
 import {
   assignedJob,
@@ -20,7 +21,7 @@ export async function GET(
     );
   }
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     if (!access.isOwner && !access.canViewInvoices) {
       throw new Error("QUICK_INVOICE_MANAGEMENT_REQUIRED");
     }
@@ -47,9 +48,12 @@ export async function GET(
       },
     });
   } catch (error) {
+    const supportError = adminJobReadError(error); if (supportError) return supportError;
     const mfa = mfaErrorResponse(error);
     if (mfa) return mfa;
     const code = error instanceof Error ? error.message : "";
+    if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This invoice belongs to a job outside your current access." }, 403);
+    if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "The invoice job was not found." }, 404);
     if (code === "AUTH_REQUIRED") {
       return adminJson({ ok: false, error: "Sign in to continue." }, 401);
     }

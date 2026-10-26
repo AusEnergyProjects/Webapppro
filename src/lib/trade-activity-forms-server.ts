@@ -1178,7 +1178,7 @@ export async function readActivityConsumerDocument(version: string) {
   return { bytes: await renderCreditexConsumerRightsPdf(await loadCustomerPlanPdfFonts()), contentType: "application/pdf", fileName: "Creditex-Statement-of-Rights-v1.pdf" };
 }
 
-export async function readActivityPdf(record: ActivityRecord) {
+export async function readActivityPdf(record: ActivityRecord, options: { readOnly?: boolean } = {}) {
   const row = await activityPdfRow(record.id, record.ownerUid);
   if (!row || row.status !== "submitted_for_creditex_review") throw new Error("ACTIVITY_REPORT_NOT_READY");
   const stored = immutableActivityPdfRecord(row, record.id, record.ownerUid);
@@ -1189,6 +1189,7 @@ export async function readActivityPdf(record: ActivityRecord) {
     return { bytes, contentType: "application/pdf", fileName: `${stored.recordNumber}.pdf` };
   }
 
+  if (options.readOnly) throw new Error("ACTIVITY_REPORT_STORAGE_MISSING");
   const assets = await activityReportAssets(stored);
   const [{ renderActivityFieldPdf }, { loadCustomerPlanPdfFonts }] = await Promise.all([import("./trade-activity-forms-pdf.ts"), import("./customer-plan-pdf-fonts")]);
   const fonts = await loadCustomerPlanPdfFonts();

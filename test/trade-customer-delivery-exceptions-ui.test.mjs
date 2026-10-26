@@ -24,7 +24,7 @@ function harness(responder) {
     useEffect(callback, deps) { const index = cursor++, old = effects[index]; if (!old || deps.some((value, i) => value !== old.deps[i])) { old?.cleanup?.(); effects[index] = { deps }; pending.push(() => effects[index].cleanup = callback()); } },
   };
   const fetch = async (url, init) => { requests.push({ url, init }); return responder(url, init); };
-  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeBusinessFetch: () => fetch, useTradeBusiness: () => business } : id === "@/lib/trade-customer-delivery-exceptions" ? deliveryPolicy : id === "./TradeTasksWorkspace" ? { TradeTasksWorkspace: "task-workspace" } : { default: {} };
+  const require = id => id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./TradeBusinessProvider" ? { useTradeSupportReadOnly: () => false, useTradeBusinessFetch: () => fetch, useTradeBusiness: () => business } : id === "@/lib/trade-customer-delivery-exceptions" ? deliveryPolicy : id === "./TradeTasksWorkspace" ? { TradeTasksWorkspace: "task-workspace" } : { default: {} };
   Function("require", "exports", compiled)(require, exports);
   const render = (workOrderId = "") => { cursor = 0; const tree = exports.TradeCustomerDeliveryExceptions({ user, workOrderId, ...props, onOpenJob: (id, tab) => opened.push({ id, tab }) }); for (const effect of pending.splice(0)) effect(); return tree; };
   return { render, props, requests, opened, setBusiness(ownerUid) { business = { ownerUid }; }, async mount(id = "") { render(id); await flush(); return render(id); }, cleanup() { for (const effect of effects) effect?.cleanup?.(); } };

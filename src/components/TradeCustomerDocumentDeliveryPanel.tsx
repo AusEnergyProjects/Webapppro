@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch, useTradeSupportReadOnly } from "./TradeBusinessProvider";
 
 import { useState } from "react";
 import type { User } from "firebase/auth";
@@ -43,12 +43,14 @@ export function TradeCustomerDocumentDeliveryPanel({
   user: User;
 }) {
   const fetch = useTradeBusinessFetch();
+  const readOnly = useTradeSupportReadOnly();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const accepted = delivery ? ["provider_accepted", "sent", "delivered"].includes(delivery.status) : false;
   const blocked = delivery ? !accepted && !delivery.canRetry : false;
 
   async function resend() {
+    if (readOnly) return;
     setSending(true);
     setMessage("Sending the required customer documents...");
     try {
@@ -80,7 +82,7 @@ export function TradeCustomerDocumentDeliveryPanel({
             : "The customer email reported a complaint or suppression. Update the customer email before sending the required documents again."
           : delivery.lastError || "The required document pack must be sent successfully before customer declaration or signing."
       : "No successful delivery is recorded for the required customer document pack."}</p>
-    {!accepted && delivery?.canRetry !== false && <button type="button" className="btn" disabled={sending} onClick={() => void resend()}>{sending ? "Sending..." : "Send required documents again"}</button>}
+    {!readOnly && !accepted && delivery?.canRetry !== false && <button type="button" className="btn" disabled={sending} onClick={() => void resend()}>{sending ? "Sending..." : "Send required documents again"}</button>}
     {message && <p className="crm-status" role="status">{message}</p>}
   </section>;
 }

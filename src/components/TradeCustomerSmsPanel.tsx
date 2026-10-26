@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch, useTradeSupportReadOnly } from "./TradeBusinessProvider";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
@@ -23,6 +23,7 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
   user?: User; customerId: string; workOrderId?: string; getAuthHeaders?: () => Promise<Record<string, string>>; onOpenIntegrations?: () => void; onAccountChange?: () => void; embedded?: boolean;
 }) {
   const fetch = useTradeBusinessFetch();
+  const readOnly = useTradeSupportReadOnly();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -55,6 +56,7 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
   }, [latestMessageId]);
 
   const request = useCallback(async (payload?: Record<string, unknown>) => {
+    if (readOnly && payload) throw new Error("This support view is read only.");
     const authHeaders = getAuthHeaders ? await getAuthHeaders() : user ? { Authorization: `Bearer ${await user.getIdToken()}` } : null;
     if (!authHeaders) throw new Error("Sign in to load job messages.");
     const response = await fetch(payload ? "/api/trade-sms" : `/api/trade-sms?customerId=${encodeURIComponent(customerId)}&workOrderId=${encodeURIComponent(workOrderId)}`, {
@@ -63,7 +65,7 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
     });
     const result = await response.json().catch(() => ({})) as SmsResult;
     return { response, result };
-  }, [fetch, user, customerId, workOrderId, getAuthHeaders]);
+  }, [fetch, user, customerId, workOrderId, getAuthHeaders, readOnly]);
 
   const load = useCallback(() => {
     if (loadingRequest.current) return loadingRequest.current;
@@ -96,9 +98,9 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
     }
     window.addEventListener("focus", refreshOnFocus);
     document.addEventListener("visibilitychange", refreshOnFocus);
-    const timer = window.setInterval(refreshOnFocus, 3000);
+    const timer = readOnly ? undefined : window.setInterval(refreshOnFocus, 3000);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", refreshOnFocus); document.removeEventListener("visibilitychange", refreshOnFocus); };
-  }, [load, updateConversation]);
+  }, [load, updateConversation, readOnly]);
 
   async function refresh() {
     if (inFlight.current) return;
@@ -180,12 +182,12 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
       {!conversation.customerPhone && <p className={styles.notice}>Save a valid Australian mobile number in Customer details to use SMS.</p>}
       {conversation.connection?.accountType.toLowerCase() === "trial" && <p className={styles.notice}>Twilio trial: this customer&apos;s number must be verified in your Twilio account.</p>}
       {conversation.consent === "opted_out" && <p className={styles.notice}>This customer has opted out. Messages are blocked. They can text START to your connected SMS number to resume.</p>}
-      {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "required" && <form className={`${styles.form} ${styles.consentCard}`} onSubmit={(event) => void recordConsent(event)}>
+      {!readOnly && conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "required" && <form className={`${styles.form} ${styles.consentCard}`} onSubmit={(event) => void recordConsent(event)}>
         <p>Record the customer&apos;s permission before sending service SMS. This does not give permission for marketing.</p>
         <label><span>How and when did they agree to service SMS?</span><textarea required minLength={8} maxLength={500} rows={2} value={consentNote} onChange={(event) => setConsentNote(event.target.value)} placeholder="For example: agreed by phone today to appointment updates." disabled={Boolean(busy)} /></label>
         <button type="submit" className={styles.primary} disabled={Boolean(busy) || consentNote.trim().length < 8}>{busy === "consent" ? "Saving..." : "Record permission"}</button>
       </form>}
-      {managed && conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && conversation.marketingConsent !== "allowed" && <details className={styles.permission}>
+      {!readOnly && managed && conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && conversation.marketingConsent !== "allowed" && <details className={styles.permission}>
         <summary>Permission for review and feedback texts</summary>
         <form className={styles.form} onSubmit={event => void recordMarketingConsent(event)}>
           <p>Service updates do not give permission for review requests or marketing. Record the customer&apos;s separate agreement before sending those texts.</p>
@@ -200,13 +202,13 @@ export function TradeCustomerSmsPanel({ user, customerId, workOrderId = "", getA
         <div className={styles.bubbleSender}>{message.direction === "inbound" ? "Customer" : message.senderName || "Your business"}</div>
         <p className={styles.messageBubble}>{message.body}</p>
         <div className={styles.bubbleReceipt}><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}</time><span data-attention={["unknown", "failed", "undelivered"].includes(message.status)}>{message.direction === "outbound" && (message.status === "sent" || message.status === "delivered") && <MessageTicks status={message.status} />}{message.direction === "inbound" ? "Received" : statusLabels[message.status] || "Status pending"}</span>{conversation.canManageConnection && message.workOrderId && <span>{conversation.jobs.find(job => job.id === message.workOrderId)?.jobNumber || "Linked job"}</span>}</div>
-        {conversation.canManageConnection && message.direction === "inbound" && !message.workOrderId && conversation.jobs.length > 0 && <details className={styles.replyDetails}><summary>Link reply to a job</summary><div className={styles.linkReply}>
+        {!readOnly && conversation.canManageConnection && message.direction === "inbound" && !message.workOrderId && conversation.jobs.length > 0 && <details className={styles.replyDetails}><summary>Link reply to a job</summary><div className={styles.linkReply}>
           <small>Business only. Link this reply to share it with the job&apos;s team.</small>
           <label><span>Job for this reply</span><select aria-label={`Job for reply ${message.id}`} value={replyJobs[message.id] || ""} disabled={Boolean(busy)} onChange={event => setReplyJobs(current => ({ ...current, [message.id]: event.target.value }))}><option value="">Choose job</option>{conversation.jobs.map(job => <option key={job.id} value={job.id}>{job.jobNumber}</option>)}</select></label>
           <button type="button" className={styles.secondary} disabled={Boolean(busy) || !replyJobs[message.id]} onClick={() => void linkReply(message.id)}>Link reply</button>
         </div></details>}
       </li>) : <li className={styles.empty}><span className={styles.emptyMessageIcon} aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M26 15.5A10.5 10.5 0 0 1 15.5 26H8l-5 3V15.5a11.5 11.5 0 1 1 23 0Z" stroke="currentColor" strokeWidth="1.6" /><circle cx="10" cy="15" r="1.2" fill="currentColor" /><circle cx="15" cy="15" r="1.2" fill="currentColor" /><circle cx="20" cy="15" r="1.2" fill="currentColor" /></svg></span><strong>Your conversation starts here</strong><span>No messages yet. Replies will appear here.</span></li>}</ol>
-      {conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && <form className={`${styles.form} ${styles.textComposer}`} onSubmit={(event) => void send(event)}>
+      {!readOnly && conversation.connection?.status === "connected" && conversation.customerPhone && conversation.consent === "allowed" && <form className={`${styles.form} ${styles.textComposer}`} onSubmit={(event) => void send(event)}>
         {managed && <div className={styles.composerToolbar}><label><span className={styles.visuallyHidden}>Message purpose</span><select aria-label="Message purpose" value={purpose} disabled={Boolean(busy) || Boolean(pending)} onChange={event => setPurpose(event.target.value === "marketing" ? "marketing" : "service")}><option value="service">Service update</option><option value="marketing" disabled={conversation.marketingConsent !== "allowed"}>Review or feedback request{conversation.marketingConsent !== "allowed" ? " (permission needed)" : ""}</option></select></label><small>SMS</small></div>}
         <div className={styles.composerInput}><label><span className={styles.visuallyHidden}>Message</span><textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={480} rows={2} required disabled={Boolean(busy) || Boolean(pending)} placeholder="Text message" /></label><button type="submit" className={`${styles.primary} ${styles.sendText}`} disabled={Boolean(busy) || !body.trim() || (!pending && (!outgoingBody || insufficientCredit || (purpose === "marketing" && conversation.marketingConsent !== "allowed")))}>{busy === "send" ? "Checking..." : pending ? "Check this message" : "Send SMS"}</button></div>
         {managed && <div className={styles.messagePrice} aria-live="polite"><span>{parts} SMS {parts === 1 ? "part" : "parts"} · {price} including GST</span><small>9¢ + GST per part</small></div>}

@@ -8,14 +8,27 @@ import { createTradeBusinessFetch, readTradeBusinessSelection, resolveTradeBusin
 import styles from "./TradeBusinessProvider.module.css";
 import { TradeWorkTimeProvider } from "./TradeWorkTimeTracking";
 import { TLinkWorkspaceBar } from "./TLinkWorkspaceBar";
+import { createAdminJobSupportFetch } from "@/lib/admin-job-support-client";
 
 type BusinessContext = { business: TradeBusinessChoice; request: typeof fetch; updatePersonalName?: (name: string) => void };
 const Context = createContext<BusinessContext | null>(null);
+const SupportContext = createContext<typeof fetch | null>(null);
 const unscopedFetch: typeof fetch = (input, init) => fetch(input, init);
 
-export function useTradeBusinessFetch(): typeof fetch { return useContext(Context)?.request || unscopedFetch; }
+export function useTradeBusinessFetch(): typeof fetch {
+  const support = useContext(SupportContext);
+  const business = useContext(Context);
+  return support || business?.request || unscopedFetch;
+}
+export function useTradeSupportReadOnly() { return useContext(SupportContext) !== null; }
 export function useTradeBusiness(): TradeBusinessChoice | null { return useContext(Context)?.business || null; }
 export function useTradePersonalNameUpdate() { return useContext(Context)?.updatePersonalName; }
+
+export function TradeReadOnlySupportProvider({ workOrderId, children }: { workOrderId: string; children: ReactNode }) {
+  const request = useCallback<typeof fetch>((input, init) => createAdminJobSupportFetch(workOrderId, window.location.origin, fetch)(input, init), [workOrderId]);
+  // Deliberately no business selection or work-time recorder: the actor remains the admin.
+  return <SupportContext.Provider value={request}>{children}</SupportContext.Provider>;
+}
 
 export function TradeBusinessProvider({ business, children, onAccessLost, onPersonalNameChange }: { business: TradeBusinessChoice; children: ReactNode; onAccessLost?: () => void; onPersonalNameChange?: (name: string) => void }) {
   const active = useRef(true);

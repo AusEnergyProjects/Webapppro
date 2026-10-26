@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as tradeAbn from "../src/lib/trade-abn.ts";
 import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
 import * as greeting from "../src/lib/wattzun-greeting.ts";
@@ -213,6 +214,7 @@ function verifiedOwnerFixture(t) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const dependencies = {
+    "./admin-job-read-access": adminJobRead,
     "../../db": { getD1: () => db },
     "./firebase-server": { requireFirebaseIdentity: async () => { throw new Error("Not used by verified identity authority."); } },
     "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => {} },

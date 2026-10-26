@@ -15,6 +15,7 @@ import { rentalAssignmentCredentialSql, rentalAssignmentRequiredGates } from "@/
 import { LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
 
 import { RENTAL_VISIT_PRESETS, RENTAL_SAFETY_TEMPLATE_VERSION, rentalVisitPreset } from "@/lib/rental-safety-visit.mjs";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -161,7 +162,7 @@ function failure(error: unknown) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     return adminJson(await options(await context(access, cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180))));
   } catch (error) { return failure(error); }
 }

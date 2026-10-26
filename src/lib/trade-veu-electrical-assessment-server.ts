@@ -45,6 +45,10 @@ function expected(record:PiesaRecord,revision:unknown) {
   if (record.status !== "draft") fail("PIESA_COMPLETE_LOCKED","This completed assessment is locked.");
 }
 function currentAccess(access:TeamAccess,write:boolean) {
+  if (access.supportWorkOrderId) {
+    if (write) fail("PIESA_ACCESS_REQUIRED", "Admin job support is read-only.", 403);
+    return { sql: "w.id = ?", values: [access.supportWorkOrderId] };
+  }
   const account=`EXISTS(SELECT 1 FROM trade_accounts a WHERE a.firebase_uid=w.firebase_uid AND a.partner_type='installer' AND ${verifiedTradeAccountPredicate("a")})`;
   if(access.isOwner) return {sql:`${account} AND ?=w.firebase_uid`,values:[access.actorUid]};
   return {sql:`${account} AND EXISTS(SELECT 1 FROM trade_team_members m WHERE m.id=? AND m.owner_uid=w.firebase_uid AND m.status='active'

@@ -1,5 +1,6 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { PiesaError, type PiesaRecord } from "@/lib/veu-electrical-assessment";
 import { createVeuElectricalForm, VEU_ELECTRICAL_SIGNER_FIELDS, VEU_ELECTRICAL_SOURCE_URL, VEU_ELECTRICAL_SOURCE_PATH, VEU_ELECTRICAL_SOURCE_SHA256 } from "@/lib/veu-electrical-safety-form";
@@ -27,7 +28,7 @@ function bytesResponse(data: { bytes: Uint8Array; contentType: string; fileName:
 }
 export async function GET(request: Request) {
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     if (!access.canViewFieldEvidence) throw new PiesaError(403, "PIESA_ACCESS_REQUIRED", "Your access does not include job assessments.");
     const query = new URL(request.url).searchParams;
     if (query.get("catalogue") === "1") return adminJson({ ok: true, form: createVeuElectricalForm(), signerFields: VEU_ELECTRICAL_SIGNER_FIELDS, canManage: access.canManageFieldEvidence,

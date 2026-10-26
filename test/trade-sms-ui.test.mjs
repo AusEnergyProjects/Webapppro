@@ -19,7 +19,7 @@ const isComponent = (node, component) => node.type === component || node.type?.r
 
 function harness(component, responder, props = {}) {
   const source = fs.readFileSync(new URL(`../src/components/${component}.tsx`, import.meta.url), "utf8");
-  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText.replaceAll('require("./TradeBusinessProvider")', '({ useTradeSupportReadOnly: () => false, useTradeBusinessFetch: () => fetch, useTradeBusiness: () => null })');
   const slots = [], effects = [], callbacks = [], pending = [], requests = [];
   let cursor = 0;
   const changed = (before, after) => !before || after.some((value, index) => value !== before[index]);

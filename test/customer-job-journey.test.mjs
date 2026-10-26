@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as journey from "../src/lib/customer-job-journey.ts";
 import * as photos from "../src/lib/trade-photo-requests.ts";
 import * as calendar from "../src/lib/customer-appointment-calendar.ts";
@@ -21,6 +22,7 @@ function load(path, dependencies) {
   return result;
 }
 const access = load("../src/lib/trade-access-server.ts", {
+  "./admin-job-read-access": adminJobRead,
   "../../db": {}, "./firebase-server": {}, "./creditex-schema-guards": {},
   "./trade-abn": {}, "./trade-mfa-server": {}, "./trade-account-predicates": accountPredicates,
 });

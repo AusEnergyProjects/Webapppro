@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import ts from 'typescript';
 import {readBoundedJsonRequest,BoundedJsonRequestError} from '../src/lib/bounded-json-request.ts';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 function compile(path,dependencies){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(key=>{assert.ok(key in dependencies,key);return dependencies[key];},m,m.exports);return m.exports;}
 class JobLifecycleError extends Error{constructor(code,message,status){super(message);this.code=code;this.status=status;}}
 class ComplianceAccessError extends Error{}
@@ -11,7 +12,7 @@ const response=(body,status=200)=>Response.json(body,{status});
 function fixture(){const state={origin:true,calls:[],accessFailure:null};const db={id:'db'},actor={uid:'trusted',organisationId:'org',membershipId:'trusted-member',role:'reviewer'};
  const operation=name=>async(...args)=>{state.calls.push({name,args});return {saved:name};};
  const shared=compile('../src/app/api/creditex/job-lifecycle/_shared.ts',{'@/lib/admin-server':{adminJson:response,mfaErrorResponse:()=>null},'@/lib/bounded-json-request':{readBoundedJsonRequest,BoundedJsonRequestError},'@/lib/compliance-access-server':{ComplianceAccessError},'@/lib/creditex-job-lifecycle-server':{JobLifecycleError,loadJobLifecycle:operation('load'),mutateJobLifecycle:operation('mutate'),loadTradeJobReview:operation('loadReview'),reviewTradeJob:operation('review'),dispatchJobCorrectionEmail:operation('retry')}});
- const common={'@/lib/admin-server':{adminJson:response,sameOrigin:()=>state.origin},'@/app/api/creditex/job-lifecycle/_shared':shared};
+ const common={'@/lib/admin-server':{adminJson:response,sameOrigin:()=>state.origin},'@/lib/admin-job-read-access':adminJobRead,'@/app/api/creditex/job-lifecycle/_shared':shared};
  const creditex=compile('../src/app/api/creditex/job-lifecycle/route.ts',{'../../../../../db':{getD1:()=>db},'@/lib/admin-server':common['@/lib/admin-server'],'@/lib/compliance-access-server':{requireComplianceAccess:async(_r,options,d)=>{state.calls.push({name:'auth',options,db:d});if(state.accessFailure)throw state.accessFailure;return actor;}},'./_shared':shared});
  const trade=compile('../src/app/api/trade-job-review/route.ts',{'../../../../db':{getD1:()=>db},...common,'@/lib/trade-team-server':{requireInstallerTeamAccess:async()=>({actorUid:'manager',ownerUid:'business',canManageJobs:true})}});
  return{state,db,actor,shared,creditex,trade};}

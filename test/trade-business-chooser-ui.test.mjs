@@ -5,6 +5,7 @@ import ts from "typescript";
 import * as jsx from "react/jsx-runtime";
 import * as portals from "../src/lib/tlink-portals.ts";
 import * as businessClient from "../src/lib/trade-business-client.ts";
+import * as adminSupportClient from "../src/lib/admin-job-support-client.ts";
 
 const workspaceBarExports = {};
 const workspaceBarSource = readFileSync(new URL("../src/components/TLinkWorkspaceBar.tsx", import.meta.url), "utf8");
@@ -46,7 +47,7 @@ function harness(initialChoices, { destination = "member", saved = "", disableNo
   const fetch = async (url, init) => { requests.push({ url, init });
     if (url === "/api/trade-businesses" && respondBusiness) return respondBusiness(url, init);
     return Response.json({ businesses, requiresSelection: businesses.length > 1 }); };
-  const dependencies = { react, "react/jsx-runtime": jsx, "firebase/auth": {
+  const dependencies = { react, "react/jsx-runtime": jsx, "@/lib/admin-job-support-client": adminSupportClient, "firebase/auth": {
     onIdTokenChanged(_auth, callback) { authObserver = callback; callback(firebaseAuth.currentUser); return () => {}; },
     reload: async account => { authCalls.push(["reload", account.uid]); await reloadUser(account); },
     sendEmailVerification: async (account, settings) => { authCalls.push(["verification", account.uid, settings]); await verifyEmail(account, settings); },

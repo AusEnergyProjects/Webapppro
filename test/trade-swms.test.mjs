@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import { PDFDocument } from "pdf-lib";
 import { extractText } from "unpdf";
 import { migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
@@ -64,6 +65,21 @@ test("every business has the optional default with server business and booked wo
   assert.equal(f.sqlite.prepare("SELECT COUNT(*) count FROM trade_job_forms").get().count, 0);
   assert.equal(f.sqlite.prepare("SELECT stage FROM trade_work_orders").get().stage, "scheduled");
   await assert.rejects(saveSwms(f.db, owner, { ...f.input(started.record), finalize: true, signature }, now), /must sign in/);
+});
+
+test("admin support reads the selected saved SWMS without trade membership or mutation capability", async t => {
+  const f = fixture(t), started = await f.start();
+  const support = { ...worker, actorUid: "support-admin", memberId: "", supportWorkOrderId: "job", canManageFieldEvidence: false };
+  const changes = f.sqlite.prepare("SELECT total_changes() count").get().count;
+  const payload = await loadSwms(f.db, support, "job");
+  assert.deepEqual(payload.record.answers, started.record.answers);
+  assert.deepEqual(payload.record.context, started.record.context);
+  assert.equal(payload.capabilities.canEdit, false);
+  assert.equal(payload.capabilities.canSign, false);
+  await assert.rejects(loadSwms(f.db, { ...support, supportWorkOrderId: "another-job" }, "job"), /outside your current field access/);
+  await assert.rejects(loadSwms(f.db, { ...support, ownerUid: "another-owner" }, "job"), /outside your current field access/);
+  await assert.rejects(saveSwms(f.db, support, f.input(started.record), now), /viewing this SWMS only/);
+  assert.equal(f.sqlite.prepare("SELECT total_changes() count").get().count, changes);
 });
 
 test("draft saves and exact retries are isolated from progress; only the scheduled worker signs the immutable retained record", async t => {
@@ -181,6 +197,7 @@ function routeFixture(t) {
   const f = fixture(t), calls = [], state = { sameOrigin: true, access: worker, authError: null, assignmentError: null, mfaResponse: null };
   class TradeAccessError extends Error {}
   const dependencies = {
+    "@/lib/admin-job-read-access": adminJobRead,
     "../../../../db": { getD1: () => f.db },
     "@/lib/admin-server": {
       adminJson: (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } }),

@@ -3,6 +3,7 @@ import test from "node:test";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from "../src/lib/firebase-mfa.ts";
 import * as routing from "../src/lib/aea-trade-routing.mjs";
 import * as plan from "../src/lib/public-plan-enquiry.mjs";
@@ -32,6 +33,7 @@ const quickContact = {
   customer_address_state: "VIC", customer_message: "Please arrange an assessment.",
 };
 const modules = new Map([
+  ["admin-job-read-access", adminJobRead],
   ["aea-trade-routing.mjs", routing],
   ["public-plan-enquiry.mjs", plan],
   ["public-plan-quote-preparation.mjs", preparation],

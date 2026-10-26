@@ -1,5 +1,6 @@
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { authenticatedRentalReportPdf } from "@/lib/trade-rental-report-server";
 
 export const runtime = "edge";
@@ -13,7 +14,7 @@ function safeName(value: string) {
 export async function GET(request: Request, context: Context) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     const reportId = cleanAdminText((await context.params).reportId, 180);
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     if (!reportId || !workOrderId) return adminJson({ ok: false, error: "Choose an issued rental report." }, 400);

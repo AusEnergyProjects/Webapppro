@@ -1,6 +1,8 @@
 .composer { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(310px, .9fr); align-items: start; gap: 24px; min-width: 0; }
 .editor { display: grid; min-width: 0; gap: 16px; }
 .editor fieldset { display: grid; gap: 16px; min-width: 0; }
+.supportReadOnly fieldset button, .supportReadOnly :global(.trade-quote-order-controls), .supportReadOnly :global(.trade-quote-builder-actions), .supportReadOnly :global(.trade-quote-packets), .supportReadOnly :global(.trade-quote-recipient-actions) { display: none; }
+.supportReadOnly fieldset input, .supportReadOnly fieldset select, .supportReadOnly fieldset textarea { opacity: 1; }
 .editor :global(.trade-quote-lines), .editor :global(.trade-quote-choice-lines) { min-width: 0; overflow: visible; }
 .editor :global(.trade-quote-line) { background: var(--trade-surface-soft, #f7faf8); border: 1px solid var(--trade-line, #d9e5e0); border-radius: 10px; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; padding: 16px; }
 .editor :global(.trade-quote-line.headings) { display: none; }

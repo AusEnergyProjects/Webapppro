@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -61,7 +62,7 @@ async function fixture(balance = 1_000_000) {
   const account = load("../src/lib/trade-sms-account-server.ts", { ...dependencies, "./trade-sms-wallet-server": wallet,
     "./admin-notifications": { adminNotificationStatement: () => { throw new Error("Unexpected rental notification in managed send fixture"); } } });
   const twilio = load("../src/lib/trade-sms-provider.ts", { "./trade-sms": pure });
-  const tradeAccess=load("../src/lib/trade-access-server.ts",{"../../db":{getD1:()=>db},"./firebase-server":{},"./creditex-schema-guards":{},"./trade-abn":abn,"./trade-mfa-server":{},"./trade-account-predicates":accountPredicates});
+  const tradeAccess=load("../src/lib/trade-access-server.ts",{"./admin-job-read-access":adminJobRead,"../../db":{getD1:()=>db},"./firebase-server":{},"./creditex-schema-guards":{},"./trade-abn":abn,"./trade-mfa-server":{},"./trade-account-predicates":accountPredicates});
   const server = load("../src/lib/trade-sms-server.ts", { ...dependencies, "@/lib/trade-integration-crypto": protectedPayload,
     "./trade-access-server":tradeAccess,
     "@/lib/service-reminder-delivery": reminders, "./trade-sms": pure, "./trade-sms-provider": twilio,

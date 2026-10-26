@@ -1,4 +1,6 @@
 .directory { min-width: 0; }
+.adminActions { margin-top: 18px; padding: 16px; border: 1px solid var(--portal-line, #c6d6cf); border-radius: 12px; background: var(--portal-surface, #fff); color: var(--portal-ink, #173e30); }
+.adminActions summary { cursor: pointer; font-weight: 700; }
 .hint { margin: 0; font-size: 12px; color: var(--portal-muted, #53695e); line-height: 1.5; }
 .table table { min-width: 0; width: max-content; max-width: none; }
 .table th, .table td { box-sizing: border-box; padding: 9px 10px; min-width: 105px; max-width: 200px; font-size: 13px; }

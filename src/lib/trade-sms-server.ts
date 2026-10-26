@@ -17,7 +17,7 @@ type Customer = { id: string; phone: string };
 type Recipient = { id: string; customer_id: string; phone_number: string; consent_at: string; opted_out_at: string; marketing_consent_at:string };
 type Message = { id: string; connection_id: string; recipient_id: string; customer_id: string; direction: "inbound" | "outbound"; body: string; status: string; segments: number; request_id: string; provider_message_sid: string; created_at: string; work_order_id: string; actor_uid: string; actor_name: string; purpose:string; price_micro:number };
 export type SmsSendOptions = {purpose?:"service"|"marketing";expectedPhone?:string;beforeSend?:()=>Promise<void>;automation?:{eventId:string;ruleKind:string;ruleRevision:number;appointmentId:string;appointmentStart:string}};
-export type SmsActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "businessName" | "canSendSms" | "fieldSessionId">;
+export type SmsActor = Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "displayName" | "isOwner" | "businessName" | "canSendSms" | "fieldSessionId" | "supportWorkOrderId">;
 type SmsJob = { id: string; work_number: string };
 
 function publicMessage(row: Message) {
@@ -26,10 +26,11 @@ function publicMessage(row: Message) {
 }
 
 // Reused in both reads and mutation reservations so revocation or reassignment cannot race a send.
-function smsScopeGuard(actor: SmsActor, customerId: string, workOrderId: string) {
+function smsScopeGuard(actor: SmsActor, customerId: string, workOrderId: string, readOnly = false) {
   const clauses: string[] = [];
   const values: (string | number)[] = [];
-  if (!actor.isOwner) {
+  if (actor.supportWorkOrderId && (!readOnly || actor.supportWorkOrderId !== workOrderId)) throw new Error("SMS_JOB_ACCESS_REQUIRED");
+  if (!actor.isOwner && !actor.supportWorkOrderId) {
     if (!actor.canSendSms || !workOrderId) throw new Error("SMS_JOB_ACCESS_REQUIRED");
     clauses.push(`EXISTS (SELECT 1 FROM trade_team_members sms_actor WHERE sms_actor.id = ? AND sms_actor.owner_uid = ?
       AND sms_actor.status = 'active' AND sms_actor.can_send_sms = 1 AND ${actor.fieldSessionId
@@ -50,8 +51,8 @@ function smsScopeGuard(actor: SmsActor, customerId: string, workOrderId: string)
   return { sql: clauses.join(" AND ") || "1 = 1", values };
 }
 
-async function smsContext(actor: SmsActor, customerId: string, workOrderId: string, db: D1Database) {
-  const guard = smsScopeGuard(actor, customerId, workOrderId);
+async function smsContext(actor: SmsActor, customerId: string, workOrderId: string, db: D1Database, readOnly = false) {
+  const guard = smsScopeGuard(actor, customerId, workOrderId, readOnly);
   const allowed = await db.prepare(`SELECT 1 allowed WHERE ${guard.sql}`).bind(...guard.values).first();
   if (!allowed) throw new Error("SMS_JOB_ACCESS_REQUIRED");
   const customer = await currentCustomer(actor.ownerUid, customerId, db);
@@ -107,7 +108,7 @@ async function usedSegments(ownerUid: string, db: D1Database, now = new Date().t
 export async function smsWorkspace(actor: SmsActor, customerId = "", workOrderId = "", db: D1Database = getD1()) {
   const ownerUid = actor.ownerUid;
   if (!customerId && !actor.isOwner) throw new Error("SMS_JOB_ACCESS_REQUIRED");
-  const context = customerId ? await smsContext(actor, customerId, workOrderId, db) : null;
+  const context = customerId ? await smsContext(actor, customerId, workOrderId, db, true) : null;
   const current = await currentConnection(ownerUid, db);
   const connection = current ? { number: current.phone_number, provider:current.provider, status: current.status, accountLabel: current.account_label, accountType: current.account_type,
     dailyLimit: current.daily_limit, usedSegments: await usedSegments(ownerUid, db) } : null;
@@ -122,7 +123,7 @@ export async function smsWorkspace(actor: SmsActor, customerId = "", workOrderId
     .bind(ownerUid, customerId, ...(!actor.isOwner ? [workOrderId] : []), ...guard.values).all<Message>();
   return { connection, customerPhone, consent, marketingConsent:ownsRecipient && recipient.marketing_consent_at && !recipient.opted_out_at ? "allowed" : "required",
     businessName:actor.businessName,partPriceMicro:current?.provider==="clicksend" ? SMS_PART_PRICE_MICRO : 0,
-    balanceMicro:current?.provider==="clicksend" ? (await smsWallet(ownerUid,db)).balanceMicro : null,
+    balanceMicro:!actor.supportWorkOrderId && current?.provider==="clicksend" ? (await smsWallet(ownerUid,db)).balanceMicro : null,
     messages: history.results.reverse().map(publicMessage), canManageConnection: actor.isOwner,
     jobNumber: context.job?.work_number || "", jobs: actor.isOwner ? (await customerSmsJobs(ownerUid, customerId, db)).map(job => ({ id: job.id, jobNumber: job.work_number })) : [] };
 }

@@ -1,4 +1,5 @@
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import {
@@ -57,7 +58,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
 }
 
 async function accessAndJob(request: Request, workOrderId: string) {
-  const access = await requireInstallerTeamAccess(request);
+  const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
   const job = await assignedJob(access, workOrderId);
   return { access, job };
 }

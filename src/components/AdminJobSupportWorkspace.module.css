@@ -1,0 +1,17 @@
+.workspace { min-width: 0; color: var(--portal-ink, #173e30); --color-aea-ink: var(--portal-ink, #173e30); --color-aea-muted: var(--portal-muted, #53695e); --color-aea-line: var(--portal-line, #c6d6cf); }
+.heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.heading span { color: var(--portal-muted, #53695e); font-size: 12px; }
+.heading h1 { margin: 4px 0; font-size: 24px; overflow-wrap: anywhere; }
+.heading p { margin: 0; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions button, .error button { min-height: 42px; padding: 9px 16px; border: 1px solid var(--portal-line, #c6d6cf); border-radius: 8px; background: var(--portal-surface, white); color: inherit; cursor: pointer; font: inherit; }
+.actions button:disabled { cursor: wait; opacity: .65; }
+.actions button:focus-visible, .error button:focus-visible, .heading h1:focus-visible { outline: 2px solid var(--portal-green, #218260); outline-offset: 3px; }
+.notice { margin: 0 0 18px; padding: 13px 16px; border: 1px solid var(--portal-line, #c6d6cf); border-radius: 10px; background: var(--portal-soft, #eef5f1); font-size: 14px; line-height: 1.5; }
+.error { border: 1px solid var(--portal-line, #c6d6cf); border-radius: 12px; padding: 20px; background: var(--portal-surface, #fff); }
+.workspace :global(.crm-job-card) { background: var(--portal-surface, #fff); }
+.workspace :global(.crm-job-card-header), .workspace :global(.crm-job-tabs) { background: var(--portal-soft, #eef5f1); color: var(--portal-ink, #173e30); }
+.workspace :global(.crm-job-tabs) { overflow-x: auto; }
+.workspace :global(.crm-job-section) { min-width: 0; }
+.workspace input:disabled, .workspace select:disabled, .workspace textarea:disabled { opacity: 1; -webkit-text-fill-color: var(--portal-ink, #173e30); color: var(--portal-ink, #173e30); background: var(--portal-soft, #eef5f1); }
+@media (max-width: 600px) { .heading { gap: 12px; } .actions { width: 100%; } .actions button { flex: 1; } .notice { padding: 12px; } }

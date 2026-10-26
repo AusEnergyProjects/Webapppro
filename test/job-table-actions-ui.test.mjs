@@ -25,7 +25,7 @@ function harness(name, options = {}) {
     useEffect(callback, deps) { const i = cursor++; if (different(effects[i]?.deps, deps)) { effects[i]?.cleanup?.(); effects[i] = { deps }; queued.push(() => { effects[i].cleanup = callback(); }); } },
   };
   hooks.useLayoutEffect = hooks.useEffect;
-  const document = { activeElement: null, documentElement: { clientWidth: 369 }, getElementById: () => ({ focus() {} }), addEventListener: (name, handler) => documentEvents.set(name, handler), removeEventListener: name => documentEvents.delete(name) };
+  const document = { activeElement: null, documentElement: { clientWidth: 369 }, getElementById: () => ({ focus() {} }), querySelector: () => null, addEventListener: (name, handler) => documentEvents.set(name, handler), removeEventListener: name => documentEvents.delete(name) };
   const window = { innerWidth: 390, innerHeight: 500, setTimeout(callback) { const id = ++timerId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => callback(), addEventListener: (name, handler) => windowEvents.set(name, handler), removeEventListener: name => windowEvents.delete(name) };
   const navigator = { clipboard: { async writeText(value) { if (options.clipboardFails) throw new Error("Denied"); copied.push(value); } } };
   const item = { ...job, customerFirstName: "Example", customerLastName: "Customer", customerBusinessName: "", ...options.job };
@@ -42,7 +42,7 @@ function harness(name, options = {}) {
   const require = id => id === "./CreditexJobAuditDesk" ? {CreditexJobAuditDesk} : id === "react" ? hooks : id === "react/jsx-runtime" ? jsx : id === "./JobRowActions" ? shared : id === "@/lib/job-register-dates" ? dateHelpers : id === "@/lib/trade-job-lifecycle" ? tradeLifecycle : id === "@/lib/creditex-certificate-types" ? certificateTypes : id.endsWith(".module.css") ? { default: new Proxy({}, { get: (_, key) => String(key) }) } : id === "./WorkspaceTableTools" ? { WorkspaceTableTools, downloadWorkspaceCsv() {} } : id === "./CreditexAuditCallPanel" ? { CreditexAuditCallPanel } : id === "@/lib/firebase-client" ? { firebaseAuth: { currentUser: { uid: "reviewer" } } } : {};
   Function("require", "exports", "window", "document", compile("JobRowActions"))(require, shared, window, document);
   const exported = {};
-  if (name !== "JobRowMenu" && name !== "JobActionsButton") Function("require", "exports", "window", "document", "navigator", compile(name))(require, exported, window, document, navigator);
+  if (name !== "JobRowMenu" && name !== "JobActionsButton") Function("require", "exports", "window", "document", "navigator", "CSS", compile(name))(require, exported, window, document, navigator, { escape: value => value });
   const launcher = { isConnected: true, focus() { focusCount++; }, getBoundingClientRect: () => ({ left: 345, bottom: 470 }), querySelector: () => null };
   function attach(tree) { for (const node of nodes(tree, node => node.props?.ref)) { if (node.props.ref.current == null) node.props.ref.current = node.type === "dialog" ? { showModal() { dialogOpens++; }, close() {} } : node.props.role === "menu" ? { style: {}, getBoundingClientRect: () => ({ width: 248, height: 190 }), querySelector: () => null, contains: () => false } : { focus() {}, scrollIntoView() {}, scrollTop: 0, scrollLeft: 0 }; } }
   const render = props => { cursor = 0; const tree = (shared[name] || exported[name])(props || { api }); attach(tree); for (const effect of queued.splice(0)) effect(); return tree; };

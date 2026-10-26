@@ -9,12 +9,14 @@ import * as reminders from "../src/lib/service-reminder-delivery.ts";
 import * as clicksend from "../src/lib/trade-clicksend-provider.ts";
 import * as billing from "../src/lib/trade-sms-billing.ts";
 import * as stripe from "../src/lib/trade-sms-stripe.ts";
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 function load(path, dependencies) {
   const output = ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: path }).outputText;
   const record = { exports: {} };
   new Function("require", "module", "exports", output)((name) => {
+    if (name === '@/lib/admin-job-read-access') return adminJobRead;
     if (Object.hasOwn(dependencies, name)) return dependencies[name];
     throw new Error(`Unexpected SMS dependency ${name}`);
   }, record, record.exports);

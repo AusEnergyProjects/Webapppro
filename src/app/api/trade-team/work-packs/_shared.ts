@@ -1,4 +1,5 @@
 import { mfaErrorResponse, adminJson, sameOrigin } from "@/lib/admin-server";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { BoundedJsonRequestError } from "@/lib/bounded-json-request";
 import {
   CreditexActivityWorkPackServerError,
@@ -27,11 +28,12 @@ export function assignedWorkPackScope(
     actorUid: access.actorUid,
     actorMemberId: access.memberId,
     scope: access.jobScope,
+    ...(access.supportWorkOrderId ? { supportWorkOrderId: access.supportWorkOrderId } : {}),
   });
 }
 
 export async function assignedWorkPackRequestScope(request: Request) {
-  const access = await requireInstallerTeamAccess(request);
+  const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
   return Object.freeze({
     ...assignedWorkPackScope(access),
     canViewFieldEvidence: access.canViewFieldEvidence,

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { assignedJob, canViewQuotes, requireInstallerTeamAccess } from "@/lib/trade-team-server";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 
 export const runtime = "edge";
 
@@ -31,7 +32,7 @@ function errorResponse(error: unknown) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     if (!canViewQuotes(access)) throw new Error("QUOTE_VIEW_REQUIRED");
     const search = new URL(request.url).searchParams;
     const workOrderId = cleanAdminText(search.get("workOrderId"), 180);
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
     if (!row) throw new Error("MEDIA_NOT_FOUND");
     const object = await bucket().get(String(row.object_key));
     if (!object) throw new Error("MEDIA_NOT_FOUND");
-    await getD1().prepare(`INSERT INTO trade_crm_job_media_events
+    if (!access.supportWorkOrderId) await getD1().prepare(`INSERT INTO trade_crm_job_media_events
       (id, firebase_uid, work_order_id, job_media_id, actor_uid, actor_member_id, event_type, created_at)
       VALUES (?, ?, ?, ?, ?, ?, 'viewed', ?)`)
       .bind(crypto.randomUUID(), access.ownerUid, workOrderId, mediaId,

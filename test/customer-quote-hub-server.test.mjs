@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
@@ -150,6 +151,7 @@ async function fixture(t) {
   });
   let onHandoff=async()=>{throw new Error("Unexpected job creation");};
   const tradeRoute = load("../src/app/api/trade-customer-hub/route.ts", {
+    '@/lib/admin-job-read-access': adminJobRead,
     "../../../../db": { getD1: () => db }, "@/lib/admin-server": { sameOrigin: () => true, mfaErrorResponse: () => null },
     "@/lib/customer-hub-email-server":emails,
     "@/lib/public-lead-quote-workflow-server":{startPublicLeadQuoteWorkflow:(...args)=>onHandoff(...args)},

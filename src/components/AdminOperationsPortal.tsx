@@ -781,7 +781,7 @@ export function AdminOperationsPortal() {
               }}
             />
           )}
-          {tab === "jobs" && <AdminJobDirectory key={jobSearch.nonce} initialSearch={jobSearch.query} api={api} user={user&&["owner","admin"].includes(session.role)?user:undefined} onAuditDirtyChange={reportAuditDirty} />}
+          {tab === "jobs" && <AdminJobDirectory key={jobSearch.nonce} initialSearch={jobSearch.query} api={api} user={["owner","admin","support"].includes(session.role) ? user || undefined : undefined} canAudit={["owner","admin"].includes(session.role)} onAuditDirtyChange={reportAuditDirty} />}
           {tab === "customers" && (
             <AdminAccountDirectory
               api={api}

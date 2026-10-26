@@ -14,6 +14,19 @@ const NOW='2026-09-25T06:00:00.000Z',SHA='a'.repeat(64);
 const trade={kind:'trade',uid:'manager',access:{ownerUid:'owner',actorUid:'manager',isOwner:true,jobScope:'team',canManageJobs:true,canManageFieldEvidence:true,canViewFieldEvidence:true}};
 const admin={kind:'compliance',uid:'creditex',organisationId:'org',memberId:'creditex-admin',role:'admin'};
 const reviewer={kind:'compliance',uid:'reviewer-uid',organisationId:'org',memberId:'reviewer',role:'reviewer'};
+test('admin support can inspect job review history without review, correction or cross-job authority', async t => {
+ const f=fixture(t);f.intent();
+ const support={kind:'trade',uid:'actual-admin',access:{ownerUid:'owner',actorUid:'actual-admin',isOwner:false,memberId:'',jobScope:'team',canManageJobs:false,canManageFieldEvidence:false,canViewFieldEvidence:true,supportWorkOrderId:'job'}};
+ const state=await f.service.loadTradeJobReview(f.db,support,'job');
+ assert.equal(state.canReview,false);assert.equal(state.workOrderId,'job');assert.equal(state.activities.length,1);
+ const detail=await f.service.loadJobLifecycle(f.db,support,'intent');
+ assert.ok(Object.values(detail.capabilities).every(value=>value===false));
+ await assert.rejects(f.service.loadTradeJobReview(f.db,support,'other-job'),error=>error.status===403);
+ await assert.rejects(f.service.loadJobLifecycle(f.db,{...support,access:{...support.access,supportWorkOrderId:'other-job'}},'intent'),error=>error.status===404);
+ await assert.rejects(f.service.reviewTradeJob(f.db,support,await f.input(),f.options),error=>error.status===403);
+ assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM creditex_job_lifecycle_events').get().n,0);
+ assert.equal(f.sent.length,0);
+});
 function fixture(t){
  const sqlite=new DatabaseSync(':memory:');installEmptyTradeCrews(sqlite);t.after(()=>sqlite.close());sqlite.exec(`PRAGMA foreign_keys=ON;
  CREATE TABLE trade_work_orders(id TEXT PRIMARY KEY,firebase_uid TEXT,partner_type TEXT,work_number TEXT,title TEXT,stage TEXT,record_status TEXT,revision INTEGER,assignee_member_id TEXT,updated_at TEXT);

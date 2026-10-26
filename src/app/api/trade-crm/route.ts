@@ -1,4 +1,5 @@
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
+import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
 import { assertTradeFormAttachmentAccess, initialRentalAssessmentModules, initialTradeJobForms, initialVeuElectricalAssessmentSelection, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard } from "@/lib/trade-job-form-attachment-server";
 import { changeJobSalesOutcome, JobSalesOutcomeError, loadJobSalesOutcomes } from "@/lib/trade-job-sales-outcome-server";
 import { tradeJobNeedsSchedulingSql } from "@/lib/trade-job-scheduling-attention";
@@ -383,8 +384,8 @@ async function resolvedAddressWrite(
 }
 
 async function crmIdentity(request: Request): Promise<CrmIdentity> {
-  const access = await requireInstallerTeamAccess(request);
-  await ensureTlinkSchemaGuards(getD1());
+  const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
+  if (!access.supportWorkOrderId) await ensureTlinkSchemaGuards(getD1());
   const account = await getD1().prepare("SELECT address_state FROM trade_accounts WHERE firebase_uid = ?")
     .bind(access.ownerUid).first<Record<string, unknown>>();
   return {

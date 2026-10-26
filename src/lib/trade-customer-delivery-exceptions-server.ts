@@ -29,31 +29,38 @@ export function customerDeliveryFailureDiagnostic(error: unknown): { code: strin
 }
 
 /** Read-only projection of current source receipts. No send or retry is performed. */
-export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "isOwner">,
+export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pick<TeamAccess, "ownerUid" | "actorUid" | "memberId" | "isOwner" | "supportWorkOrderId">,
   options: { workOrderId?: string; page?: number } = {}): Promise<CustomerDeliveryExceptions> {
-  if (!access.actorUid || !access.memberId) throw new Error("EMAIL_ACCESS_REQUIRED");
+  if (!access.actorUid || (!access.memberId && !access.supportWorkOrderId)) throw new Error("EMAIL_ACCESS_REQUIRED");
   const workOrderId = options.workOrderId || "";
+  if (access.supportWorkOrderId && access.supportWorkOrderId !== workOrderId) throw new Error("EMAIL_ACCESS_REQUIRED");
+  const reviewer = access.supportWorkOrderId
+    ? `SELECT ? owner_uid, '' id, 1 full_review, 'team' job_scope, 'team' schedule_scope,
+        1 can_view_quotes, 0 can_send_quotes, 1 can_view_invoices, 0 can_manage_invoices,
+        1 can_view_customers, 0 can_reschedule_jobs`
+    : `SELECT member.*,member.member_uid=member.owner_uid full_review FROM trade_team_members member
+        WHERE member.owner_uid=? AND member.id=? AND member.member_uid=? AND member.status='active'
+          AND NOT EXISTS(SELECT 1 FROM trade_crew_members crew WHERE crew.owner_uid=member.owner_uid AND crew.member_id=member.id)`;
+  const reviewerValues = access.supportWorkOrderId ? [access.ownerUid] : [access.ownerUid, access.memberId, access.actorUid];
   const page = Math.max(1, Math.min(10000, Number.isSafeInteger(options.page) ? Number(options.page) : 1));
   const pageSize = 10;
   // workerd limits each compound SELECT to five terms. Materialized source groups
   // preserve one database snapshot and global ordering/counts without flattening seven terms.
   const result = await db.prepare(`WITH reviewer AS MATERIALIZED (
-    SELECT member.*,member.member_uid=member.owner_uid is_owner FROM trade_team_members member
-    WHERE member.owner_uid=? AND member.id=? AND member.member_uid=? AND member.status='active'
-      AND NOT EXISTS(SELECT 1 FROM trade_crew_members crew WHERE crew.owner_uid=member.owner_uid AND crew.member_id=member.id)
+    ${reviewer}
   ), jobs AS MATERIALIZED (
     SELECT w.id,w.firebase_uid,w.work_number,w.title,w.stage,d.pipeline_stage,d.crm_customer_id,
-      reviewer.is_owner,reviewer.id reviewer_member_id,reviewer.schedule_scope,
-      reviewer.is_owner OR (reviewer.can_view_quotes=1 AND reviewer.can_send_quotes=1) review_quotes,
-      reviewer.is_owner OR (reviewer.can_view_invoices=1 AND reviewer.can_manage_invoices=1) review_invoices,
-      reviewer.is_owner OR (reviewer.can_view_customers=1 AND reviewer.can_reschedule_jobs=1) review_bookings,
+      reviewer.full_review,reviewer.id reviewer_member_id,reviewer.schedule_scope,
+      reviewer.full_review OR (reviewer.can_view_quotes=1 AND reviewer.can_send_quotes=1) review_quotes,
+      reviewer.full_review OR (reviewer.can_view_invoices=1 AND reviewer.can_manage_invoices=1) review_invoices,
+      reviewer.full_review OR (reviewer.can_view_customers=1 AND reviewer.can_reschedule_jobs=1) review_bookings,
       (SELECT lower(trim(customer.email)) FROM trade_crm_customers customer
         WHERE customer.id=d.crm_customer_id AND customer.firebase_uid=w.firebase_uid AND customer.record_status='active') customer_email
     FROM trade_work_orders w JOIN trade_crm_job_details d ON d.work_order_id=w.id AND d.firebase_uid=w.firebase_uid
     JOIN reviewer ON reviewer.owner_uid=w.firebase_uid
     WHERE w.partner_type='installer' AND w.record_status='active'
       AND w.source_type<>'opportunity' AND d.customer_source IN ('trade_owned','public_lead_released')
-      AND (reviewer.is_owner=1 OR reviewer.job_scope='team' OR ${jobMemberSql("w", "reviewer.id")})
+      AND (reviewer.full_review=1 OR reviewer.job_scope='team' OR ${jobMemberSql("w", "reviewer.id")})
       AND (?='' OR w.id=?)
   ), commercial_exceptions AS MATERIALIZED (
     SELECT 'quote:'||delivery.id id,w.id work_order_id,'Quote email' label,delivery.status,delivery.updated_at,'quote' tab
@@ -89,7 +96,7 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
         AND latest.id<'calendar-invite:'||appointment.id||':'||appointment.revision||';'
       ORDER BY latest.id DESC LIMIT 1)
     WHERE w.review_bookings=1 AND appointment.status IN ('scheduled','cancelled') AND (${CURRENT_SALES} OR appointment.status='cancelled')
-      AND (w.is_owner=1 OR w.schedule_scope='team' OR appointment.assignee_member_id=w.reviewer_member_id)
+      AND (w.full_review=1 OR w.schedule_scope='team' OR appointment.assignee_member_id=w.reviewer_member_id)
       AND event.event_type IN ('customer_calendar_invite_failed','customer_calendar_invite_unavailable','customer_calendar_invite_reconciliation_required')
     UNION ALL
     SELECT 'documents:'||delivery.id,w.id,'Booking documents',
@@ -98,7 +105,7 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
     JOIN trade_activity_customer_document_deliveries delivery ON delivery.id=(SELECT latest.id FROM trade_activity_customer_document_deliveries latest
       WHERE latest.work_order_id=w.id AND latest.appointment_id=appointment.id AND latest.firebase_uid=w.firebase_uid
       ORDER BY latest.created_at DESC,latest.delivery_generation DESC,latest.id DESC LIMIT 1)
-    WHERE w.is_owner=1 AND ${CURRENT_SALES} AND (delivery.status IN ('failed','bounced','complained','suppressed') OR delivery.provider_status='reconciliation_required')
+    WHERE w.full_review=1 AND ${CURRENT_SALES} AND (delivery.status IN ('failed','bounced','complained','suppressed') OR delivery.provider_status='reconciliation_required')
       AND NOT EXISTS(SELECT 1 FROM json_each(delivery.activity_bindings) binding WHERE NOT EXISTS(
         SELECT 1 FROM trade_work_order_compliance_intents intent WHERE intent.work_order_id=w.id AND intent.installer_uid=w.firebase_uid
           AND intent.status IN ('planned','case_linked') AND intent.activity_template_id=json_extract(binding.value,'$.activityTemplateId')
@@ -111,11 +118,11 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
       WHERE latest.inspection_id=inspection.id AND latest.firebase_uid=w.firebase_uid AND latest.report_id=inspection.issued_report_id
         AND latest.event_type IN ('report_email_requested','report_email_accepted','report_email_failed')
       ORDER BY latest.created_at DESC,CASE latest.event_type WHEN 'report_email_accepted' THEN 0 WHEN 'report_email_failed' THEN 1 ELSE 2 END,latest.id DESC LIMIT 1)
-    WHERE w.is_owner=1 AND event.event_type='report_email_failed'
+    WHERE w.full_review=1 AND event.event_type='report_email_failed'
     UNION ALL
     SELECT 'follow-up:'||message.id,w.id,'Customer follow-up',message.status,message.updated_at,'messages'
     FROM jobs w JOIN trade_follow_up_messages message ON message.owner_uid=w.firebase_uid AND message.work_order_id=w.id
-    WHERE w.is_owner=1 AND ${CURRENT_SALES} AND message.status IN ('failed','uncertain') AND (message.status='uncertain' OR message.next_attempt_at='')
+    WHERE w.full_review=1 AND ${CURRENT_SALES} AND message.status IN ('failed','uncertain') AND (message.status='uncertain' OR message.next_attempt_at='')
       AND w.customer_email<>'' AND lower(trim(message.recipient))=w.customer_email
       AND message.id=(SELECT latest.id FROM trade_follow_up_messages latest WHERE latest.owner_uid=w.firebase_uid AND latest.work_order_id=w.id
         AND latest.template_id=message.template_id AND latest.context_json=message.context_json
@@ -129,7 +136,7 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
     SELECT * FROM commercial_exceptions UNION ALL SELECT * FROM operational_exceptions
   ) SELECT exceptions.*,jobs.work_number,jobs.title,COUNT(*) OVER() total FROM exceptions JOIN jobs ON jobs.id=exceptions.work_order_id
     ORDER BY exceptions.updated_at DESC,exceptions.id DESC LIMIT ? OFFSET ?`)
-    .bind(access.ownerUid, access.memberId, access.actorUid, workOrderId, workOrderId, pageSize, (page - 1) * pageSize).all<Row>();
+    .bind(...reviewerValues, workOrderId, workOrderId, pageSize, (page - 1) * pageSize).all<Row>();
   const items: CustomerDeliveryException[] = result.results.map(row => {
     const status = ["uncertain", "reconciliation_required"].includes(row.status) ? "uncertain"
       : ["unavailable", "waiting_for_channel", "complained", "opted_out", "suppressed"].includes(row.status) ? "blocked" : "failed";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusinessFetch, useTradeSupportReadOnly } from "./TradeBusinessProvider";
 
 import type { User } from "firebase/auth";
 import { useCallback, useEffect, useState } from "react";
@@ -28,6 +28,7 @@ function activityProgressText(item: FieldRecord) {
 
 export function TradeActivityFieldRecords({ user, workOrderId, canShare, refreshKey }: { user: User; workOrderId: string; canShare: boolean; refreshKey: number }) {
   const fetch = useTradeBusinessFetch();
+  const supportReadOnly = useTradeSupportReadOnly();
   const [records, setRecords] = useState<FieldRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -76,7 +77,7 @@ export function TradeActivityFieldRecords({ user, workOrderId, canShare, refresh
         {report?.id === item.id ? <a href={report.url} download={report.name}>Download completed report</a> : null}
         {canShare && item.lifecycleStatus !== "imported" ? <button type="button" disabled={busy} onClick={() => void shareReport(item)}>Create share link</button> : null}
         {share?.id === item.id ? <p><a href={share.url} target="_blank" rel="noreferrer">Open shareable report</a> · Link expires in 30 days. Previous links for this report are replaced.</p> : null}
-      </div> : item.lifecycleStatus !== "imported" ? <a href={`aeafield://job/${encodeURIComponent(workOrderId)}`}>Open job in TLink app</a> : null}
+      </div> : !supportReadOnly && item.lifecycleStatus !== "imported" ? <a href={`aeafield://job/${encodeURIComponent(workOrderId)}`}>Open job in TLink app</a> : null}
     </article>)}
     {!busy && !error && !records.length ? <p>No activity forms are attached to this job.</p> : null}
   </section>;

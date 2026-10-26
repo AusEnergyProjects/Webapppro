@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
@@ -85,6 +86,7 @@ async function fixture(t) {
   });
   const routedDb = { prepare: query => statement(query), batch: statements => db.batch(statements.map(item => item.native)) };
   const route = load('../src/app/api/trade-customer-hub/route.ts', {
+    '@/lib/admin-job-read-access': adminJobRead,
     '../../../../db': { getD1: () => routedDb }, '@/lib/admin-server': { sameOrigin: () => true, mfaErrorResponse: () => null },
     '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access },
     '@/lib/trade-customer-hub-server': tradeServer, '@/lib/customer-quote-hub-server': hubServer,
@@ -99,6 +101,21 @@ async function fixture(t) {
   return { db, route, get, patch, owner: access, setAccess: value => { access = value; }, beforeWrite: hook => { beforeWrite = hook; },
     recipient: { ownerUid: 'owner', workOrderId: 'work', customerId: 'customer', recipientEmail: email } };
 }
+
+test('admin support customer Q&A scope reads only the selected job without granting interest or reply writes', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.patch(true, 0)).status, 200);
+  const support = { ...f.owner, actorUid: 'actual-admin', isOwner: false, memberId: '', canManageQuotes: false, supportWorkOrderId: 'work' };
+  const result = await tradeServer.tradeHubView(f.db, support, 'work');
+  assert.equal(result.available, true); assert.equal(result.workOrderId, 'work');
+  assert.equal(result.canAsk, false); assert.equal(result.canManageInterest, false);
+  assert.doesNotMatch(JSON.stringify(result), /encrypted_token|token_hash|customer-hub\//);
+  assert.throws(() => tradeServer.tradeHubScope(support, 'another-job'), /CUSTOMER_HUB_ACCESS_ENDED/);
+  assert.throws(() => tradeServer.tradeHubScope(support, 'work', true), /CUSTOMER_HUB_ACCESS_ENDED/);
+  assert.throws(() => tradeServer.tradeHubScope(support, 'work', false, 'match'), /CUSTOMER_HUB_ACCESS_ENDED/);
+  await f.db.prepare("UPDATE public_trade_lead_contact_releases SET postcode='3001' WHERE id='release'").run();
+  assert.equal((await tradeServer.tradeHubView(f.db, support, 'work')).available, false);
+});
 
 test('actual D1 executes new all-qualified hub GET, interest PATCH and exact quote email scopes without Creditex approval', async t => {
   const f = await fixture(t);

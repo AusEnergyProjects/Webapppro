@@ -20,7 +20,7 @@ const fixtures = {
   public: `export const LazyPublicEnergyAssistantWidget=()=>null;`,
   picker: `export const WattzunRecordPicker=()=>null;`,
   review: `import React from 'react';export function WattzunActionReview({onCreated,onCancel}) {return <section aria-label="Synthetic reviewed action"><button onClick={()=>onCreated({kind:'quote_draft',id:'saved-quote-23',workOrderId:'saved-job-23',versionId:'saved-version-23',href:'/direct-trade/dashboard?workspace=work&jobId=saved-job-23&jobTab=quote',label:'Open saved quote draft'})}>Confirm synthetic quote</button><button onClick={onCancel}>Cancel synthetic quote</button></section>;}`,
-  quoteBusiness: `import {useMemo} from 'react';import {createTradeBusinessFetch} from './src/lib/trade-business-client';export const useTradeBusiness=()=>({ownerUid:'synthetic-business'});export const useTradeBusinessFetch=()=>useMemo(()=>createTradeBusinessFetch('synthetic-business',location.origin,window.fetch),[]);`,
+  quoteBusiness: `import {useMemo} from 'react';import {createTradeBusinessFetch} from './src/lib/trade-business-client';export const useTradeBusiness=()=>({ownerUid:'synthetic-business'});export const useTradeSupportReadOnly=()=>false;export const useTradeBusinessFetch=()=>useMemo(()=>createTradeBusinessFetch('synthetic-business',location.origin,window.fetch),[]);`,
   quoteLeaf: `export const TradeCustomerHubPanel=()=>null;export const TradeQuoteStockNotice=()=>null;export const TradeSolarEquipmentList=()=>null;export const TradeQuoteLivePreview=()=>null;`,
   // The real call lifecycle has deterministic clock tests. This fixture checks only the real UI wiring,
   // with no microphone, audio playback or provider access.

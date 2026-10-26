@@ -68,7 +68,7 @@ function harness(t, api, options = {}) {
     if (name === "./CustomerHubFilePreview") return sharedPreview;
     if (name === "./TradeCustomerHubAssist") return { TradeCustomerHubAssist: "TradeCustomerHubAssist" };
     if (name === "react/jsx-runtime") return jsx;
-    if (name === "./TradeBusinessProvider") return { useTradeBusinessFetch: () => {
+    if (name === "./TradeBusinessProvider") return { useTradeSupportReadOnly: () => false, useTradeBusinessFetch: () => {
       if (scopedOwner !== ownerUid) { scopedOwner = ownerUid; request = createTradeBusinessFetch(ownerUid, "https://ausenergyassessments.com", transport); }
       return request;
     }, useTradeBusiness: () => ({ ownerUid }) };

@@ -1394,6 +1394,8 @@ test("a missing immutable activity PDF is restored at the same key for authentic
     const shared = await server.sharedActivityRecord(shareUrl.searchParams.get("reportToken"));
 
     objects.delete(row.pdf_object_key);
+    await assert.rejects(server.readActivityPdf(record, { readOnly: true }), /ACTIVITY_REPORT_STORAGE_MISSING/);
+    assert.equal(objects.has(row.pdf_object_key), false, "Support reads must not regenerate missing report bytes");
     assert.equal(new TextDecoder().decode((await server.readActivityPdf(record)).bytes), "%PDF-test-final-custody");
     assert.equal(core.activityHash(objects.get(row.pdf_object_key)), row.pdf_sha256);
     assert.equal(new TextDecoder().decode((await server.readActivityPdf(shared)).bytes), "%PDF-test-final-custody");

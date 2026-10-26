@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { adminJobReadError } from "./admin-job-read-error";
 import { requireFirebaseIdentity, type FirebaseIdentity } from "@/lib/firebase-server";
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL, requireSecondFactor } from "@/lib/firebase-mfa";
 import { hasMyobIntegrationData, writeMyobSecurityEvent } from "@/lib/myob-security-audit";
@@ -36,6 +37,8 @@ export function adminError(error: unknown) {
 }
 
 export function mfaErrorResponse(error: unknown) {
+  const supportError = adminJobReadError(error);
+  if (supportError) return supportError;
   // Keep context-selection failures actionable in the existing shared access-response path.
   const code = error instanceof Error && "code" in error ? error.code : error instanceof Error ? error.message : "";
   if (code === "BUSINESS_SELECTION_REQUIRED") return adminJson({ ok: false, code,

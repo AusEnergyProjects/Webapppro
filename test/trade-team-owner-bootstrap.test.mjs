@@ -1,4 +1,5 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as firebaseMfa from "../src/lib/firebase-mfa.ts";
 import * as myobSecurityAudit from "../src/lib/myob-security-audit.ts";
 import assert from "node:assert/strict";
@@ -37,6 +38,7 @@ function loadServer(database, overrides = {}) {
   }).outputText;
   const moduleRecord = { exports: {} };
   const mocks = {
+    "./admin-job-read-access": adminJobRead,
     "./trade-crews-server": { applyTradeCrewAccess: async access => access },
     "@/lib/trade-job-collaboration": jobCollaboration, "./trade-job-collaboration": jobCollaboration,
     "./firebase-mfa": firebaseMfa,

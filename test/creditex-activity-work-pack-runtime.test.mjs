@@ -2847,6 +2847,33 @@ test("SRES activation binds eight current reviewed gates and invalidates stale s
   /COMPLIANCE_SRES_ACTIVATION_SNAPSHOT_IMMUTABLE/);
 });
 
+test('admin support reads only its selected work pack and cannot mutate retained trade records', async () => {
+  const { sqlite, database: mutableDatabase } = await seededRuntime();
+  try {
+    const { projection } = await openAssignedRuntimeWorkPack(mutableDatabase);
+    const database = {
+      prepare(sql) { assert.match(sql.trim(), /^(SELECT|WITH)\b/i, 'Support cannot install schema guards or change records'); return mutableDatabase.prepare(sql); },
+      batch() { throw new Error('Support cannot execute write batches'); },
+    };
+    const support = { ...ownerScope(), actorUid: 'real-admin', actorMemberId: '', supportWorkOrderId: WORK_ORDER_ID };
+    const before = sqlite.prepare('SELECT * FROM compliance_activity_work_pack_instances ORDER BY id').all();
+    const input = { ...support, caseInstanceId: projection.instance.id };
+    const read = await server.loadAssignedCreditexActivityWorkPack(database, input);
+    assert.equal(read.instance.workOrderId, WORK_ORDER_ID);
+    const listed = await server.listAssignedCreditexActivityWorkPacks(database, { ...support, workOrderIds: [WORK_ORDER_ID] });
+    assert.equal(listed.length, 1);
+    for (const workOrderIds of [[], ['another-job'], [WORK_ORDER_ID, 'another-job']]) {
+      await assert.rejects(server.listAssignedCreditexActivityWorkPacks(database, { ...support, workOrderIds }), error => error.code === 'ADMIN_JOB_SCOPE_REQUIRED');
+    }
+    await assert.rejects(server.loadAssignedCreditexActivityWorkPack(database, { ...input, supportWorkOrderId: 'another-job' }), error => error.code === 'ADMIN_JOB_SCOPE_REQUIRED');
+    for (const name of ['commitAssignedCreditexActivityWorkPack', 'prepareAssignedCreditexActivityWorkPackSigning', 'finaliseAssignedCreditexActivityWorkPack']) {
+      await assert.rejects(server[name](database, { ...input, expectedResponseSha256: projection.instance.responseSha256, idempotency: idempotency(`blocked-support-${name}`) }), error => error.code === 'ADMIN_JOB_READ_ONLY', name);
+    }
+    assert.deepEqual(sqlite.prepare('SELECT * FROM compliance_activity_work_pack_instances ORDER BY id').all(), before);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM trade_offline_actions').get().n, 0);
+  } finally { sqlite.close(); }
+});
+
 test('Imported work packs remain readable and reject every assigned execution mutation',async()=>{
  const {sqlite,database}=await seededRuntime();
  try{

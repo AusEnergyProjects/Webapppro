@@ -1,4 +1,5 @@
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { requireTeamCommunicationAccess } from "@/lib/trade-communications-access";
 import { getCustomerProjectEvidenceBucket } from "@/lib/customer-project-evidence-bucket";
@@ -9,6 +10,7 @@ import { listSavedMessageJobFiles, MessageJobFileError, saveMessageToJob, search
 export const runtime = "edge";
 
 function failure(error: unknown) {
+  const supportError = adminJobReadError(error); if (supportError) return supportError;
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   if (error instanceof MessageJobFileError) return adminJson({ ok: false, error: error.message }, error.status);
@@ -25,8 +27,9 @@ function failure(error: unknown) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const actor = await requireTeamCommunicationAccess(request), query = new URL(request.url).searchParams;
+    const actor = await requireAdminJobReadAccess(request) ?? await requireTeamCommunicationAccess(request), query = new URL(request.url).searchParams;
     if (query.has("workOrderId")) return adminJson({ ok: true, files: await listSavedMessageJobFiles(getD1(), actor, query.get("workOrderId")) });
+    if (actor.supportWorkOrderId) return adminJson({ ok: false, error: "Choose the current job's saved files." }, 403);
     return adminJson({ ok: true, jobs: await searchMessageSaveJobs(getD1(), actor, {
       threadId: query.get("threadId"), messageId: query.get("messageId"), search: query.get("search"),
     }) });
@@ -36,6 +39,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const actor = await requireTeamCommunicationAccess(request);
     let value: unknown;
     try { value = JSON.parse(await readBoundedRequestText(request, 2048)); }

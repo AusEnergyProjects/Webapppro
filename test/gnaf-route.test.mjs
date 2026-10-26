@@ -17,6 +17,7 @@ function declarations(path, names) {
 }
 const stubs = {
   "@/lib/admin-server": `import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from './src/lib/firebase-mfa.ts';
+    import { adminJobReadError } from './src/lib/admin-job-read-error.ts';
     ${declarations("src/lib/admin-server.ts", ["sameOrigin", "adminJson", "mfaErrorResponse"])}`,
   "@/lib/trade-access-server": declarations("src/lib/trade-access-server.ts", ["TradeAccessError"]),
   "@/lib/trade-team-server": `let error=null,calls=0;

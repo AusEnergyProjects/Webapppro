@@ -20,12 +20,12 @@ const JOB_FROM = `FROM trade_work_orders w JOIN trade_accounts business ON busin
   LEFT JOIN trade_crm_service_sites site ON site.id=d.service_site_id AND site.firebase_uid=w.firebase_uid
     AND site.customer_id=d.crm_customer_id AND site.record_status='active'
   LEFT JOIN trade_team_members lead ON lead.id=w.assignee_member_id AND lead.owner_uid=w.firebase_uid AND lead.status='active'
-  JOIN trade_team_members swms_actor ON swms_actor.id=? AND swms_actor.owner_uid=w.firebase_uid`;
+  LEFT JOIN trade_team_members swms_actor ON swms_actor.id=? AND swms_actor.owner_uid=w.firebase_uid`;
 const CONTEXT_SQL = `json_object('businessName',business.business_name,'abn',COALESCE(NULLIF(business.verified_abn,''),business.abn),
   'workNumber',w.work_number,'jobTitle',CASE WHEN w.source_type='opportunity' OR d.customer_source='platform_private' THEN 'Protected job' ELSE w.title END,
   'siteAddress',CASE WHEN w.source_type<>'opportunity' AND d.customer_source IN ('trade_owned','public_lead_released')
     THEN trim(COALESCE(site.address_line_1,'') || ' ' || COALESCE(site.address_line_2,'') || ' ' || COALESCE(site.suburb,'') || ' ' || COALESCE(site.address_state,'') || ' ' || COALESCE(site.postcode,'')) ELSE '' END,
-  'leadId',COALESCE(lead.id,''),'leadName',COALESCE(lead.display_name,''),'signerId',swms_actor.id,'signerName',swms_actor.display_name,
+  'leadId',COALESCE(lead.id,''),'leadName',COALESCE(lead.display_name,''),'signerId',COALESCE(swms_actor.id,''),'signerName',COALESCE(swms_actor.display_name,''),
   'visits',json(COALESCE((SELECT json_group_array(json(ordered_visit.item)) FROM (
     SELECT json_object('id',visit.id,'memberId',worker.id,'name',worker.display_name) item
     FROM trade_crm_appointments visit JOIN trade_team_members worker ON worker.id=visit.assignee_member_id
@@ -35,6 +35,7 @@ const CONTEXT_SQL = `json_object('businessName',business.business_name,'abn',COA
   ) ordered_visit),'[]')))`;
 
 function accessSql(access: TeamAccess, write = false) {
+  if (access.supportWorkOrderId) return { sql: "w.id = ? AND w.firebase_uid = ? AND ? = 0", values: [access.supportWorkOrderId, access.ownerUid, write ? 1 : 0] };
   const actor = messageActorGuard(access);
   return { sql: `${actor.sql} AND swms_actor.can_view_field_evidence=1 ${write ? "AND swms_actor.can_manage_field_evidence=1" : ""}
     AND (swms_actor.member_uid=swms_actor.owner_uid OR (
@@ -44,7 +45,7 @@ function accessSql(access: TeamAccess, write = false) {
 async function currentJob(db: D1Database, access: TeamAccess, workOrderId: string): Promise<Job> {
   const guard = accessSql(access);
   const row = await db.prepare(`SELECT w.id,w.stage,w.revision,w.assignee_member_id,COALESCE(d.pipeline_stage,'') pipeline_stage,
-    swms_actor.can_manage_field_evidence can_manage,${CONTEXT_SQL} context_snapshot ${JOB_FROM}
+    COALESCE(swms_actor.can_manage_field_evidence,0) can_manage,${CONTEXT_SQL} context_snapshot ${JOB_FROM}
     WHERE w.id=? AND w.firebase_uid=? AND w.partner_type='installer' AND w.record_status='active' AND ${guard.sql}`)
     .bind(access.memberId, workOrderId, access.ownerUid, ...guard.values).first<Omit<Job, "context">>();
   if (!row) throw new SwmsError("This job is unavailable or outside your current field access.", 403);
@@ -80,8 +81,9 @@ async function saved(db: D1Database, access: TeamAccess, workOrderId: string) {
 }
 export async function loadSwms(db: D1Database, access: TeamAccess, workOrderId: string): Promise<SwmsPayload> {
   const job = await currentJob(db, access, workOrderId), row = await saved(db, access, workOrderId);
+  const savedRecord = row ? record(row, access.supportWorkOrderId ? undefined : job.context) : null;
   return { ok: true, jobRevision: Number(job.revision), template: row ? JSON.parse(row.template_snapshot) : SWMS_TEMPLATE,
-    context: job.context, record: row ? record(row, job.context) : null, capabilities: capabilities(job, row) };
+    context: access.supportWorkOrderId && savedRecord ? savedRecord.context : job.context, record: savedRecord, capabilities: capabilities(job, row) };
 }
 
 function mutationGuard(db: D1Database, access: TeamAccess, job: Job, now: string, row?: Row) {

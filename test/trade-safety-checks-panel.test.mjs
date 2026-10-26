@@ -142,7 +142,7 @@ test('authorised completed-job reader can retry retained email and recover pendi
 test('view-only access cannot start, edit, sign or complete, even if a stale delivery flag is present', async () => {
   const h = harness({ canManage: false, readOnly: true, canManageDelivery: true }); let tree = await opened(h);
   assert.ok(nodes(tree, node => node.type === 'input').every(node => node.props.disabled));
-  const gas = nodes(tree, node => node.type === 'button' && text(node).startsWith('Gas safety check'))[0]; assert.equal(gas.props.disabled, true);
+  assert.equal(nodes(tree, node => node.type === 'button' && text(node).startsWith('Gas safety check')).length, 0, 'View-only users must not see controls for creating unattached safety checks.');
   tree = await click(h, tree, 'Sign off');
   assert.equal(nodes(tree, node => node.type === 'signature-pad')[0].props.disabled, true);
   assert.equal(button(tree, 'Save signature').props.disabled, true);

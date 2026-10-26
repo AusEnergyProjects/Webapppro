@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import * as firebaseMfa from '../../src/lib/firebase-mfa.ts';
 import * as myobSecurityAudit from '../../src/lib/myob-security-audit.ts';
+import * as adminJobReadError from '../../src/lib/admin-job-read-error.ts';
 
 // Load production response translation without providing a permissive auth or
 // database stub. These API fixtures supply their own scoped access separately.
@@ -12,6 +13,7 @@ const dependencies = {
   '@/lib/firebase-server': { requireFirebaseIdentity: unavailableRuntime },
   '@/lib/firebase-mfa': firebaseMfa,
   '@/lib/myob-security-audit': myobSecurityAudit,
+  './admin-job-read-error': adminJobReadError,
 };
 const source = fs.readFileSync(new URL('../../src/lib/admin-server.ts', import.meta.url), 'utf8');
 const output = ts.transpileModule(source, {

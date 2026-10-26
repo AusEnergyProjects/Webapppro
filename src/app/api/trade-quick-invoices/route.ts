@@ -1,4 +1,5 @@
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { acceptedInvoiceEmailStatus, retryAcceptedInvoiceEmail } from "@/lib/trade-accepted-invoice-delivery-server";
 import { withAccountingDispatch } from "@/lib/trade-accounting-automation-dispatch";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
@@ -40,6 +41,7 @@ function invoiceAccessPayload(access: TeamAccess) {
 }
 
 function invoiceError(error: unknown) {
+  const supportError = adminJobReadError(error); if (supportError) return supportError;
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const code = error instanceof Error ? error.message : "";
@@ -47,6 +49,8 @@ function invoiceError(error: unknown) {
   if (code.startsWith("ACCEPTED_INVOICE_PAYMENT_")) return adminJson({ ok: false, error: "The saved invoice payment details need checking before this email can be sent." }, 409);
   if (["ACCEPTED_INVOICE_ACCESS_ENDED", "ACCEPTED_INVOICE_DOCUMENT_INVALID", "ACCEPTED_INVOICE_RECIPIENT_INVALID"].includes(code)) return adminJson({ ok: false, error: "The accepted invoice or customer contact needs checking before this email can be sent." }, 409);
   if (code === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
+  if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This invoice belongs to a job outside your current access." }, 403);
+  if (code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "The invoice job was not found." }, 404);
   if (["ACCOUNT_INACTIVE", "INSTALLER_ONLY", "FULL_ACCESS_REQUIRED", "TEAM_ACCESS_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "ABN_REVIEW_REQUIRED", "EMAIL_VERIFICATION_REQUIRED"].includes(code)) return adminJson({ ok: false, error: "This installer account does not currently have invoice access." }, 403);
   if (code === "QUICK_INVOICE_MANAGEMENT_REQUIRED") return adminJson({ ok: false, error: "Only the owner, manager or coordinator can manage customer invoices." }, 403);
   if (code === "DISCOUNT_REQUIRED") return adminJson({ ok: false, error: "Your team access does not allow discounts, credits or price reductions." }, 403);
@@ -304,7 +308,7 @@ function payload(
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     requireInvoiceAccess(access);
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
     if (!workOrderId) return adminJson({ ok: false, error: "Choose a job." }, 400);
@@ -327,6 +331,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const access = await requireInstallerTeamAccess(request);
     requireInvoiceAccess(access, true);
     const body = await request.json().catch(() => ({})) as Row;

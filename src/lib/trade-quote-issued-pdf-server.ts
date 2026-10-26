@@ -144,6 +144,7 @@ export async function issuedTradeQuotePdf(input: {
   quoteVersionId: string;
   snapshot: TradeQuoteDocumentSnapshot;
   origin: string;
+  allowBackfill?: boolean;
 }) {
   if (input.snapshot.quoteVersionId !== input.quoteVersionId) {
     throw new Error("QUOTE_DOCUMENT_INVALID");
@@ -163,6 +164,7 @@ export async function issuedTradeQuotePdf(input: {
       reference: existingReference,
     };
   }
+  if (input.allowBackfill === false) throw new Error("QUOTE_ISSUED_PDF_UNAVAILABLE");
 
   // Legacy issued versions predate exact-byte storage. Re-rendering is only
   // safe when it reproduces an attachment hash already recorded at delivery.

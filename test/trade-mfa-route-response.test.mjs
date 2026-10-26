@@ -7,6 +7,7 @@ import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from '.
 import { TradeMapInputError } from '../src/lib/trade-map-dataset-server.ts';
 import { TradeMapLocationInputError } from '../src/lib/trade-map-location-cache.ts';
 import { jobSalesOutcomeFixture } from './helpers/trade-job-sales-outcome-fixture.mjs';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -28,13 +29,14 @@ function compileFunctions(path, names, dependencies) {
 // as an actionable HTTP response before any financial read or write begins.
 const admin = compileFunctions('src/lib/admin-server.ts',
   ['adminJson', 'mfaErrorResponse', 'sameOrigin', 'cleanAdminText'],
-  { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL });
+  { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL, adminJobReadError: adminJobRead.adminJobReadError });
 
 function deniedRoute(routeName, error) {
   let guardCalls = 0;
   let databaseCalls = 0;
   class OtherDomainError extends Error {}
   const dependencies = {
+    ...adminJobRead,
     ...jobSalesOutcomeFixture,
     ...admin,
     requireInstallerTeamAccess: async () => { guardCalls += 1; throw error; },

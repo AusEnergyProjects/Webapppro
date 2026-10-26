@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import { migratedDataforceSqlite } from "./helpers/trade-dataforce-database.mjs";
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import * as records from "../src/lib/wattzun-records.ts";
@@ -55,6 +56,7 @@ function fixture(t, options = {}) {
   insert("trade_work_orders", { id: "job-other", firebase_uid: "business-two", partner_type: "installer", source_type: "internal", work_number: "PRIVATE_OTHER_JOB", title: "PRIVATE_OTHER_TITLE", service_category: "electrical", stage: "ready", assignee_member_id: "member-two", record_status: "active", created_at: now, updated_at: now });
   insert("trade_work_order_tasks", { id: "task-other", work_order_id: "job-other", firebase_uid: "business-two", title: "PRIVATE_OTHER_TASK", status: "pending", created_at: now, updated_at: now });
   const teamSource = load("../src/lib/trade-team-server.ts", {
+    "./admin-job-read-access": adminJobRead,
     "../../db": { getD1: () => db }, "./trade-job-collaboration": collaboration,
     "./firebase-server": {}, "./trade-mfa-server": {}, "./trade-access-server": {},
     "./trade-business-context-server": {}, "./trade-team-permission-policy.mjs": {},

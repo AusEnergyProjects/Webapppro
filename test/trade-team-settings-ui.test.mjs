@@ -245,7 +245,7 @@ test("delegated field work never offers the unsupported handover route", () => {
   assert.match(crm, /disabled=\{isImported \|\| !canManageJobs \|\| busy === `task-toggle:/);
   assert.match(crm, /\{canManageJobs && <form className="crm-inline-form note"/);
   assert.doesNotMatch(crm, /hideAssets|Assets and history/, "The removed customer asset panel cannot expose an owner-only route to staff");
-  assert.match(crm, /\{!permissions && !isLost && <TradeCommercialHandoffPanel/);
+  assert.match(crm, /\{!supportReadOnly && !permissions && !isLost && <TradeCommercialHandoffPanel/);
 });
 
 test("staff job creation and scoped job context do not leak directory search", () => {

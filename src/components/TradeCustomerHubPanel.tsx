@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onIdTokenChanged, type User } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase-client";
-import { useTradeBusiness, useTradeBusinessFetch } from "./TradeBusinessProvider";
+import { useTradeBusiness, useTradeBusinessFetch, useTradeSupportReadOnly } from "./TradeBusinessProvider";
 import type { TradeHubQuestion } from "@/lib/customer-quote-hub";
 import { CustomerHubFilePreview } from "./CustomerHubFilePreview";
 import styles from "./TradeCustomerHubPanel.module.css";
@@ -40,15 +40,17 @@ export function TradeCustomerHubInterest({ matchId, onOpenQa, disabled = false }
 
 function Panel(props: PanelProps) {
   const business = useTradeBusiness();
+  const supportReadOnly = useTradeSupportReadOnly();
   const [user, setUser] = useState<User | null>(firebaseAuth.currentUser);
   useEffect(() => onIdTokenChanged(firebaseAuth, setUser), []);
   if (!user?.emailVerified) return <p className={styles.status} role="status">Sign in with your verified account to open Customer Q&amp;A.</p>;
-  if (!business?.ownerUid) return <p className={styles.status} role="status">Choose your business to open Customer Q&amp;A.</p>;
-  return <AuthenticatedPanel key={`${user.uid}:${business.ownerUid}`} {...props} user={user} />;
+  if (!business?.ownerUid && !supportReadOnly) return <p className={styles.status} role="status">Choose your business to open Customer Q&amp;A.</p>;
+  return <AuthenticatedPanel key={`${user.uid}:${business?.ownerUid || "support"}`} {...props} user={user} />;
 }
 
 function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, onOpenQa, disabled = false, questionId, navigationNonce }: PanelProps & { user: User }) {
   const businessRequest = useTradeBusinessFetch();
+  const supportReadOnly = useTradeSupportReadOnly();
   const [data, setData] = useState<Result | null>(null);
   const [prompt, setPrompt] = useState("");
   const [kind, setKind] = useState<RequestKind>("text");
@@ -64,7 +66,7 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
   const endpoint = `/api/trade-customer-hub?${matchId ? `matchId=${encodeURIComponent(matchId)}` : `workOrderId=${encodeURIComponent(workOrderId || "")}`}`;
   const questions = data?.questions || [];
   const duplicate = prompt.trim() ? questions.find(question => question.prompt.trim().toLowerCase() === prompt.trim().toLowerCase()) : undefined;
-  const canWrite = Boolean(data?.interested && data.accepting && data.canAsk);
+  const canWrite = !supportReadOnly && Boolean(data?.interested && data.accepting && data.canAsk);
   useEffect(() => {
     const target = questionId && data?.questions?.some(question => question.id === questionId) ? questionElements.current[questionId] : null;
     const key = `${navigationNonce}:${questionId}`;
@@ -121,6 +123,7 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
     if (isCurrent()) { setBusy(""); void load(); }
   }
   async function save(method: "POST" | "PATCH", body: object) {
+    if (supportReadOnly) throw new Error("This support view is read only.");
     const response = await request("/api/trade-customer-hub", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json() as Result;
     if (!response.ok || !result.ok) {
@@ -170,7 +173,7 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
   if (!data?.available) return interestOnly ? <div className={styles.panel}><p className={styles.status} role="status">{message || (data ? "Customer Q&A is unavailable for this lead." : "Loading lead interest...")}</p>
     {(message || data) && <button type="button" onClick={() => void load()}>Retry</button>}</div> : message ? <p className={styles.status} role="status">{message}</p> : null;
   return <section className={styles.panel} aria-label="Shared customer requests" aria-busy={Boolean(busy)}>
-    {interestOnly ? <div className={styles.interest}><div><strong>Interested in this job?</strong><small>{data.interested ? "Updates are on. Click Interested to open Customer Q&A." : "Interested adds the customer, turns on updates and opens Customer Q&A."}</small></div>
+    {supportReadOnly ? <p className={styles.status}>Customer Q&amp;A is read only in support.</p> : interestOnly ? <div className={styles.interest}><div><strong>Interested in this job?</strong><small>{data.interested ? "Updates are on. Click Interested to open Customer Q&A." : "Interested adds the customer, turns on updates and opens Customer Q&A."}</small></div>
       <div className={styles.leadInterest} role="group" aria-label="Lead interest">
         <button type="button" aria-pressed={!data.interested} disabled={disabled || Boolean(busy) || !data.canManageInterest || !data.interested} onClick={() => void toggleInterest()}>Not interested</button>
         <button type="button" aria-pressed={Boolean(data.interested)} className={styles.primary} disabled={disabled || Boolean(busy) || !data.canManageInterest}
@@ -178,9 +181,9 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
       </div></div> : <div className={styles.interest}><div><strong>Customer Q&amp;A updates</strong><small>{data.interested ? "Receive updates for this customer's shared questions and files." : "Choose Interested to receive updates and join the conversation."}</small></div>
       <button type="button" role="switch" aria-label="Interested in customer updates" aria-checked={Boolean(data.interested)} disabled={Boolean(busy) || !data.canManageInterest}
         onClick={() => void toggleInterest()}>{busy === "interest" ? "Saving…" : data.interested ? "Interested" : "Not interested"}</button></div>}
-    {!interestOnly && <><header className={styles.heading}><h4>Ask customer</h4><p>Answers and files are shared with invited businesses. Quote pricing stays private.</p></header>
+    {!interestOnly && <><header className={styles.heading}><h4>{supportReadOnly ? "Customer Q&A" : "Ask customer"}</h4><p>Answers and files are shared with invited businesses. Quote pricing stays private.</p></header>
     {!data.accepting ? <p className={styles.status} role="status">The customer has closed quotes and questions. Existing records remain available.</p>
-      : data.canAsk ? <div className={styles.composer}>
+      : !supportReadOnly && data.canAsk ? <div className={styles.composer}>
         <div className={styles.kinds} role="group" aria-label="Request type">{requestKinds.map(option => <button key={option.kind} type="button"
           aria-pressed={kind === option.kind} disabled={Boolean(busy) || !data.interested} onClick={() => setKind(option.kind)}>{option.label}</button>)}</div>
         <div className={styles.starters} role="group" aria-label="Quick request starters"><span>Start with</span>{starters.map(starter => <button key={starter.label} type="button" disabled={Boolean(busy) || !data.interested}
@@ -190,8 +193,8 @@ function AuthenticatedPanel({ user, workOrderId, matchId, interestOnly = false, 
         {duplicate && <p className={styles.duplicate} role="status">This request is already shared. Its {duplicate.answer || duplicate.files.length ? "answer or files" : "status"} is shown below.</p>}
         <div className={styles.actions}><small>The customer sees this in their private project.</small><button type="button" className={styles.primary}
           disabled={Boolean(busy) || !canWrite || prompt.trim().length < 5 || Boolean(duplicate)} onClick={() => void ask()}>{busy === "ask" ? "Adding…" : "Ask customer"}</button></div>
-      </div> : <p className={styles.status}>{data.interested ? "You can view shared requests. Quote management permission is needed to ask a question." : "Turn on Interested to ask questions and reply."}</p>}
-    {data.interested && data.canAsk && workOrderId && <TradeCustomerHubAssist workOrderId={workOrderId} questions={questions} onOpenQuestion={id => { const element = questionElements.current[id]; if (element) { element.open = true; element.scrollIntoView({ behavior: "smooth", block: "center" }); element.querySelector("summary")?.focus({ preventScroll: true }); } }} />}
+      </div> : <p className={styles.status}>{supportReadOnly ? "Saved questions, answers and shared files are shown below." : data.interested ? "You can view shared requests. Quote management permission is needed to ask a question." : "Turn on Interested to ask questions and reply."}</p>}
+    {!supportReadOnly && data.interested && data.canAsk && workOrderId && <TradeCustomerHubAssist workOrderId={workOrderId} questions={questions} onOpenQuestion={id => { const element = questionElements.current[id]; if (element) { element.open = true; element.scrollIntoView({ behavior: "smooth", block: "center" }); element.querySelector("summary")?.focus({ preventScroll: true }); } }} />}
     {questions.length > 0 && <div className={styles.history}><h5>Customer answers &amp; uploads <span>{questions.length}</span></h5><p className={styles.historyHelp}>Replies and uploaded files appear below the question they answer.</p>{questions.map(question => <details className={styles.question} key={question.id} ref={element => { questionElements.current[question.id] = element; }} open={questionId === question.id || duplicate?.id === question.id || question.files.length > 0 || undefined}>
       <summary><strong>{question.prompt}</strong><span>{question.files.length ? `${question.files.length} customer ${question.files.length === 1 ? "file" : "files"}` : question.answer || question.replies.length ? "Replied" : question.authorType === "customer" ? "Customer question" : "Awaiting reply"}</span></summary>
       <div className={styles.answer}><small>{question.authorType === "customer" ? "Asked by customer" : "Shared business question"}</small>{question.answer && <p>{question.answer}</p>}

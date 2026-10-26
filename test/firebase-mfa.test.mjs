@@ -1,4 +1,5 @@
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -86,6 +87,7 @@ test("team access applies the policy to the employer owner rather than the staff
   const guarded = [];
   const identity = { uid: "staff", email: "staff@example.invalid", emailVerified: true };
   const server = load("src/lib/trade-team-server.ts", {
+    "./admin-job-read-access": adminJobRead,
     "../../db": { getD1: () => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: "member", owner_uid: "myob-owner" }), run: async () => ({}) }) }) }) },
     "./firebase-server": { requireFirebaseIdentity: async () => identity },
     "./trade-business-context-server": {

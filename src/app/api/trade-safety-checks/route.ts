@@ -1,4 +1,5 @@
 import { adminJson, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { BoundedJsonRequestError, readBoundedJsonRequest } from "@/lib/bounded-json-request";
 import { SafetyCheckError, type SafetyCheckKind, type SafetyCheckRecord } from "@/lib/job-safety-check";
@@ -15,6 +16,7 @@ function string(value: unknown): string { if (typeof value !== "string" || !valu
 function revision(value: unknown): number { if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) invalid(); return value; }
 function kind(value: unknown): SafetyCheckKind { if (value !== "electrical" && value !== "gas") invalid(); return value; }
 function failure(error: unknown) {
+  const supportError = adminJobReadError(error); if (supportError) return supportError;
   const mfa = mfaErrorResponse(error); if (mfa) return mfa;
   if (error instanceof SafetyCheckError || error instanceof BoundedJsonRequestError) return adminJson({ ok: false, code: error.code, error: error.message }, error.status);
   const code = error instanceof Error ? error.message : "SAFETY_CHECK_REQUEST_FAILED";
@@ -28,8 +30,9 @@ function bytesResponse(data: { bytes: Uint8Array; contentType: string; fileName:
     "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" } });
 }
 export async function GET(request: Request) {
+  if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request);
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request);
     if (!access.canViewFieldEvidence) throw new SafetyCheckError(403, "SAFETY_CHECK_ACCESS_REQUIRED", "Your access does not include job safety checks.");
     const query = new URL(request.url).searchParams;
     if (query.get("view") === "catalogue" || query.get("catalogue") === "1") return adminJson({ ok: true,
@@ -59,6 +62,7 @@ async function multipart(request: Request) {
 async function mutate(request: Request, patch: boolean) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const access = await requireInstallerTeamAccess(request);
     if (!access.canManageFieldEvidence) throw new SafetyCheckError(403, "SAFETY_CHECK_ACCESS_REQUIRED", "Your access does not allow changing safety checks.");
     let record: SafetyCheckRecord;

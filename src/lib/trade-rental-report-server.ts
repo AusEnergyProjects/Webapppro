@@ -1499,7 +1499,7 @@ export async function authenticatedRentalReportPdf(input: {
   workOrderId: string;
   reportId: string;
 }) {
-  if (!input.access.canRunReports) throw new Error("REPORT_PERMISSION_REQUIRED");
+  if (!input.access.canRunReports && !input.access.supportWorkOrderId) throw new Error("REPORT_PERMISSION_REQUIRED");
   await assignedJob(input.access, input.workOrderId);
   const row = await getD1().prepare(`SELECT report.id, report.report_number, report.revision,
       report.pdf_object_key, report.pdf_sha256, report.pdf_size_bytes,
@@ -1512,7 +1512,7 @@ export async function authenticatedRentalReportPdf(input: {
       AND ${issuedRentalReportVisibilitySql} LIMIT 1`)
     .bind(input.reportId, input.access.ownerUid, input.workOrderId).first<Row>();
   if (!row) throw new Error("RENTAL_REPORT_LINK_NOT_FOUND");
-  if (!input.access.isOwner && String(row.assessor_member_id || "") !== input.access.memberId) {
+  if (!input.access.supportWorkOrderId && !input.access.isOwner && String(row.assessor_member_id || "") !== input.access.memberId) {
     throw new Error("ASSESSOR_REQUIRED");
   }
   const bytes = await readImmutableIssuedPdf({
@@ -1668,6 +1668,7 @@ export async function ownerRentalReportPresentation(input: {
   inspectionId: string;
   origin: string;
   includeSecret: boolean;
+  includeInternalPdf?: boolean;
 }) {
   const rows = await getD1().prepare(`SELECT report.id, report.report_number, report.revision, report.status,
       report.issued_at, report.pdf_size_bytes, inspection.work_order_id,
@@ -1708,7 +1709,7 @@ export async function ownerRentalReportPresentation(input: {
       status: String(row.status),
       issuedAt: String(row.issued_at || ""),
       pdfSizeBytes: number(row.pdf_size_bytes),
-      internalPdfUrl: input.includeSecret
+      internalPdfUrl: input.includeSecret || input.includeInternalPdf
         ? `${input.origin}/api/trade-rental-inspections/report/${encodeURIComponent(String(row.id))}/pdf?workOrderId=${encodeURIComponent(String(row.work_order_id))}`
         : "",
       link: row.link_id ? {

@@ -51,6 +51,7 @@ function expected(record:SafetyCheckRecord,revision:unknown) {
   if (record.status !== "draft") fail("SAFETY_CHECK_COMPLETE_LOCKED","This completed assessment is locked.");
 }
 function currentAccess(access:TeamAccess,write:boolean) {
+  if (access.supportWorkOrderId) return { sql: "w.id = ? AND w.firebase_uid = ? AND ? = 0", values: [access.supportWorkOrderId, access.ownerUid, write ? 1 : 0] };
   const account=`EXISTS(SELECT 1 FROM trade_accounts a WHERE a.firebase_uid=w.firebase_uid AND a.partner_type='installer' AND ${verifiedTradeAccountPredicate("a")})`;
   if(access.isOwner) return {sql:`${account} AND ?=w.firebase_uid`,values:[access.actorUid]};
   return {sql:`${account} AND EXISTS(SELECT 1 FROM trade_team_members m WHERE m.id=? AND m.owner_uid=w.firebase_uid AND m.status='active'

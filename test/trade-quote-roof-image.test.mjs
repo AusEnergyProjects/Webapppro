@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import { deflateSync, crc32 } from "node:zlib";
 import { PDFDocument, PDFName, PDFDict } from "pdf-lib";
 import * as roofImages from "../src/lib/trade-quote-roof-image.ts";
@@ -82,11 +83,12 @@ test("private roof storage verifies full PNG, saves an immutable identity and re
   assert.equal(writes.length, 2);
 });
 
-function routeFixture({ owned = true, assigned = true, permitted = true, priceBookView = true, priorRoof = reference, claim = true, priorEquipment = "", designWorkOrderId = "job", suppliedDocuments = [], mediaStatus = "draft" } = {}) {
+function routeFixture({ owned = true, assigned = true, permitted = true, priceBookView = true, priorRoof = reference, claim = true, priorEquipment = "", designWorkOrderId = "job", suppliedDocuments = [], mediaStatus = "draft", supportReadOnly = false, savedLink = null, savedItems = [] } = {}) {
   const queries = [], stored = [], discarded = [], loaded = [], designAccess = [], documentAccess = [], pdfLoads = [];
   const quote = { id: "quote", work_order_id: "job", current_version_number: 1, quote_number: "Q-1" };
   const version = { id: "version", quote_id: "quote", version_number: 1, status: mediaStatus, updated_at: "original", roof_image_json: priorRoof ? JSON.stringify(priorRoof) : "", equipment_json: priorEquipment, roof_design_id: "" };
-  const access = { ownerUid: "owner", actorUid: "staff", canViewQuotes: permitted, canManageQuotes: permitted, canApplyDiscounts: true, canViewPriceBook: priceBookView, isOwner: false };
+  const access = { ownerUid: "owner", actorUid: "staff", canViewQuotes: permitted, canManageQuotes: permitted, canApplyDiscounts: true, canViewPriceBook: priceBookView, isOwner: false,
+    ...(supportReadOnly ? { actorUid: "admin", supportWorkOrderId: "job", canManageQuotes: false, canSendQuotes: false, canManageCustomers: false, canApplyDiscounts: false, canViewPriceBook: false } : {}) };
   const db = {
     prepare(sql) { return { bind(...values) { const statement = { sql, values }; queries.push(statement); return { ...statement,
       async first() {
@@ -96,11 +98,13 @@ function routeFixture({ owned = true, assigned = true, permitted = true, priceBo
         if (sql.includes("FROM trade_crm_quotes")) return quote;
         if (sql.includes("SELECT * FROM trade_crm_quote_versions")) return version;
         if (sql.includes("SELECT status FROM trade_crm_quote_versions")) return { status: "draft" };
+        if (sql.includes("FROM trade_crm_quote_links")) return savedLink;
         return null;
       },
-      async all() { return { results: sql.includes("SELECT * FROM trade_crm_quote_versions") ? [version] : [] }; },
+      async all() { return { results: sql.includes("SELECT * FROM trade_crm_quote_versions") ? [version] : sql.includes("SELECT * FROM trade_crm_quote_items") ? savedItems : [] }; },
     }; } }; },
     async batch(statements) {
+      if (supportReadOnly) throw new Error("Support reads must not mutate quote records");
       const equipment = statements.find(statement => statement.sql.includes("SET equipment_json"));
       if (equipment && claim) { version.equipment_json = equipment.values[0]; version.roof_design_id = equipment.values[1]; }
       const docs = statements.find(statement => statement.sql.includes("SET product_documents_json"));
@@ -111,9 +115,11 @@ function routeFixture({ owned = true, assigned = true, permitted = true, priceBo
     },
   };
   const route = compile("../src/app/api/trade-quotes/route.ts", {
+    "@/lib/admin-job-read-access": { ...adminJobRead, requireAdminJobReadAccess: supportReadOnly ? async () => access : adminJobRead.requireAdminJobReadAccess },
     "../../../../db": { getD1: () => db },
-    "@/lib/admin-server": { sameOrigin: () => true, cleanAdminText: value => String(value ?? "").trim(), adminJson: (body, status = 200) => Response.json(body, { status }), mfaErrorResponse: () => null },
-    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, canViewQuotes: value => value.canViewQuotes, canManageQuotes: value => value.canManageQuotes, assignedJob: async () => { if (!assigned) throw new Error("JOB_NOT_FOUND"); } },
+    "@/lib/admin-server": { sameOrigin: () => true, cleanAdminText: value => String(value ?? "").trim(), parseJsonList: () => [], adminJson: (body, status = 200) => Response.json(body, { status }), mfaErrorResponse: () => null },
+    "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, canViewQuotes: value => value.canViewQuotes, canManageQuotes: value => value.canManageQuotes, assignedJob: async (context, job) => { if (context.supportWorkOrderId && context.supportWorkOrderId !== job) throw new Error("JOB_NOT_ASSIGNED"); if (!assigned) throw new Error("JOB_NOT_FOUND"); } },
+    "@/lib/trade-photo-request-delivery": { maskPhotoRequestEmail: email => email },
     "@/lib/trade-quote-roof-image": roofImages, "@/lib/trade-quote-equipment": quoteEquipment, "@/lib/trade-quote-product-documents": quoteProductDocuments, "@/lib/trade-quote-product-documents-server": { resolveQuoteProductDocuments: async (owner, groups, equipment) => { documentAccess.push({ owner, groups, equipment }); return suppliedDocuments; } },
     "@/lib/trade-quote-review-server": { buildTradeQuoteDocumentSnapshot: async (owner, id) => { pdfLoads.push({ owner, id }); return { quoteVersionId: id, work: { id: "job" }, productDocuments: suppliedDocuments }; }, parseTradeQuoteDocumentSnapshot: () => ({ quoteVersionId: "version", work: { id: "job" } }) },
     "@/lib/trade-quote-pdf-server": { renderTradeQuotePdf: async snapshot => { pdfLoads.push(snapshot); return new TextEncoder().encode("%PDF-draft-with-documents"); }, tradeQuotePdfFilename: () => "quote.pdf" },
@@ -260,4 +266,27 @@ test('complete PDF preview requires owned assigned job and serves immutable issu
   const issuedResponse = await issued.route.GET(new Request('https://tlink.test/api/trade-quotes?workOrderId=job&media=pdf&versionId=version'));
   assert.equal(await issuedResponse.text(), '%PDF-immutable-issued'); assert.equal(issued.pdfLoads.length, 1);
   assert.equal(issued.pdfLoads[0].ownerUid, 'owner');
+});
+
+test('support quote reads show saved internal values without expiring links or enabling edits', async () => {
+  const savedLink = { id: 'link', status: 'active', expires_at: '2000-01-01T00:00:00.000Z', token_hash: 'retained', encrypted_token: 'retained', token_issue: 1 };
+  const h = routeFixture({ supportReadOnly: true, savedLink, savedItems: [{ id: 'item', quote_version_id: 'version', quantity_milli: 1000, unit_cost_cents_ex_gst: 500, subtotal_cents: 1000, margin_basis_points: 5000 }] });
+  const get = query => h.route.GET(new Request(`https://tlink.test/api/trade-quotes?${query}`, { headers: { 'X-TLink-Admin-Job': 'job' } }));
+  const response = await get('workOrderId=job');
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  const body = await response.json();
+  assert.equal(body.access.canViewInternal, true);
+  for (const permission of ['canManageQuotes', 'canSendQuotes', 'canManageCustomers', 'canApplyDiscounts', 'canViewPriceBook']) assert.equal(body.access[permission], false);
+  assert.equal(body.quote.versions[0].items[0].unitCostCentsExGst, 500);
+  assert.equal(body.quote.versions[0].internalSummary.costCentsExGst, 500);
+  assert.deepEqual(body.priceBookItems, []); assert.deepEqual(body.jobPackets, []);
+  assert.equal(body.quote.link.status, 'expired'); assert.equal(body.quote.link.shareUrl, '');
+  assert.equal(savedLink.status, 'active'); assert.equal(savedLink.token_hash, 'retained');
+  assert.equal(h.queries.some(query => /UPDATE|INSERT|DELETE/.test(query.sql)), false);
+  assert.equal((await get('workOrderId=other-job')).status, 403);
+  const mutation = await h.route.POST(new Request('https://tlink.test/api/trade-quotes', { method: 'POST', headers: { 'X-TLink-Admin-Job': 'job' } }));
+  assert.equal(mutation.status, 403);
+  const issued = routeFixture({ supportReadOnly: true, mediaStatus: 'issued' });
+  assert.equal((await issued.route.GET(new Request('https://tlink.test/api/trade-quotes?workOrderId=job&media=pdf&versionId=version', { headers: { 'X-TLink-Admin-Job': 'job' } }))).status, 200);
+  assert.equal(issued.pdfLoads[0].allowBackfill, false);
 });

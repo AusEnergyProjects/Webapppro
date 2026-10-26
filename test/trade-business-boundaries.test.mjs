@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL } from '../src/lib/firebase-mfa.ts';
+import { adminJobReadError, rejectAdminJobAccess } from './helpers/admin-job-read-fixture.mjs';
 
 function functions(path, names, dependencies = {}) {
   const source = ts.createSourceFile(path, readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
@@ -15,7 +16,7 @@ function functions(path, names, dependencies = {}) {
 }
 
 const shared = functions('src/lib/admin-server.ts', ['adminJson', 'mfaErrorResponse', 'sameOrigin'],
-  { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL });
+  { FirebaseMfaRequiredError, MFA_REQUIRED_MESSAGE, MFA_SETUP_URL, adminJobReadError });
 const owner = functions('src/lib/trade-access-server.ts', ['TradeAccessError', 'assertTradeOwnerContext']);
 const request = selected => new Request('https://tlink.test/api/field/access', {
   headers: selected === undefined ? {} : { 'X-TLink-Business': selected },
@@ -24,6 +25,7 @@ const request = selected => new Request('https://tlink.test/api/field/access', {
 test('owner-only tools cannot act on the actors own business while another team is selected', async () => {
   let reads = 0;
   const guard = functions('src/lib/trade-access-server.ts', ['requireVerifiedTradeAccess'], {
+    rejectAdminJobAccess,
     requireFirebaseIdentity: async () => ({ uid: 'owned-business' }),
     assertTradeOwnerContext: owner.assertTradeOwnerContext,
     requireVerifiedTradeIdentity: async identity => { reads++; return identity; },

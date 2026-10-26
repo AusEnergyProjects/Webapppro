@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 import * as pdfLib from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { migratedDataforceSqlite } from './helpers/trade-dataforce-database.mjs';
@@ -223,6 +224,20 @@ function fixture(t) {
     loseCommitOnce() { loseCommit = true; }, failProgressOnce() { failProgressRead = true; }, provider(mode) { providerMode = mode; },
     onObjectWrite(callback) { beforeObjectWrite = callback; },onObjectRead(callback){beforeObjectRead=callback;},onQuery(callback){beforeQuery=callback;} };
 }
+test('admin support reads the same saved safety answers while job scope and writes remain enforced', async t => {
+  const h = fixture(t), record = await h.service.startSafetyCheckRecord(worker, jobId, 'gas');
+  const support = { ...worker, actorUid: 'support-admin', memberId: '', supportWorkOrderId: jobId, canManageFieldEvidence: false };
+  const changes = h.sqlite.prepare('SELECT total_changes() count').get().count;
+  assert.deepEqual(await h.service.readSafetyCheckRecord(support, record.id), record);
+  const presentation = await h.service.safetyCheckPresentation(support, record);
+  assert.deepEqual(presentation.answers, record.answers);
+  await assert.rejects(h.service.readSafetyCheckRecord({ ...support, supportWorkOrderId: 'another-job' }, record.id), /current business or job access/);
+  await assert.rejects(h.service.listSafetyCheckRecords(support, 'another-job'), /current business or job access/);
+  await assert.rejects(h.service.saveSafetyCheckAnswers(support, record.id, record.revision, {}, 'support-mutation'), /access does not include/);
+  assert.equal(h.sqlite.prepare('SELECT total_changes() count').get().count, changes);
+  assert.equal(h.providerRequests.length, 0);
+});
+
 function answerFixture(form, kind, repeats = 1) {
   const answers = { [`$repeat.${kind === 'gas' ? 'appliances' : 'circuits'}`]: repeats };
   for (const field of flow.expandedActivityFields(form, answers)) {
@@ -469,6 +484,7 @@ test('failed gas tests and unsafe findings require actual comments and matched f
 test('HTTP boundary uses the real authoritative flow, strict input, private binary headers and explicit progress without GET side effects', async t => {
   const h = fixture(t), bounded = load('../src/lib/bounded-json-request.ts'); let actor = worker, acceptedOrigin = true;
   const route = load('../src/app/api/trade-safety-checks/route.ts', {
+    '@/lib/admin-job-read-access': adminJobRead,
     '@/lib/admin-server': { adminJson: (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store' } }),
       sameOrigin: () => acceptedOrigin, mfaErrorResponse: () => null },
     '@/lib/trade-team-server': { async requireInstallerTeamAccess() { if (!actor) throw new Error('AUTH_REQUIRED'); return actor; } },

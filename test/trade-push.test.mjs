@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import ts from 'typescript';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 import * as pure from '../src/lib/trade-push.ts';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 
@@ -17,7 +18,7 @@ function load(path,dependencies) {
   return loadedModule.exports;
 }
 const access = load('../src/lib/trade-message-media-access.ts',{});
-const account = load('../src/lib/trade-access-server.ts',{'../../db':{},'./firebase-server':{},'./creditex-schema-guards':{},'./trade-abn':{},'./trade-mfa-server':{},'./trade-account-predicates':accountPredicates});
+const account = load('../src/lib/trade-access-server.ts',{'./admin-job-read-access':adminJobRead,'../../db':{},'./firebase-server':{},'./creditex-schema-guards':{},'./trade-abn':{},'./trade-mfa-server':{},'./trade-account-predicates':accountPredicates});
 const b64 = bytes => Buffer.from(bytes).toString('base64url');
 const subscriberKeys = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
 const p256dh = b64(await crypto.subtle.exportKey('raw',subscriberKeys.publicKey));

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
@@ -109,6 +110,7 @@ async function fixture(t) {
     '@/lib/customer-project-evidence-bucket': { getCustomerProjectEvidenceBucket: () => bucket }, '@/lib/private-image-evidence': images,
   });
   const tradeRoute = load('../src/app/api/trade-customer-hub/route.ts', {
+    '@/lib/admin-job-read-access': adminJobRead,
     '../../../../db': { getD1: () => db }, '@/lib/admin-server': admin, '@/lib/trade-team-server': { requireInstallerTeamAccess: async () => access },
     '@/lib/trade-customer-hub-server': tradeServer, '@/lib/customer-quote-hub-server': hubServer, '@/lib/customer-hub-links': links,
     '@/lib/customer-project-evidence-bucket': { getCustomerProjectEvidenceBucket: () => bucket },

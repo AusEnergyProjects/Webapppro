@@ -1,4 +1,5 @@
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
 import { adminJson, cleanAdminText, mfaErrorResponse, sameOrigin } from "@/lib/admin-server";
 import { TradeAccessError } from "@/lib/trade-access-server";
 import { assignedJob, requireInstallerTeamAccess } from "@/lib/trade-team-server";
@@ -8,6 +9,7 @@ import { loadSwms, saveSwms, startSwms, SwmsError, swmsPdfRecord } from "@/lib/t
 export const runtime = "edge";
 function isObject(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function failure(error: unknown) {
+  const supportError = adminJobReadError(error); if (supportError) return supportError;
   const mfa = mfaErrorResponse(error); if (mfa) return mfa;
   if (error instanceof SwmsError) return adminJson({ ok: false, error: error.message }, error.status);
   if (error instanceof BoundedJsonRequestError) return adminJson({ ok: false, error: error.status === 413 ? "This SWMS is too large. Reduce the text or redraw the signature." : error.message }, error.status);
@@ -20,7 +22,7 @@ function failure(error: unknown) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const access = await requireInstallerTeamAccess(request), params = new URL(request.url).searchParams;
+    const access = await requireAdminJobReadAccess(request) ?? await requireInstallerTeamAccess(request), params = new URL(request.url).searchParams;
     const workOrderId = cleanAdminText(params.get("workOrderId"), 180);
     await assignedJob(access, workOrderId);
     if (params.get("download") === "1") {
@@ -37,6 +39,7 @@ export async function GET(request: Request) {
 async function mutate(request: Request, start: boolean) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const access = await requireInstallerTeamAccess(request), body = await readBoundedJsonRequest(request, 1_200_000);
     if (!isObject(body)) throw new SwmsError("Send valid SWMS details.", 400);
     const input = body;

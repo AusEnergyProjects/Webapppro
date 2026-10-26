@@ -1,4 +1,5 @@
 import test from "node:test";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -72,6 +73,7 @@ function fixture(t, options = {}) {
     "../../db": { getD1: () => db }, "./firebase-mfa": mfa, "./myob-security-audit": audit,
   });
   const access = load("src/lib/trade-access-server.ts", {
+    "./admin-job-read-access": adminJobRead,
     "../../db": { getD1: () => db }, "./firebase-server": { requireFirebaseIdentity: async () => identity },
     "./creditex-schema-guards": { ensureCreditexSchemaGuards: async () => { schemaChecks += 1; } },
     "./trade-abn": abn, "./trade-account-predicates": predicates, "./trade-mfa-server": policy,

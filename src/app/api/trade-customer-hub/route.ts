@@ -1,6 +1,7 @@
 import {getD1} from "../../../../db";
 import {sameOrigin,mfaErrorResponse} from "@/lib/admin-server";
 import {requireInstallerTeamAccess} from "@/lib/trade-team-server";
+import {requireAdminJobReadAccess} from "@/lib/admin-job-read-access";
 import {tradeHubContext,tradeHubView,tradeHubScope} from "@/lib/trade-customer-hub-server";
 import {hubError,hubJson} from "@/lib/customer-quote-hub-server";
 import {getCustomerProjectEvidenceBucket} from "@/lib/customer-project-evidence-bucket";
@@ -10,7 +11,7 @@ import {ensureCustomerHubForReleasedLead} from "@/lib/customer-hub-links";
 import {syncMarketplaceEnquiries} from "@/lib/opportunity-server";
 export const runtime='edge';
 export async function GET(request:Request){try{
-  const access=await requireInstallerTeamAccess(request),db=getD1(),url=new URL(request.url),workOrderId=url.searchParams.get('workOrderId')||'';
+  const access=await requireAdminJobReadAccess(request)??await requireInstallerTeamAccess(request),db=getD1(),url=new URL(request.url),workOrderId=url.searchParams.get('workOrderId')||'';
   if(!url.searchParams.has('fileId'))return hubJson(await tradeHubView(db,access,workOrderId,url.searchParams.get('matchId')||''));
   if(!access.canViewQuotes)throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
   const scope=tradeHubScope(access,workOrderId);

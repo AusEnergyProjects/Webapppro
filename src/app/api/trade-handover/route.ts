@@ -1,4 +1,6 @@
 import { getD1 } from "../../../../db";
+import { requireAdminJobReadAccess, adminJobReadError, rejectAdminJobMutation } from "@/lib/admin-job-read-access";
+import { assignedJob } from "@/lib/trade-team-server";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { accountEntitlements } from "@/lib/direct-trade-entitlements-server";
 import { requireVerifiedTradeAccess, TradeAccessError } from "@/lib/trade-access-server";
@@ -23,6 +25,7 @@ type TradeIdentity = {
   uid: string;
   businessName: string;
   fullAccess: boolean;
+  supportReadOnly?: boolean;
 };
 
 type WorkRecord = {
@@ -71,6 +74,7 @@ async function tradeIdentity(request: Request): Promise<TradeIdentity> {
 }
 
 function errorResponse(error: unknown) {
+  const supportError = adminJobReadError(error); if (supportError) return supportError;
   const mfa = mfaErrorResponse(error);
   if (mfa) return mfa;
   const code = error instanceof TradeAccessError ? error.code : error instanceof Error ? error.message : "";
@@ -79,7 +83,8 @@ function errorResponse(error: unknown) {
   if (code === "ACCOUNT_INACTIVE") return adminJson({ ok: false, error: "This installer account is not active." }, 403);
   if (code === "INSTALLER_REQUIRED" || code === "TRADE_ROLE_REQUIRED") return adminJson({ ok: false, error: "Installed asset and customer handover tools are available to installer accounts." }, 403);
   if (code === "FULL_ACCESS_REQUIRED" || code === "ABN_REVIEW_REQUIRED" || code === "EMAIL_VERIFICATION_REQUIRED") return adminJson({ ok: false, error: "Complete trade verification before using assets, warranties and handover packs." }, 403);
-  if (code === "WORK_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
+  if (code === "JOB_NOT_ASSIGNED") return adminJson({ ok: false, error: "This handover belongs to a job outside your current access." }, 403);
+  if (code === "WORK_NOT_FOUND" || code === "JOB_NOT_FOUND") return adminJson({ ok: false, error: "Work record not found." }, 404);
   if (code === "PACK_NOT_FOUND") return adminJson({ ok: false, error: "Start the asset and handover record first." }, 404);
   if (code === "PACK_LOCKED") return adminJson({ ok: false, error: "This handover is locked while it is under review or already published." }, 409);
   if (code === "ASSET_LIMIT_REACHED") return adminJson({ ok: false, error: "This handover pack has reached its installed asset limit." }, 409);
@@ -196,7 +201,7 @@ async function handoverPayload(identity: TradeIdentity, work: WorkRecord) {
       reviewNote: pack.review_note,
       createdAt: pack.created_at,
       updatedAt: pack.updated_at,
-      canEdit: EDITABLE_PACK_STATUSES.has(pack.status),
+      canEdit: !identity.supportReadOnly && EDITABLE_PACK_STATUSES.has(pack.status),
       assets,
       complianceItems,
       documents,
@@ -217,8 +222,10 @@ async function handoverPayload(identity: TradeIdentity, work: WorkRecord) {
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
-    const identity = await tradeIdentity(request);
+    const support = await requireAdminJobReadAccess(request);
+    const identity: TradeIdentity = support ? { uid: support.ownerUid, businessName: support.businessName, fullAccess: true, supportReadOnly: true } : await tradeIdentity(request);
     const workOrderId = cleanAdminText(new URL(request.url).searchParams.get("workOrderId"), 180);
+    if (support) await assignedJob(support, workOrderId);
     const work = await ownedWorkRecord(identity.uid, workOrderId);
     if (!work) throw new Error("WORK_NOT_FOUND");
     return adminJson({ ok: true, ...(await handoverPayload(identity, work)) });
@@ -230,6 +237,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const identity = await tradeIdentity(request);
     if (!identity.fullAccess) throw new Error("FULL_ACCESS_REQUIRED");
     let body: Record<string, unknown>;
@@ -321,6 +329,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
+    rejectAdminJobMutation(request);
     const identity = await tradeIdentity(request);
     if (!identity.fullAccess) throw new Error("FULL_ACCESS_REQUIRED");
     let body: Record<string, unknown>;

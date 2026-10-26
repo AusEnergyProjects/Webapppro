@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
 import * as form from '../src/lib/veu-electrical-safety-form.ts';
+import * as adminJobRead from './helpers/admin-job-read-fixture.mjs';
 const read=path=>fs.readFileSync(new URL(path,import.meta.url),'utf8');
 function compile(path,imports={}){
   const code=ts.transpileModule(read(path),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,exports={};
@@ -21,6 +22,7 @@ function fixture(){
   service.readPiesaPdf=async(...args)=>{calls.push({name:'readPiesaPdf',args});return{bytes:new TextEncoder().encode('%PDF-private'),contentType:'application/pdf',fileName:'PIESA-1.pdf'};};
   service.readPiesaEvidence=service.readPiesaPdf;
   const route=compile('../src/app/api/trade-veu-electrical-assessments/route.ts',{
+    '@/lib/admin-job-read-access':adminJobRead,
     '@/lib/admin-server':{adminJson:(value,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store'}}),sameOrigin:()=>origin,mfaErrorResponse:()=>null},
     '@/lib/trade-team-server':{async requireInstallerTeamAccess(){if(!access)throw new Error('AUTH_REQUIRED');return access;}},
     '@/lib/bounded-json-request':bounded,'@/lib/veu-electrical-assessment':types,'@/lib/veu-electrical-safety-form':form,'@/lib/trade-veu-electrical-assessment-server':service,

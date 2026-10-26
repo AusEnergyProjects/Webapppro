@@ -1,4 +1,5 @@
 import { mfaErrorResponse } from "./helpers/admin-response-fixture.mjs";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
@@ -60,6 +61,7 @@ function loadRoute(accessRecord) {
     fileName: "src/app/api/trade-job-quote-photos/route.ts",
   }).outputText;
   const mocks = {
+    "@/lib/admin-job-read-access": adminJobRead,
     "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../../../db": { getD1: () => db },
     "@/lib/admin-server": { mfaErrorResponse, adminJson: (value, status = 200) => Response.json(value, { status }),
       cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),

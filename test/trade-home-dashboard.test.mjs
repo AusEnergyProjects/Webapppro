@@ -5,6 +5,7 @@ import test from "node:test";
 import ts from "typescript";
 import { loadHomeDashboard } from "../src/lib/trade-home-dashboard-server.ts";
 import { ReportInputError } from "../src/lib/trade-business-reports.ts";
+import { requireAdminJobReadAccess } from "./helpers/admin-job-read-fixture.mjs";
 
 const now = new Date("2026-10-01T03:00:00Z");
 const schema = readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
@@ -378,6 +379,7 @@ const routeCode = ts.transpileModule(["crmIdentity", "GET"].map(name => {
 function api(f, overrides = {}, options = {}) {
   let authCalls = 0;
   const dependencies = {
+    requireAdminJobReadAccess,
     requireInstallerTeamAccess: async () => { authCalls++; if (options.authError) throw new Error(options.authError); return { ...defaultAccess, ...overrides }; },
     ensureTlinkSchemaGuards: async () => {}, getD1: () => f.db, loadHomeDashboard: (db, uid, access, params, state) => loadHomeDashboard(db, uid, access, params, state, now),
     sameOrigin: () => options.sameOrigin !== false, cleanAdminText: (value, maximum) => String(value || "").trim().slice(0, maximum),

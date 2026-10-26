@@ -5,6 +5,8 @@ import type {TradeHubQuestion} from "./customer-quote-hub";
 
 export type TradeHubContext={id:string;release_id:string;recipient_email:string;opportunity_id:string;work_order_id:string;customer_id:string;accepting:number;matched_categories:string;service_categories:string;match_id:string;match_status:string;interested:number;interest_revision:number};
 export function tradeHubScope(access:TeamAccess,workOrderId:string,writing=false,matchId='',missingHub=false){
+  const support=Boolean(access.supportWorkOrderId);
+  if(support&&(access.supportWorkOrderId!==workOrderId||writing||matchId||missingHub))throw new Error('CUSTOMER_HUB_ACCESS_ENDED');
   const owner=access.isOwner&&access.actorUid===access.ownerUid;
   const leadOnly=Boolean(matchId&&owner);
   const customerJob=`FROM trade_work_orders work
@@ -22,11 +24,11 @@ export function tradeHubScope(access:TeamAccess,workOrderId:string,writing=false
   AND ${leadOnly?'match.id=?':`EXISTS(SELECT 1 FROM trade_work_orders work JOIN trade_crm_job_details detail ON detail.work_order_id=work.id AND detail.firebase_uid=work.firebase_uid
     WHERE work.id=? AND work.firebase_uid=match.firebase_uid AND work.source_type='public_lead' AND work.source_reference=match.id
       AND work.record_status='active' AND detail.customer_source='public_lead_released'
-      AND ${owner?'1=1':`EXISTS(SELECT 1 FROM trade_team_members member WHERE member.id=? AND member.owner_uid=work.firebase_uid AND member.member_uid=? AND member.status='active'
+      AND ${owner||support?'1=1':`EXISTS(SELECT 1 FROM trade_team_members member WHERE member.id=? AND member.owner_uid=work.firebase_uid AND member.member_uid=? AND member.status='active'
         AND member.can_view_quotes=1 ${writing?'AND member.can_manage_quotes=1':''}
         AND ((member.job_scope='team' AND NOT EXISTS(SELECT 1 FROM trade_crew_members crew WHERE crew.owner_uid=member.owner_uid AND crew.member_id=member.id)) OR ${jobMemberSql('work','member.id')}))`}
       AND (?<>'own' OR ${jobMemberSql("work")}))`}`,
-    values:[workOrderId,workOrderId,workOrderId,workOrderId,access.ownerUid,...(leadOnly?[matchId]:[workOrderId,...(owner?[]:[access.memberId,access.actorUid]),!access.isOwner&&access.jobScope==='own'?'own':'team',access.memberId||''])]};
+    values:[workOrderId,workOrderId,workOrderId,workOrderId,access.ownerUid,...(leadOnly?[matchId]:[workOrderId,...(owner||support?[]:[access.memberId,access.actorUid]),!access.isOwner&&access.jobScope==='own'?'own':'team',access.memberId||''])]};
 }
 export async function tradeHubContext(db:D1Database,access:TeamAccess,workOrderId:string,matchId=''){
   if(!access.canViewQuotes)throw new Error("CUSTOMER_HUB_ACCESS_ENDED");

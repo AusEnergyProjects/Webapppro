@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as accountPredicates from "../src/lib/trade-account-predicates.ts";
 
 const token = "a".repeat(43);
@@ -29,6 +30,7 @@ function loadModule(path, dependencies) {
 
 // Execute the production ABN checksum and authoritative approval-review predicate.
 const tradeAccess = loadModule("../src/lib/trade-access-server.ts", {
+  "./admin-job-read-access": adminJobRead,
   "../../db": {}, "./firebase-server": {}, "./creditex-schema-guards": {},
   "./trade-abn": {}, "./trade-mfa-server": {}, "./trade-account-predicates": accountPredicates,
 });

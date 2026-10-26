@@ -1,4 +1,5 @@
 import { getD1 } from "../../db";
+import { rejectAdminJobAccess } from "./admin-job-read-access";
 import {
   requireFirebaseIdentity,
   type FirebaseIdentity,
@@ -195,6 +196,7 @@ export async function requireVerifiedTradeAccess(
   request: Request,
   options: AccessOptions = {},
 ) {
+  rejectAdminJobAccess(request);
   const identity = await requireFirebaseIdentity(request);
   assertTradeOwnerContext(request, identity);
   return requireVerifiedTradeIdentity(

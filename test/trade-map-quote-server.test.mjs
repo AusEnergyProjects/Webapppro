@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import ts from "typescript";
+import * as adminJobRead from "./helpers/admin-job-read-fixture.mjs";
 import * as mapQuote from "../src/lib/trade-map-quote.ts";
 import * as quoteMath from "../src/lib/trade-quote.ts";
 
@@ -18,6 +19,7 @@ function fixture({ canView = true, assigned = true, foreignJob = false, unitLabe
     }, async all() { return { results: [] }; },
   }; } }; } };
   const dependencies = {
+    "@/lib/admin-job-read-access": adminJobRead,
     "../../../../db": { getD1: () => database },
     "@/lib/admin-server": { sameOrigin: () => true, cleanAdminText: value => String(value || "").trim(), adminJson: (body, status = 200) => Response.json(body, { status }), mfaErrorResponse: () => null },
     "@/lib/trade-team-server": { requireInstallerTeamAccess: async () => access, canViewQuotes: value => value.canViewQuotes, assignedJob: async (value, id) => { assert.equal(value.ownerUid, "business-owner"); assert.equal(id, "job-1"); if (!assigned) throw new Error("JOB_NOT_FOUND"); } },
