@@ -111,8 +111,15 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active", provi
  const migration = read('../drizzle/0160_trade_rental_inspections.sql');
  database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
  database.exec(read('../drizzle/0196_trade_outgoing_email.sql').replaceAll('--> statement-breakpoint', ''));
- const db=testD1(database);const sent=[];const sendOptions=[];const hooks={beforePdf:null,beforeSend:null};const assignedCalls=[];let shouldFail=failSend;
+ const db=testD1(database);const sent=[];const sendOptions=[];const hooks={beforePdf:null,beforeSend:null,providerReceipt:null,attachment:null};const assignedCalls=[];let shouldFail=failSend;
  const api=loadTypescriptModule('../src/lib/trade-rental-report-email-server.ts',{
+ './trade-rental-report-provider-events':{readRentalReportProviderReceipt:async(_,input)=>{
+   assert.equal(input.ownerUid,'owner');assert.equal(input.inspectionId,'inspection');assert.equal(input.reportId,'report');
+   assert.equal(input.recipientSha256,createHash('sha256').update('jane@example.test').digest('hex'));return hooks.providerReceipt;
+ }},
+ './trade-rental-report-provider-verification':{readRentalReportAttachmentVerification:async(_,input)=>{
+   assert.equal(input.providerMessageId,hooks.providerReceipt.providerMessageId);return hooks.attachment;
+ }},
  './rental-report-email-template.mjs':{rentalReportEmailDraft},
  '../../db':{getD1:()=>db},'@/lib/trade-team-server':{assignedJob:async(access,workOrderId)=>{assignedCalls.push({access,workOrderId});const job=database.prepare("SELECT id FROM trade_work_orders WHERE id=? AND firebase_uid=? AND record_status='active'").get(workOrderId,access.ownerUid);if(!job)throw new Error('JOB_NOT_FOUND');return job;}},
  '@/lib/trade-rental-report-server':{authenticatedRentalReportPdf:async()=>{await hooks.beforePdf?.();return{bytes:pdfBytes || (largeReport ? new Uint8Array(18 * 1024 * 1024 + 1) : pdfSize ? new Uint8Array(pdfSize) : new Uint8Array([37,80,68,70,45])),reportNumber:'RMS-123'};},ownerRentalReportPresentation:async()=>[{id:'report',link:linkStatus ? {status:linkStatus,shareUrl:'https://example.test/rental-report/secure-test-link'} : null}]},
@@ -524,6 +531,20 @@ test('delivery receipt identifies the current report and normalized recipient af
  f.database.exec("UPDATE trade_rental_inspection_events SET metadata='{}' WHERE event_type='report_email_accepted'");
  const legacy=await f.api.rentalReportDeliveryState('owner','inspection');
  assert.equal(legacy.reportId,'report');assert.equal(legacy.recipientSha256,'');
+});
+
+test('provider delivery and verified attachment are projected without weakening duplicate-send protection', async () => {
+ const f=fixture();await f.send();
+ f.hooks.providerReceipt={providerStatus:'delivered',providerMessageId:'provider-accepted',occurredAt:'2026-10-26T02:46:00.000Z'};
+ f.hooks.attachment={filename:'RMS-123.pdf',sizeBytes:5,sha256:'a'.repeat(64),verifiedAt:'2026-10-26T03:00:00.000Z'};
+ const receipt=await f.api.rentalReportDeliveryState('owner','inspection');
+ assert.equal(receipt.status,'accepted');assert.equal(receipt.providerStatus,'delivered');assert.equal(receipt.attachment,f.hooks.attachment);
+ assert.match(receipt.message,/recipient mail server accepted/i);
+ await f.send();assert.equal(f.sent.length,1);
+ f.hooks.providerReceipt.providerStatus='bounced';
+ const bounced=await f.api.rentalReportDeliveryState('owner','inspection');
+ assert.equal(bounced.status,'accepted');assert.match(bounced.message,/bounced/);
+ await f.send();assert.equal(f.sent.length,1);
 });
 
 for (const linkStatus of ['', 'revoked', 'expired']) test(`report email requires active link even with a small PDF: ${linkStatus || 'missing'}`, async () => {

@@ -2,6 +2,7 @@ import { getD1 } from "../../db";
 import { type AdminIdentity, writeAdminAudit } from "./admin-server";
 import type { TeamAccess } from "./trade-team-server";
 import { ownerRentalReportPresentation } from "./trade-rental-report-server";
+import { verifyRentalReportProviderDelivery } from "./trade-rental-report-provider-verification";
 import {
   emailRentalAssessmentReport, rentalReportDeliveryRecipient,
   rentalReportDeliveryReview, rentalReportDeliveryState,
@@ -41,12 +42,19 @@ async function context(workOrderId: string, origin: string) {
     WHERE work.id = ? AND work.partner_type = 'installer' AND work.record_status = 'active' LIMIT 1`)
     .bind(identifier(workOrderId)).first<CurrentReport>();
   if (!report) throw new AdminRentalEmailError("RENTAL_REPORT_NOT_FOUND", "This job has no current issued rental report.", 404);
-  const [recipient, review, delivery, reports] = await Promise.all([
+  const [recipient, review, savedDelivery, reports] = await Promise.all([
     rentalReportDeliveryRecipient(report.owner_uid, workOrderId),
     rentalReportDeliveryReview(report.owner_uid, report.inspection_id),
     rentalReportDeliveryState(report.owner_uid, report.inspection_id),
     ownerRentalReportPresentation({ ownerUid: report.owner_uid, inspectionId: report.inspection_id, origin, includeSecret: false }),
   ]);
+  const recipientSha256 = recipient ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(recipient.email))), byte => byte.toString(16).padStart(2, "0")).join("") : "";
+  const recipientMatches = Boolean(recipientSha256 && savedDelivery?.recipientSha256 === recipientSha256);
+  const delivery = savedDelivery?.status === "accepted" && !recipientMatches ? {
+    status: savedDelivery.status, reportId: savedDelivery.reportId, recipientSha256: savedDelivery.recipientSha256,
+    at: savedDelivery.at, message: "A report email is recorded for a different or unconfirmed recipient. Delivery to the current customer email is not confirmed.",
+  } : savedDelivery;
   const activeLink = reports.find(row => row.id === report.report_id)?.link?.status === "active";
   const message = review?.status === "held" ? review.message
     : report.formatting_pending ? "The corrected report is still being prepared. Email remains paused."
@@ -55,7 +63,8 @@ async function context(workOrderId: string, origin: string) {
           : delivery?.message || "The saved report is ready to email.";
   const canSend = Boolean(recipient && activeLink && review?.status !== "held" && !report.formatting_pending
     && !["accepted", "sending", "reconciliation_required"].includes(delivery?.status || ""));
-  return { report, recipient, review, delivery, activeLink, message, canSend };
+  const canVerify = delivery?.status === "accepted" && recipientMatches;
+  return { report, recipient, review, delivery, activeLink, message, canSend, canVerify };
 }
 
 export async function adminRentalReportEmailStatus(admin: AdminIdentity, workOrderId: string, origin: string) {
@@ -65,13 +74,12 @@ export async function adminRentalReportEmailStatus(admin: AdminIdentity, workOrd
     "Checked the issued rental report email status.", { ownerUid: current.report.owner_uid, reportId: current.report.report_id });
   return { reportId: current.report.report_id, reportNumber: current.report.report_number,
     recipientEmail: current.recipient?.email || "", reportDelivery: current.delivery,
-    canSend: current.canSend, message: current.message };
+    canSend: current.canSend, canVerify: current.canVerify, message: current.message };
 }
 
-export async function sendAdminRentalReportEmail(admin: AdminIdentity, body: unknown, origin: string) {
-  requireSender(admin);
+async function currentRequest(body: unknown, origin: string) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    throw new AdminRentalEmailError("REPORT_EMAIL_INPUT_INVALID", "Send the job, report and expected recipient.", 400);
+    throw new AdminRentalEmailError("REPORT_EMAIL_INPUT_INVALID", "Choose the job, report and expected recipient.", 400);
   }
   const input = body as Record<string, unknown>;
   const workOrderId = identifier(input.workOrderId), reportId = identifier(input.reportId);
@@ -86,6 +94,29 @@ export async function sendAdminRentalReportEmail(admin: AdminIdentity, body: unk
   if (!current.recipient || current.recipient.email !== input.expectedRecipientEmail.trim().toLowerCase()) {
     throw new AdminRentalEmailError("REPORT_RECIPIENT_CHANGED", "The customer email changed. Refresh before sending this report.", 409);
   }
+  return { current: { ...current, recipient: current.recipient }, workOrderId, reportId };
+}
+
+export async function verifyAdminRentalReportEmail(admin: AdminIdentity, body: unknown, origin: string) {
+  requireSender(admin);
+  const { current, workOrderId, reportId } = await currentRequest(body, origin);
+  await writeAdminAudit(admin, "job.report_email_verification_requested", "trade_work_order", workOrderId,
+    "Requested the provider delivery receipt and verification of the attached saved report.",
+    { ownerUid: current.report.owner_uid, reportId });
+  const verification = await verifyRentalReportProviderDelivery({
+    ownerUid: current.report.owner_uid, workOrderId, reportId,
+    expectedRecipientEmail: current.recipient.email, actorUid: admin.uid,
+  });
+  await writeAdminAudit(admin, "job.report_email_verification_result", "trade_work_order", workOrderId,
+    "Recorded the report email delivery and attachment verification result.",
+    { ownerUid: current.report.owner_uid, reportId, status: verification.status,
+      providerStatus: verification.providerStatus, providerMessageId: verification.providerMessageId });
+  return verification;
+}
+
+export async function sendAdminRentalReportEmail(admin: AdminIdentity, body: unknown, origin: string) {
+  requireSender(admin);
+  const { current, workOrderId, reportId } = await currentRequest(body, origin);
   if (current.review?.status === "held") return { status: "held", reportId, message: current.message };
   if (current.report.formatting_pending || !current.activeLink) return { status: "failed", reportId, message: current.message };
   if (current.delivery && ["accepted", "sending", "reconciliation_required"].includes(current.delivery.status)) return current.delivery;

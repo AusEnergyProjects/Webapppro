@@ -5,6 +5,8 @@ import { authenticatedRentalReportPdf, ownerRentalReportPresentation } from '@/l
 import { reminderProviderFailureOutcome } from '@/lib/service-reminder-delivery';
 import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from '@/lib/trade-email-server';
 import { rentalReportEmailDraft } from './rental-report-email-template.mjs';
+import { readRentalReportProviderReceipt } from './trade-rental-report-provider-events';
+import { readRentalReportAttachmentVerification } from './trade-rental-report-provider-verification';
 
 type Row = Record<string, unknown>;
 type Input = { access: TeamAccess; workOrderId: string; inspectionId: string; reportId: string; expectedRecipientEmail: string; origin: string; admin?: Pick<AdminIdentity, 'uid' | 'role'> };
@@ -126,10 +128,22 @@ export async function rentalReportDeliveryState(ownerUid: string, inspectionId: 
       }
     }
   }
-  return { status, reportId: String(row.report_id || ''), recipientSha256: /^[a-f0-9]{64}$/.test(String(meta.recipientSha256 || '')) ? String(meta.recipientSha256) : '',
-    message: status === 'accepted' ? 'The report email was accepted for delivery.'
+  const reportId = String(row.report_id || '');
+  const recipientSha256 = /^[a-f0-9]{64}$/.test(String(meta.recipientSha256 || '')) ? String(meta.recipientSha256) : '';
+  const receipt = status === 'accepted' && recipientSha256
+    ? await readRentalReportProviderReceipt(getD1(), { ownerUid, inspectionId, reportId, recipientSha256 }) : null;
+  const attachment = receipt ? await readRentalReportAttachmentVerification(getD1(), {
+    ownerUid, inspectionId, reportId, recipientSha256, providerMessageId: receipt.providerMessageId,
+  }) : null;
+  const providerMessage = receipt?.providerStatus === 'delivered' ? 'The recipient mail server accepted the report email.'
+    : receipt?.providerStatus === 'bounced' ? 'The report email bounced. The recipient mail server rejected it.'
+    : receipt?.providerStatus === 'complained' ? 'The recipient marked the report email as spam.'
+    : receipt?.providerStatus === 'failed' || receipt?.providerStatus === 'suppressed' ? 'The email provider could not deliver the report email.'
+    : receipt?.providerStatus === 'delivery_delayed' ? 'The recipient mail server has delayed delivery of the report email.' : '';
+  return { status, reportId, recipientSha256, ...(receipt || {}), ...(attachment ? { attachment } : {}),
+    message: providerMessage || (status === 'accepted' ? 'The report email was accepted for delivery. Recipient delivery is not yet confirmed.'
     : status === 'reconciliation_required' ? 'Check the outgoing mailbox before sending this report again.'
-    : status === 'failed' ? String(meta.error || 'The report could not be emailed. Retry from this assessment.') : 'The report email is being sent.', at: row.created_at };
+    : status === 'failed' ? String(meta.error || 'The report could not be emailed. Retry from this assessment.') : 'The report email is being sent.'), at: row.created_at };
 }
 
 async function event(input: Input, eventType: string, requestId: string, metadata: Row, now = new Date().toISOString()) {

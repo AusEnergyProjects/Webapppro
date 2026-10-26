@@ -121,7 +121,7 @@ function applyScheduledDocumentProviderEvent(update, {
 test("authenticated mapped callbacks retry until their provider message binding is visible", () => {
   assert.match(
     callbackSource,
-    /if \(!providerMessageId \|\| !status\) return Response\.json\(\{ ok: true, ignored: true \}\)/,
+    /if \(!providerMessageId \|\| !isRentalReportProviderEventType\(eventType\)\) return Response\.json\(\{ ok: true, ignored: true \}\)/,
     "unmapped or malformed provider events should remain safely ignored",
   );
   assert.match(

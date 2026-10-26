@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import styles from "./AdminJobSupportWorkspace.module.css";
 
-type Delivery = { status: string; message: string; reportId: string };
+type Delivery = {
+  status: string; message: string; reportId: string; providerStatus?: string; providerMessageId?: string; occurredAt?: string;
+  attachment?: { filename: string; sizeBytes: number; sha256: string; verifiedAt: string };
+};
 type EmailState = {
   reportId: string; reportNumber: string; recipientEmail: string;
-  reportDelivery: Delivery | null; canSend: boolean; message?: string;
+  reportDelivery: Delivery | null; canSend: boolean; canVerify: boolean; message?: string;
 };
 
 export function AdminRentalReportEmail({ user, workOrderId }: { user: User; workOrderId: string }) {
@@ -75,15 +78,40 @@ export function AdminRentalReportEmail({ user, workOrderId }: { user: User; work
     }
   }
 
+  async function verify() {
+    if (!state?.canVerify || busy || submitting.current) return;
+    submitting.current = true;
+    setBusy(true); setMessage("Checking the delivery receipt and attached PDF...");
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/jobs/rental-report-email", {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify_delivery", workOrderId, reportId: state.reportId, expectedRecipientEmail: state.recipientEmail }),
+      });
+      const result = await response.json() as { ok: boolean; verification?: { message: string }; error?: string };
+      if (!response.ok || !result.ok) throw new Error(result.error || "Delivery could not be verified.");
+      await load();
+      if (active.current) setMessage(result.verification?.message || "Delivery status checked.");
+    } catch (error) {
+      if (active.current) setMessage(error instanceof Error ? error.message : "Delivery could not be verified.");
+    } finally {
+      submitting.current = false;
+      if (active.current) setBusy(false);
+    }
+  }
+
   if (!state && !message) return null;
   return <section className={styles.notice} aria-label="Admin report email">
     <strong>Report email{state && ` · ${state.reportNumber}`}</strong>
     {state && <p>Recipient: {state.recipientEmail || "No customer email saved"}</p>}
     <p role="status">{message || state?.message || state?.reportDelivery?.message || "Ready to email the saved report."}</p>
+    {state?.reportDelivery?.attachment && <p>Verified attachment: {state.reportDelivery.attachment.filename} ({(state.reportDelivery.attachment.sizeBytes / 1024 / 1024).toFixed(1)} MB). Its contents match the saved report.</p>}
+    {state?.reportDelivery?.providerMessageId && <small>Email receipt: {state.reportDelivery.providerMessageId}</small>}
     <div className={styles.actions}>
       {state && <button type="button" disabled={busy || checkRequired || !state.canSend} onClick={() => void send()}>
-        {busy ? "Checking delivery..." : state.reportDelivery?.status === "accepted" ? "Email accepted for delivery" : "Send saved report email"}
+        {busy ? "Checking delivery..." : state.reportDelivery?.providerStatus === "delivered" ? "Email delivered" : state.reportDelivery?.status === "accepted" ? "Email accepted for delivery" : "Send saved report email"}
       </button>}
+      {state?.canVerify && <button type="button" disabled={busy} onClick={() => void verify()}>Check delivery and attachment</button>}
       <button type="button" disabled={busy} onClick={() => void refresh()}>Refresh email status</button>
     </div>
     <small>This admin action uses the business&apos;s report sender and records your admin account.</small>

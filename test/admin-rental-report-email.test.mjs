@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import ts from "typescript";
 import * as bounded from "../src/lib/bounded-json-request.ts";
 
@@ -27,7 +28,7 @@ function fixture() {
     INSERT INTO trade_rental_reports VALUES('report-a','inspection-a','business-a','issued','RMS-A-R1'),('report-b','inspection-b','business-b','issued','RMS-B-R1');`);
   const admin = { uid: "real-admin", email: "admin@example.test", role: "admin", displayName: "Admin" };
   const state = { recipient: "hello@appliedtradeservices.com.au", review: null, delivery: null, linkStatus: "active", auditFailure: false, authFailure: "", send: null };
-  const calls = { auth: [], audits: [], sends: [], lifetime: [] };
+  const calls = { auth: [], audits: [], sends: [], verifications: [], lifetime: [] };
   const server = {
     sameOrigin: request => !request.headers.get("origin") || request.headers.get("origin") === new URL(request.url).origin,
     adminJson: (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } }),
@@ -43,6 +44,11 @@ function fixture() {
   const service = load("../src/lib/admin-rental-report-email.ts", {
     "../../db": { getD1: () => ({ prepare: query => ({ bind: (...values) => ({ first: async () => sql.prepare(query).get(...values) || null }) }) }) },
     "./admin-server": server,
+    "./trade-rental-report-provider-verification": { verifyRentalReportProviderDelivery: async input => {
+      calls.verifications.push(input);
+      return { status: "verified", reportId: input.reportId, providerStatus: "delivered", providerMessageId: "receipt-a",
+        message: "The recipient mail server accepted the report email and its PDF matches the saved report." };
+    } },
     "./trade-rental-report-server": { ownerRentalReportPresentation: async input => [{ id: input.inspectionId === "inspection-a" ? "report-a" : "report-b", link: { status: state.linkStatus } }] },
     "./trade-rental-report-email-server": {
       rentalReportDeliveryRecipient: async () => state.recipient ? { email: state.recipient, name: "James Winstanley" } : null,
@@ -73,7 +79,7 @@ test("admin status exposes only the exact current report and audits the real adm
   const response = await f.get(), result = await response.json();
   assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(result, { ok: true, reportId: "report-a", reportNumber: "RMS-A-R1", recipientEmail: f.body.expectedRecipientEmail,
-    reportDelivery: null, canSend: true, message: "The saved report is ready to email." });
+    reportDelivery: null, canSend: true, canVerify: false, message: "The saved report is ready to email." });
   assert.equal(f.calls.sends.length, 0); assert.equal(f.calls.audits[0][0].uid, "real-admin");
   assert.equal(f.calls.audits[0][3], "job-a"); assert.equal(f.calls.audits[0][5].ownerUid, "business-a");
   assert.equal((await f.get("workOrderId=job-a&workOrderId=job-b")).status, 400);
@@ -160,4 +166,46 @@ test("malformed and oversized bodies do not start a delivery", async () => {
     assert.equal(response.status, status);
   }
   assert.equal(f.calls.sends.length, 0); assert.equal(f.calls.lifetime.length, 0);
+});
+
+test("delivery verification uses the exact current job, recipient and real admin without sending", async () => {
+  const f = fixture(); f.state.delivery = { status: "accepted", reportId: "report-a" };
+  const response = await f.post({ action: "verify_delivery", ownerUid: "business-b", actorUid: "spoofed", providerMessageId: "spoofed" });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).verification.providerStatus, "delivered");
+  assert.deepEqual(f.calls.verifications, [{ ownerUid: "business-a", workOrderId: "job-a", reportId: "report-a",
+    expectedRecipientEmail: "hello@appliedtradeservices.com.au", actorUid: "real-admin" }]);
+  assert.equal(f.calls.sends.length, 0);
+  assert.deepEqual(f.calls.audits.map(a => a[1]), ["job.report_email_verification_requested", "job.report_email_verification_result"]);
+  assert.equal(f.calls.lifetime.length, 1); await f.calls.lifetime[0];
+});
+
+test("a changed CRM recipient cannot inherit delivery and attachment evidence from a prior recipient", async () => {
+  const f = fixture();
+  f.state.delivery = { status: "accepted", reportId: "report-a", message: "Delivered.",
+    recipientSha256: createHash("sha256").update(f.state.recipient).digest("hex"),
+    providerStatus: "delivered", providerMessageId: "receipt-a", attachment: { filename: "RMS-A-R1.pdf" } };
+  const initial = await (await f.get()).json();
+  assert.equal(initial.canVerify, true); assert.equal(initial.reportDelivery.providerStatus, "delivered");
+  f.state.recipient = "changed@example.test";
+  const changed = await (await f.get()).json();
+  assert.equal(changed.recipientEmail, "changed@example.test"); assert.equal(changed.canVerify, false);
+  assert.equal(changed.canSend, false); assert.equal(changed.reportDelivery.status, "accepted");
+  assert.equal(changed.reportDelivery.providerStatus, undefined); assert.equal(changed.reportDelivery.attachment, undefined);
+  assert.match(changed.message, /Delivery to the current customer email is not confirmed/);
+});
+
+test("verification rejects stale reports, changed recipients, unknown actions, unsupported roles and unaudited requests", async () => {
+  for (const input of [{ reportId: "report-b" }, { expectedRecipientEmail: "other@example.test" }]) {
+    const f = fixture(); assert.equal((await f.post({ action: "verify_delivery", ...input })).status, 409);
+    assert.equal(f.calls.verifications.length, 0); assert.equal(f.calls.sends.length, 0);
+    await assert.rejects(f.calls.lifetime[0]);
+  }
+  const f = fixture();
+  assert.equal((await f.post({ action: "unknown" })).status, 400);
+  f.admin.role = "support"; assert.equal((await f.post({ action: "verify_delivery" })).status, 403);
+  f.admin.role = "admin"; f.state.auditFailure = true;
+  assert.equal((await f.post({ action: "verify_delivery" })).status, 500);
+  await assert.rejects(f.calls.lifetime[0]);
+  assert.equal(f.calls.verifications.length, 0); assert.equal(f.calls.sends.length, 0);
 });

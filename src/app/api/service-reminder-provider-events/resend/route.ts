@@ -2,6 +2,7 @@ import { getD1 } from "../../../../../db";
 import { verifyResendWebhook } from "@/lib/service-reminder-delivery";
 import { QUICK_INVOICE_PROVIDER_EVENT_UPDATE_SQL } from "@/lib/trade-quick-invoice-server";
 import { tradeQuoteDeliveryCallbackStatus } from "@/lib/trade-quote-delivery-policy.mjs";
+import { isRentalReportProviderEventType, recordRentalReportProviderEvent } from "@/lib/trade-rental-report-provider-events";
 
 export const runtime = "edge";
 
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   try { event = JSON.parse(rawBody) as Record<string, unknown>; } catch { return Response.json({ ok: false }, { status: 400 }); }
   const eventType = String(event.type || ""); const data = (event.data || {}) as Record<string, unknown>;
   const providerMessageId = String(data.email_id || data.id || ""); const status = mappedStatus[eventType];
-  if (!providerMessageId || !status) return Response.json({ ok: true, ignored: true });
+  if (!providerMessageId || !isRentalReportProviderEventType(eventType)) return Response.json({ ok: true, ignored: true });
   const db = getD1();
   const serviceDelivery = await db.prepare(`SELECT id, customer_uid, asset_id, status FROM service_reminder_deliveries
     WHERE provider = 'resend' AND provider_message_id = ?`).bind(providerMessageId).first<Record<string, unknown>>();
@@ -69,6 +70,15 @@ export async function POST(request: Request) {
   const delivery = serviceDelivery || appointmentDelivery || photoDelivery || quoteDelivery
     || quickInvoiceDelivery || opportunityDelivery || activityDelivery || scheduledDocumentDelivery || publicPlanDelivery;
   if (!delivery) {
+    const occurredAt = String(event.created_at || "");
+    if (!Number.isFinite(Date.parse(occurredAt))) return Response.json({ ok: false, error: "Invalid provider event timestamp." }, { status: 400 });
+    const recipientEmails = typeof data.to === "string" ? [data.to]
+      : Array.isArray(data.to) && data.to.every((recipient: unknown) => typeof recipient === "string") ? data.to : [];
+    const rentalReceipt = await recordRentalReportProviderEvent(db, {
+      providerMessageId, eventId, eventType,
+      recipientEmails, occurredAt, source: "webhook",
+    });
+    if (rentalReceipt.matched) return Response.json({ ok: true, replay: rentalReceipt.replay });
     return Response.json(
       {
         ok: false,
@@ -81,6 +91,7 @@ export async function POST(request: Request) {
       },
     );
   }
+  if (!status) return Response.json({ ok: true, ignored: true });
   const providerEventKey = eventId
     ? `resend:${eventId}`
     : `resend:${providerMessageId}:${eventType}:${String(event.created_at || "")}`;
