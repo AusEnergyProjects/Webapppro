@@ -12,7 +12,7 @@ import { CREDITEX_PARTNER_ORGANISATION_CODE, MAX_TRADE_COMPLIANCE_ACTIVITIES, re
 import { RENTAL_ASSESSMENT_MODULES, normalizeRentalAssessmentModules, rentalAssessmentTemplateSnapshot } from "@/lib/trade-rental-assessment.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
 import { rentalAssignmentCredentialSql, rentalAssignmentRequiredGates } from "@/lib/trade-rental-credentials";
-import { LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
+import { serviceCapabilityIds } from "@/lib/energy-service-catalogue.mjs";
 
 import { RENTAL_VISIT_PRESETS, RENTAL_SAFETY_TEMPLATE_VERSION, rentalVisitPreset } from "@/lib/rental-safety-visit.mjs";
 import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
@@ -23,12 +23,6 @@ const text = (value: unknown) => String(value || "");
 const editableInspection = new Set(["draft", "scheduled", "in_progress"]);
 const officialSafetyModules = new Set(["electrical_safety_check", "gas_safety_check"]);
 const officialSafetyInstruction = "Add the official electrical or gas safety check from this job's Forms section. Existing rental records remain available on the job.";
-
-function serviceCapabilityIds(serviceCategory: string) {
-  const canonical = LEGACY_ENERGY_SERVICE_ALIASES[serviceCategory] || serviceCategory;
-  return [canonical, ...Object.entries(LEGACY_ENERGY_SERVICE_ALIASES)
-    .filter(([, service]) => service === canonical).map(([alias]) => alias)];
-}
 
 async function context(access: TeamAccess, workOrderId: string) {
   const job = await assignedJob(access, workOrderId);

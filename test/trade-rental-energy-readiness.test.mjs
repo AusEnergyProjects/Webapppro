@@ -12,6 +12,7 @@ import * as quotation from "../src/lib/rental-quotation.mjs";
 import * as workflow from "../src/lib/rental-assessor-workflow.mjs";
 import * as answerPresentation from "../src/lib/rental-report-answer.mjs";
 import * as branding from "../src/lib/rental-report-branding.mjs";
+import * as reportVisibility from "../src/lib/trade-rental-report-visibility.ts";
 
 const scopeMigration = fs.readFileSync(new URL("../drizzle/0171_trade_rental_assessment_scope.sql", import.meta.url), "utf8");
 
@@ -176,6 +177,9 @@ function loadRoute(fixture, permissions = {}, reportApi = {}, runtime = {}) {
     "@/lib/trade-rental-evidence.mjs": evidence,
     "@/lib/trade-rental-credentials": credentials,
     "@/lib/trade-rental-schema-guards": { ensureTradeRentalSchemaGuards: async () => {} },
+    "@/lib/trade-rental-correction-drafts": { latestRentalCorrection: async () => null,
+      rentalAssessmentTables: () => ({ inspections: 'trade_rental_inspections', modules: 'trade_rental_inspection_modules',
+        items: 'trade_rental_inspection_items', findings: 'trade_rental_findings', evidence: 'trade_rental_evidence_links', events: 'trade_rental_inspection_events' }) },
     "@/lib/bounded-json-request": { BoundedJsonRequestError: class extends Error {}, readBoundedJsonRequest: (request) => request.json() },
     "@/lib/trade-rental-report-email-server": { rentalReportDeliveryRecipient: async () => null, rentalReportDeliveryState: async () => null,
       rentalReportDeliveryReview: async () => null, ...runtime.emailApi },
@@ -191,6 +195,41 @@ function loadRoute(fixture, permissions = {}, reportApi = {}, runtime = {}) {
 const post = (route, value) => route.POST(new Request("https://test.example/api/trade-rental-inspections", {
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workOrderId: "job", ...value }),
 }));
+
+test("completed unissued rental modules reopen with saved observations retained and fresh declarations required", async (t) => {
+  const fixture = databaseFixture(); t.after(() => fixture.sql.close());
+  fixture.sql.exec(`UPDATE trade_rental_inspection_modules SET status='complete',completed_by_uid='worker-uid',completed_at='before',
+    answers='{"assessorDeclaration":true,"credentialConfirmed":true,"coverageConfirmed":true,"occupancy":"vacant"}',credential_snapshot='{"oldCredential":true}'`);
+  const beforeItem = fixture.sql.prepare('SELECT * FROM trade_rental_inspection_items').get();
+  const route = loadRoute(fixture);
+  const response = await post(route, { action: 'reopen_module', moduleId: 'module', expectedRevision: 1 });
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  const result = await response.json();
+  assert.equal(result.permissions.canEdit, true);
+  const reopened = fixture.sql.prepare('SELECT * FROM trade_rental_inspection_modules').get();
+  assert.equal(reopened.status, 'draft'); assert.equal(reopened.revision, 2);
+  assert.deepEqual(JSON.parse(reopened.answers), { occupancy: 'vacant' });
+  assert.deepEqual(JSON.parse(reopened.credential_snapshot), {}); assert.equal(reopened.completed_at, ''); assert.equal(reopened.completed_by_uid, '');
+  assert.deepEqual(fixture.sql.prepare('SELECT * FROM trade_rental_inspection_items').get(), beforeItem);
+  assert.equal(fixture.sql.prepare("SELECT count(*) n FROM trade_rental_inspection_events WHERE event_type='module_reopened'").get().n, 1);
+  assert.equal((await post(route, { action: 'reopen_module', moduleId: 'module', expectedRevision: 1 })).status, 409);
+});
+
+test("rental edit permission and reopen enforce terminal job, issued assessment and role locks", async (t) => {
+  for (const scenario of ['completed', 'cancelled', 'issued', 'permission']) {
+    const fixture = databaseFixture(); t.after(() => fixture.sql.close());
+    fixture.sql.exec("UPDATE trade_rental_inspection_modules SET status='complete'");
+    if (scenario === 'issued') fixture.sql.exec("UPDATE trade_rental_inspections SET status='issued'");
+    else if (scenario !== 'permission') fixture.sql.prepare('UPDATE trade_work_orders SET stage=?').run(scenario);
+    const route = loadRoute(fixture, scenario === 'permission' ? { canManageFieldEvidence: false } : {});
+    const response = await route.GET(new Request('https://test.example/api/trade-rental-inspections?workOrderId=job'));
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).permissions.canEdit, false, scenario);
+    assert.equal((await post(route, { action: 'reopen_module', moduleId: 'module', expectedRevision: 1 })).status, scenario === 'permission' ? 403 : 409);
+    assert.equal(fixture.sql.prepare('SELECT status FROM trade_rental_inspection_modules').get().status, 'complete');
+    assert.equal(fixture.sql.prepare('SELECT count(*) n FROM trade_rental_inspection_events').get().n, 0);
+  }
+});
 
 test("quoting capture API persists actual cable, count, heating/cooling rating and shared-supply answers", async () => {
   const cases = [
@@ -580,6 +619,11 @@ test("actual issued-report source retains retired switchboard photos and answers
       "@/lib/trade-team-sync-server": {}, "@/lib/trade-rental-assessment.mjs": templates, "@/lib/trade-issued-document-store": {}, "@/lib/trade-rental-report-links": {}, "@/lib/customer-plan-pdf-fonts": {},
       "@/lib/trade-rental-evidence.mjs": evidence, "@/lib/trade-rental-credentials": credentials, "@/lib/rental-assessor-workflow.mjs": workflow, "@/lib/rental-report-answer.mjs": answerPresentation,
       "@/lib/trade-rental-schema-guards": {}, "@/lib/rental-report-branding.mjs": branding, "@/lib/rental-quotation.mjs": quotation,
+      "@/lib/trade-rental-correction-schema-guards": {},
+      "@/lib/trade-message-media-access": {},
+      "@/lib/trade-rental-report-visibility": reportVisibility,
+      "@/lib/trade-rental-correction-drafts": { rentalAssessmentTables: () => ({ inspections: 'trade_rental_inspections', modules: 'trade_rental_inspection_modules',
+        items: 'trade_rental_inspection_items', findings: 'trade_rental_findings', evidence: 'trade_rental_evidence_links', events: 'trade_rental_inspection_events' }) },
     };
     const moduleRecord = { exports: {} };
     new Function("require", "module", "exports", compiled)((id) => { assert.ok(id in dependencies, `Unexpected dependency ${id}`); return dependencies[id]; }, moduleRecord, moduleRecord.exports);
@@ -1071,6 +1115,7 @@ function reportIssuanceFixture() {
       if (!job) throw new Error('JOB_NOT_FOUND'); return job;
     } },
     '@/lib/trade-rental-schema-guards': { ensureTradeRentalSchemaGuards: async () => {} },
+    '@/lib/trade-rental-report-visibility': reportVisibility,
   };
   const moduleRecord = { exports: {} };
   new Function('require','module','exports',compiled)((id) => dependencies[id] || {}, moduleRecord,moduleRecord.exports);

@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -489,7 +490,7 @@ async function failedReportCleanupFixture(count = 9) {
   const compiled = ts.transpileModule(`${source}\nexport { cleanupFailedRentalReportObjects };`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const dependencies = { "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../db": { getD1: () => d1 },
+  const dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES, "cloudflare:workers": { env: { EVIDENCE: bucket } }, "../../db": { getD1: () => d1 },
     "@/lib/trade-rental-assessment.mjs": assessment,
     "@/lib/trade-issued-document-store": { deleteImmutableIssuedPdf: async () => { throw new Error("ISSUED_PDF_REFERENCE_INVALID"); } } };
   const transformedModule = { exports: {} };
@@ -565,7 +566,7 @@ async function renderReportSnapshot(snapshot) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
   } }).outputText;
   let stateIndex = 0;
-  const dependencies = {
+  const dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES,
     react: { ...React, useState: () => [[{ ok: true, report: snapshot }, false, ""][stateIndex++], () => {}], useEffect: () => {}, useMemo: (callback) => callback() },
     "react/jsx-runtime": jsxRuntime,
     "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },

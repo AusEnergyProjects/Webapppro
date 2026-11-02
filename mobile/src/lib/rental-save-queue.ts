@@ -426,13 +426,15 @@ async function processFinish(owner: LocalDataOwner, record: RentalSaveRecord, in
       if (!completion?.complete) throw conflict(completion?.blockers[0]?.label || 'Review the outstanding property checks.');
       result = await request(owner, record.workOrderId, { action: 'complete_module', moduleId: assessmentModule.id, expectedRevision: assessmentModule.revision });
     }
-    let reportId = result.reports?.find((entry) => entry.status === 'issued')?.id;
+    let reportId = result.reports?.find((entry) => entry.status === 'issued'
+      && (!result.correction || entry.id === result.inspection?.issuedReportId))?.id;
     if (finish.issueReport !== false && !reportId && result.inspection?.status === 'issuing') {
       throw new ApiError('Your report is still being prepared. Finishing will retry automatically.', 503, 'RENTAL_REPORT_ISSUING');
     }
     if (finish.issueReport !== false && !reportId && result.permissions?.canIssue && result.modules?.every((entry) => entry.status === 'complete')) {
-      result = await request(owner, record.workOrderId, { action: 'issue_report' });
-      reportId = result.issuedReport?.reportId || result.reports?.find((entry) => entry.status === 'issued')?.id;
+      result = await request(owner, record.workOrderId, { action: 'issue_report', expectedInspectionRevision: result.inspection?.revision });
+      reportId = result.issuedReport?.reportId || result.reports?.find((entry) => entry.status === 'issued'
+        && (!result.correction || entry.id === result.inspection?.issuedReportId))?.id;
       if (!reportId) throw new Error('The report is still being prepared. Delivery will retry.');
     }
     if (finish.email) {

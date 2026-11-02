@@ -98,6 +98,9 @@ function loadRoute(f, options = {}) {
     },
   };
   const source = fs.readFileSync(new URL("../src/app/api/trade-rental-inspections/route.ts", import.meta.url), "utf8");
+  dependencies["@/lib/trade-rental-correction-drafts"] = { latestRentalCorrection: async () => null,
+    rentalAssessmentTables: () => ({ inspections: 'trade_rental_inspections', modules: 'trade_rental_inspection_modules',
+      items: 'trade_rental_inspection_items', findings: 'trade_rental_findings', evidence: 'trade_rental_evidence_links', events: 'trade_rental_inspection_events' }) };
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const moduleRecord = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {

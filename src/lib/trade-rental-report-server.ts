@@ -42,6 +42,9 @@ import { rentalReportAnswerPresentation, rentalReportCheckStandard } from "@/lib
 import { rentalReportBrandingProfile } from "@/lib/rental-report-branding.mjs";
 import { rentalObservationResponseProjection } from "@/lib/rental-quotation.mjs";
 import { ensureTradeRentalSchemaGuards } from "@/lib/trade-rental-schema-guards";
+import { ensureRentalCorrectionSchemaGuards } from "@/lib/trade-rental-correction-schema-guards";
+import { rentalAssessmentTables, rentalCorrectionActorGuard } from "@/lib/trade-rental-correction-drafts";
+import { rentalCurrentIssuedReportSql, rentalIssuedReportVisibilitySql } from "@/lib/trade-rental-report-visibility";
 
 type Row = Record<string, unknown>;
 type EvidenceObject = {
@@ -188,27 +191,28 @@ async function reportIssueContext(access: TeamAccess, workOrderId: string) {
   return { job, inspection };
 }
 
-async function reportSource(access: TeamAccess, workOrderId: string) {
+async function reportSource(access: TeamAccess, workOrderId: string, correction?: { job: Row; inspection: Row }) {
   const db = getD1();
-  const { job, inspection } = await reportIssueContext(access, workOrderId);
+  const { job, inspection } = correction || await reportIssueContext(access, workOrderId);
+  const tables = correction ? rentalAssessmentTables(true) : { modules: 'trade_rental_inspection_modules', items: 'trade_rental_inspection_items', findings: 'trade_rental_findings', evidence: 'trade_rental_evidence_links' };
   if (String(inspection.status) === "issuing") throw new Error("RENTAL_REPORT_ISSUING");
   if (!["draft", "scheduled", "in_progress", "submitted"].includes(String(inspection.status))
-    || ["completed", "cancelled"].includes(String(job.stage))) {
+    || (correction ? String(job.stage) === 'cancelled' : ["completed", "cancelled"].includes(String(job.stage)))) {
     throw new Error("RENTAL_INSPECTION_LOCKED");
   }
   const [moduleRows, itemRows, findingRows, evidenceRows, business, assessor] = await Promise.all([
-    db.prepare(`SELECT * FROM trade_rental_inspection_modules
+    db.prepare(`SELECT * FROM ${tables.modules}
       WHERE inspection_id = ? AND firebase_uid = ? ORDER BY COALESCE(selected_required, 1) DESC, created_at, id`)
       .bind(inspection.id, access.ownerUid).all<Row>(),
-    db.prepare(`SELECT * FROM trade_rental_inspection_items
+    db.prepare(`SELECT * FROM ${tables.items}
       WHERE inspection_id = ? AND firebase_uid = ? ORDER BY sort_order, created_at, id`)
       .bind(inspection.id, access.ownerUid).all<Row>(),
-    db.prepare(`SELECT * FROM trade_rental_findings
+    db.prepare(`SELECT * FROM ${tables.findings}
       WHERE inspection_id = ? AND firebase_uid = ? ORDER BY sort_order, created_at, id`)
       .bind(inspection.id, access.ownerUid).all<Row>(),
     db.prepare(`SELECT evidence.*, media.file_name, media.content_type, media.size_bytes,
         media.object_key, media.caption media_caption, media.original_sha256, media.evidence_envelope
-      FROM trade_rental_evidence_links evidence
+      FROM ${tables.evidence} evidence
       JOIN trade_crm_job_media media ON media.id = evidence.job_media_id
         AND media.work_order_id = ? AND media.firebase_uid = evidence.firebase_uid
       WHERE evidence.inspection_id = ? AND evidence.firebase_uid = ? AND evidence.status = 'active'
@@ -766,6 +770,203 @@ export async function issueRentalAssessmentReport(input: RentalReportIssueInput)
   }
 }
 
+type RentalAssessmentCorrectionIssueInput = RentalReportIssueInput & { correctionId: string; expectedRevision: number };
+
+async function assessmentCorrectionContext(input: Pick<RentalAssessmentCorrectionIssueInput, 'access' | 'workOrderId' | 'correctionId'>) {
+  const { access } = input;
+  if (!access.canRunReports || !access.canViewFieldEvidence || !access.canManageFieldEvidence || access.supportWorkOrderId) throw new Error('REPORT_PERMISSION_REQUIRED');
+  const db = getD1();
+  const job = await assignedJob(access, input.workOrderId);
+  const inspection = await db.prepare('SELECT * FROM trade_rental_corrections WHERE id=? AND work_order_id=? AND firebase_uid=?')
+    .bind(input.correctionId, input.workOrderId, access.ownerUid).first<Row>();
+  if (!inspection) throw new Error('RENTAL_INSPECTION_NOT_FOUND');
+  if (inspection.assessor_member_id !== access.memberId || job.assignee_member_id !== access.memberId || job.stage === 'cancelled') throw new Error('ASSESSOR_REQUIRED');
+  const original = await db.prepare(`SELECT source.*, original.inspection_number original_inspection_number
+    FROM trade_rental_reports source JOIN trade_rental_inspections original ON original.id=source.inspection_id AND original.firebase_uid=source.firebase_uid
+    WHERE source.id=? AND source.inspection_id=? AND source.firebase_uid=? AND source.status='issued' AND original.status='issued'
+      AND source.pdf_sha256=? AND source.source_snapshot_sha256=?
+      AND NOT EXISTS(SELECT 1 FROM trade_rental_reports newer WHERE newer.inspection_id=source.inspection_id
+        AND newer.firebase_uid=source.firebase_uid AND newer.status='issued' AND newer.id<>? AND newer.revision>source.revision)`)
+    .bind(inspection.source_report_id, inspection.source_inspection_id, access.ownerUid, inspection.source_report_sha256,
+      inspection.source_snapshot_sha256, inspection.issued_report_id).first<Row>();
+  if (!original || await sha256Text(String(original.report_snapshot)) !== original.source_snapshot_sha256) throw new Error('RENTAL_REPORT_SOURCE_CHANGED');
+  return { job, inspection, original };
+}
+
+function correctionSourceStampSql(ownerUid: string, correctionId: string, memberId: string) {
+  const tables = rentalAssessmentTables(true);
+  const sources = [
+    { key: 'modules', table: tables.modules, fields: 'id,module_key,status,required,required_capability,template_version,template_snapshot,answers,credential_snapshot,revision,completed_by_uid,completed_at,updated_at,selected_required' },
+    { key: 'items', table: tables.items, fields: 'id,module_id,item_key,section_key,check_key,instance_key,location_label,outcome,response_json,public_notes,internal_notes,required_evidence_count,sort_order,revision,completed_by_uid,completed_at,updated_at' },
+    { key: 'findings', table: tables.findings, fields: 'id,module_id,item_id,finding_key,category,title,description,standard_reference,finding_status,severity,location_label,recommended_action,scope_summary,quantity_milli,unit_label,details,sort_order,revision,updated_at' },
+    { key: 'evidence', table: tables.evidence, fields: 'id,module_id,item_id,finding_id,job_media_id,requirement_key,evidence_type,purpose,caption_snapshot,status,sort_order,updated_at' },
+  ];
+  const values: unknown[] = [];
+  const parts = sources.map(({ key, table, fields }) => {
+    values.push(correctionId, ownerUid);
+    return `'${key}',(SELECT json_group_array(json_array(${fields})) FROM (SELECT ${fields} FROM ${table} WHERE inspection_id=? AND firebase_uid=? ORDER BY id))`;
+  });
+  values.push(ownerUid, memberId, ownerUid, memberId);
+  parts.push(`'credentials',(SELECT json_group_array(json_array(id,status,credential_type,name,credential_number,issuer,jurisdiction,expires_at,rental_gate,file_id,updated_at))
+    FROM (SELECT * FROM trade_team_member_credentials WHERE owner_uid=? AND team_member_id=? ORDER BY id))`);
+  parts.push(`'files',(SELECT json_group_array(json_array(id,status,file_name,title,sha256,expires_at,updated_at))
+    FROM (SELECT * FROM trade_team_member_files WHERE owner_uid=? AND team_member_id=? ORDER BY id))`);
+  return { sql: `SELECT json_object(${parts.join(',')}) source_stamp`, values };
+}
+
+function correctionWriteGuard(db: D1Database, input: RentalAssessmentCorrectionIssueInput, context: Awaited<ReturnType<typeof assessmentCorrectionContext>>,
+  sourceStamp: string, headerRevision: number, status: string, reportId: string, now: string) {
+  const actor = rentalCorrectionActorGuard(input.access);
+  const stamp = correctionSourceStampSql(input.access.ownerUid, input.correctionId, input.access.memberId);
+  return db.prepare(`INSERT INTO trade_crm_write_guards(id,firebase_uid,operation_id,step_number,verified,created_at)
+    VALUES(?,?,?,1,CASE WHEN ${actor.sql}
+      AND EXISTS(SELECT 1 FROM trade_team_members member JOIN trade_work_orders work ON work.firebase_uid=member.owner_uid AND work.assignee_member_id=member.id
+        WHERE member.id=? AND member.owner_uid=? AND member.status='active' AND (member.member_uid=member.owner_uid
+          OR (member.can_run_reports=1 AND member.can_view_field_evidence=1 AND member.can_manage_field_evidence=1))
+          AND work.id=? AND work.record_status='active' AND work.stage=? AND work.revision=?)
+      AND EXISTS(SELECT 1 FROM trade_rental_corrections correction JOIN trade_rental_reports source ON source.id=correction.source_report_id
+        AND source.inspection_id=correction.source_inspection_id AND source.firebase_uid=correction.firebase_uid
+        WHERE correction.id=? AND correction.firebase_uid=? AND correction.revision=? AND correction.status=?
+          AND correction.issued_report_id=? AND correction.assessor_member_id=? AND source.status='issued'
+          AND source.pdf_sha256=correction.source_report_sha256 AND source.source_snapshot_sha256=correction.source_snapshot_sha256
+          AND NOT EXISTS(SELECT 1 FROM trade_rental_reports newer WHERE newer.inspection_id=source.inspection_id
+            AND newer.firebase_uid=source.firebase_uid AND newer.status='issued' AND newer.id<>? AND newer.revision>source.revision))
+      AND (${stamp.sql})=? THEN 1 ELSE 0 END,?)`)
+    .bind(crypto.randomUUID(),input.access.ownerUid,`rental-correction-issue:${crypto.randomUUID()}`, ...actor.values,
+      input.access.memberId,input.access.ownerUid,input.workOrderId,context.job.stage,context.job.revision,
+      input.correctionId,input.access.ownerUid,headerRevision,status,reportId,input.access.memberId,reportId,
+      ...stamp.values,sourceStamp,now);
+}
+
+async function correctionIssueReceipt(input: RentalReportIssueInput, reportId: string, inspectionId: string) {
+  const reports = await ownerRentalReportPresentation({ownerUid:input.access.ownerUid,inspectionId,origin:input.origin,includeSecret:true});
+  const report=reports.find(row=>row.id===reportId && row.status==='issued');
+  if (!report?.link) throw new Error('RENTAL_REPORT_RECONCILIATION_REQUIRED');
+  return {reportId:report.id,reportNumber:report.reportNumber,revision:report.revision,issuedAt:report.issuedAt,
+    expiresAt:report.link.expiresAt,shareUrl:report.link.shareUrl||'',pdfUrl:report.link.pdfUrl||''};
+}
+
+export async function recoverRentalAssessmentCorrection(input: Pick<RentalAssessmentCorrectionIssueInput,'access'|'workOrderId'|'correctionId'>) {
+  const db=getD1(); await ensureRentalCorrectionSchemaGuards(db);
+  const context=await assessmentCorrectionContext(input);
+  await retryFailedRentalReportCleanup(input.access.ownerUid,input.workOrderId);
+  if (context.inspection.status!=='issuing') return;
+  const cutoff=new Date(Date.now()-15*60*1000).toISOString();
+  const staged=await db.prepare(`SELECT id report_id,report_snapshot,revision report_revision,pdf_object_key,pdf_sha256,pdf_size_bytes
+    FROM trade_rental_reports WHERE id=? AND inspection_id=? AND firebase_uid=? AND status='staged' AND updated_at<?`)
+    .bind(context.inspection.issued_report_id,context.inspection.source_inspection_id,input.access.ownerUid,cutoff).first<Row>();
+  if (!staged) return;
+  const now=new Date().toISOString();
+  const results=await db.batch([
+    db.prepare(`UPDATE trade_rental_reports SET status='failed',updated_at=? WHERE id=? AND firebase_uid=? AND status='staged' AND updated_at<?`)
+      .bind(now,staged.report_id,input.access.ownerUid,cutoff),
+    db.prepare(`UPDATE trade_rental_corrections SET status='in_progress',issued_report_id='',revision=revision+1,updated_at=?
+      WHERE id=? AND firebase_uid=? AND status='issuing' AND revision=? AND issued_report_id=?
+        AND EXISTS(SELECT 1 FROM trade_rental_reports report WHERE report.id=? AND report.status='failed' AND report.updated_at=?)`)
+      .bind(now,input.correctionId,input.access.ownerUid,context.inspection.revision,staged.report_id,staged.report_id,now),
+  ]);
+  if (number(results[0]?.meta.changes)===1 && number(results[1]?.meta.changes)===1) await cleanupFailedRentalReportObjects(staged,input.access.ownerUid);
+}
+
+/** A fresh assessment revision preserves every issued source record and delivery receipt. */
+export async function issueRentalAssessmentCorrection(input: RentalAssessmentCorrectionIssueInput) {
+  const db=getD1(); await ensureRentalCorrectionSchemaGuards(db);
+  const context=await assessmentCorrectionContext(input);
+  if (!Number.isSafeInteger(input.expectedRevision) || number(context.inspection.revision)!==input.expectedRevision) throw new Error('RENTAL_MUTATION_CONFLICT');
+  if (context.inspection.status==='issued') return correctionIssueReceipt(input,String(context.inspection.issued_report_id),String(context.inspection.source_inspection_id));
+  const source=await reportSource(input.access,input.workOrderId,context);
+  if (source.modules.some(module=>!String(module.completed_at) || String(module.completed_at)<String(source.inspection.created_at)
+    || String(module.completed_by_uid)!==input.access.actorUid)) throw new Error('RENTAL_MODULES_INCOMPLETE');
+  await readImmutableIssuedPdf({objectKey:String(context.original.pdf_object_key),sha256:String(context.original.pdf_sha256),sizeBytes:number(context.original.pdf_size_bytes)},
+    {kind:'rental-report',documentId:String(context.original.id),revision:number(context.original.revision)});
+  const stampQuery=correctionSourceStampSql(input.access.ownerUid,input.correctionId,input.access.memberId);
+  const sourceStamp=String((await db.prepare(stampQuery.sql).bind(...stampQuery.values).first<Row>())?.source_stamp||'');
+  const reportRevision=number((await db.prepare('SELECT MAX(revision) revision FROM trade_rental_reports WHERE inspection_id=? AND firebase_uid=?')
+    .bind(source.inspection.source_inspection_id,input.access.ownerUid).first<Row>())?.revision)+1;
+  const reportId=crypto.randomUUID(),linkId=crypto.randomUUID(),secret=newRentalReportSecret();
+  const issuedAt=new Date().toISOString(),expiresAt=rentalReportExpiresAt(issuedAt);
+  const reportNumber=`${String(context.original.original_inspection_number)}-R${reportRevision}`;
+  const stagedRevision=input.expectedRevision+1,finalRevision=stagedRevision+1;
+  let prepared:ImmutableIssuedPdfReference|null=null;
+  let stored:ImmutableIssuedPdfReference|null=null;
+  try {
+    const built=await buildReportSnapshot(source,{reportId,reportNumber,revision:reportRevision,issuedAt});
+    const snapshot={...built.snapshot,report:{...parsedObject(built.snapshot.report),assessmentCorrection:{
+      correctionId:input.correctionId,sourceReportId:String(context.original.id),sourceReportNumber:String(context.original.report_number),
+      sourceReportRevision:number(context.original.revision),sourceIssuedAt:String(context.original.issued_at),
+      sourceReportPdfSha256:String(context.original.pdf_sha256),sourceSnapshotSha256:String(context.original.source_snapshot_sha256),
+      reason:String(source.inspection.correction_reason)}}};
+    const snapshotJson=canonicalRentalJson(snapshot),snapshotHash=await sha256Text(snapshotJson);
+    await db.batch([
+      correctionWriteGuard(db,input,context,sourceStamp,input.expectedRevision,String(source.inspection.status),'',issuedAt),
+      db.prepare(`INSERT INTO trade_rental_reports(id,inspection_id,firebase_uid,report_number,revision,status,report_schema_version,
+        report_snapshot,source_snapshot_sha256,staged_at,created_at,updated_at) VALUES(?,?,?,?,?,'staged',?,?,?,?,?,?)`)
+        .bind(reportId,source.inspection.source_inspection_id,input.access.ownerUid,reportNumber,reportRevision,REPORT_SCHEMA_VERSION,snapshotJson,snapshotHash,issuedAt,issuedAt,issuedAt),
+      db.prepare(`UPDATE trade_rental_corrections SET status='issuing',issued_report_id=?,revision=?,updated_at=?
+        WHERE id=? AND firebase_uid=? AND revision=? AND status=? AND issued_report_id=''`)
+        .bind(reportId,stagedRevision,issuedAt,input.correctionId,input.access.ownerUid,input.expectedRevision,source.inspection.status),
+    ]);
+    await storePreparedRentalEvidence(built.preparedObjects,{reportId,revision:reportRevision});
+    const fonts=await loadCustomerPlanPdfFonts();
+    const {createRentalAssessmentPdfBytes}=await import('@/lib/trade-rental-report-pdf.mjs');
+    const {rentalReportBrandBytes}=await import('@/lib/trade-rental-report-brand');
+    const pdf=await createRentalAssessmentPdfBytes(snapshot,built.assets,fonts,rentalReportBrandBytes(snapshot));
+    prepared=await prepareImmutableIssuedPdfReference({kind:'rental-report',documentId:reportId,revision:reportRevision,bytes:pdf});
+    const plan=await db.prepare(`UPDATE trade_rental_reports SET pdf_object_key=?,pdf_sha256=?,pdf_size_bytes=?,updated_at=?
+      WHERE id=? AND firebase_uid=? AND status='staged' AND source_snapshot_sha256=? AND pdf_object_key=''`)
+      .bind(prepared.objectKey,prepared.sha256,prepared.sizeBytes,new Date().toISOString(),reportId,input.access.ownerUid,snapshotHash).run();
+    if (number(plan.meta.changes)!==1) throw new Error('RENTAL_REPORT_ISSUE_CONFLICT');
+    stored=await storeImmutableIssuedPdf({kind:'rental-report',documentId:reportId,revision:reportRevision,bytes:pdf,expectedSha256:prepared.sha256});
+    await Promise.all(source.modules.map(module=>assertRentalModuleCredentialCurrent({db,ownerUid:input.access.ownerUid,assessorMemberId:input.access.memberId,
+      moduleKey:String(module.module_key),requiredCapability:String(module.required_capability),answers:module.answers,
+      storedSnapshot:module.credential_snapshot,completedAt:String(module.completed_at),checkedAt:new Date().toISOString()})));
+    const tokenHash=await hashRentalReportSecret(secret),encryptedToken=await protectRentalReportSecret(linkId,1,secret);
+    const workRevision=nextJobRevision(source.job.revision);
+    const metadata=JSON.stringify({correctionId:input.correctionId,sourceReportId:context.original.id,sourceReportPdfSha256:context.original.pdf_sha256,
+      sourceSnapshotSha256:context.original.source_snapshot_sha256,reportNumber,revision:reportRevision,reason:source.inspection.correction_reason});
+    await guardedOnlineJobMutationBatch(db,[
+      correctionWriteGuard(db,input,context,sourceStamp,stagedRevision,'issuing',reportId,issuedAt),
+      db.prepare(`UPDATE trade_rental_reports SET status='issued',issued_by_uid=?,issued_by_member_id=?,issuer_snapshot=?,issued_at=?,updated_at=?
+        WHERE id=? AND firebase_uid=? AND status='staged' AND report_snapshot=? AND source_snapshot_sha256=?
+          AND pdf_object_key=? AND pdf_sha256=? AND pdf_size_bytes=?`)
+        .bind(input.access.actorUid,input.access.memberId,canonicalRentalJson(snapshot.issuer),issuedAt,issuedAt,reportId,input.access.ownerUid,
+          snapshotJson,snapshotHash,stored.objectKey,stored.sha256,stored.sizeBytes),
+      db.prepare(`UPDATE trade_rental_corrections SET status='issued',issued_at=?,revision=?,updated_at=?
+        WHERE id=? AND firebase_uid=? AND status='issuing' AND revision=? AND issued_report_id=?`)
+        .bind(issuedAt,finalRevision,issuedAt,input.correctionId,input.access.ownerUid,stagedRevision,reportId),
+      db.prepare(`INSERT INTO trade_rental_report_links(id,report_id,inspection_id,firebase_uid,token_hash,encrypted_token,expires_at,created_by_uid,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(linkId,reportId,source.inspection.source_inspection_id,input.access.ownerUid,tokenHash,encryptedToken,expiresAt,input.access.actorUid,issuedAt,issuedAt),
+      db.prepare(`INSERT INTO trade_rental_inspection_events(id,inspection_id,report_id,report_link_id,firebase_uid,actor_type,actor_uid,event_type,summary,metadata,created_at)
+        VALUES(?,?,?,?,?,'assessor',?,'report_assessment_correction_issued',?,?,?)`)
+        .bind(crypto.randomUUID(),source.inspection.source_inspection_id,reportId,linkId,input.access.ownerUid,input.access.actorUid,`${reportNumber} issued from a separately completed correction assessment.`,metadata,issuedAt),
+      db.prepare(`INSERT INTO trade_rental_correction_events(id,inspection_id,report_id,report_link_id,firebase_uid,actor_type,actor_uid,event_type,summary,metadata,created_at)
+        VALUES(?,?,?,?,?,'assessor',?,'report_issued',?,?,?)`)
+        .bind(crypto.randomUUID(),input.correctionId,reportId,linkId,input.access.ownerUid,input.access.actorUid,`${reportNumber} issued.`,metadata,issuedAt),
+      db.prepare(`UPDATE trade_work_orders SET revision=?,updated_at=? WHERE id=? AND firebase_uid=? AND revision=? AND stage=? AND record_status='active'`)
+        .bind(workRevision,issuedAt,input.workOrderId,input.access.ownerUid,source.job.revision,source.job.stage),
+      ...jobSyncChangeStatements(db,{ownerUid:input.access.ownerUid,workOrderId:input.workOrderId,revision:workRevision,changedAt:issuedAt,audienceMemberId:input.access.memberId}),
+    ],{kind:'stage',jobRevision:workRevision,jobStage:String(source.job.stage),ownerUid:input.access.ownerUid,updatedAt:issuedAt,workOrderId:input.workOrderId});
+    const path=rentalReportPath(linkId,secret);
+    return {reportId,reportNumber,revision:reportRevision,issuedAt,expiresAt,shareUrl:`${input.origin}${path}`,pdfUrl:`${input.origin}/api${path}/pdf`};
+  } catch(error) {
+    const committed=await db.prepare(`SELECT id FROM trade_rental_reports WHERE id=? AND firebase_uid=? AND status='issued'`)
+      .bind(reportId,input.access.ownerUid).first<Row>();
+    if(committed) return correctionIssueReceipt(input,reportId,String(source.inspection.source_inspection_id));
+    const failedAt=new Date().toISOString();
+    await db.batch([
+      db.prepare(`UPDATE trade_rental_reports SET status='failed',updated_at=? WHERE id=? AND firebase_uid=? AND status='staged'`)
+        .bind(failedAt,reportId,input.access.ownerUid),
+      db.prepare(`UPDATE trade_rental_corrections SET status='in_progress',issued_report_id='',revision=revision+1,updated_at=?
+        WHERE id=? AND firebase_uid=? AND status='issuing' AND issued_report_id=? AND revision=?`)
+        .bind(failedAt,input.correctionId,input.access.ownerUid,reportId,stagedRevision),
+    ]);
+    const failed=await db.prepare(`SELECT id report_id,report_snapshot,revision report_revision,pdf_object_key,pdf_sha256,pdf_size_bytes
+      FROM trade_rental_reports WHERE id=? AND firebase_uid=? AND status='failed'`).bind(reportId,input.access.ownerUid).first<Row>();
+    if(failed) await cleanupFailedRentalReportObjects(failed,input.access.ownerUid);
+    throw error;
+  }
+}
+
 type RentalReportCorrectionInput = RentalReportIssueInput & {
   reportId: string;
   expectedInspectionRevision: number;
@@ -1254,7 +1455,7 @@ async function createRentalAssessmentReport(input: RentalReportIssueInput) {
           JSON.stringify({ reportNumber, revision: reportRevision, expiresAt }), issuedAt,
           source.inspection.id, input.access.ownerUid, linkId),
       ...jobSyncChangeStatements(db, { ownerUid: input.access.ownerUid, workOrderId: input.workOrderId,
-        revision: nextWorkRevision, changedAt: issuedAt, audienceMemberId: source.job.assignee_member_id }),
+        revision: nextWorkRevision, changedAt: issuedAt, audienceMemberId: String(source.job.assignee_member_id || '') }),
     ], {
       kind: "stage",
       jobRevision: nextWorkRevision,
@@ -1403,7 +1604,7 @@ export async function renewRentalReportLink(input: {
       link.encrypted_token, link.token_issue
     FROM trade_rental_reports report
     JOIN trade_rental_inspections inspection ON inspection.id = report.inspection_id
-      AND inspection.firebase_uid = report.firebase_uid AND inspection.issued_report_id = report.id
+      AND inspection.firebase_uid = report.firebase_uid AND ${rentalCurrentIssuedReportSql()}
     LEFT JOIN trade_rental_report_links link ON link.id = (
       SELECT latest.id FROM trade_rental_report_links latest
       WHERE latest.report_id = report.id AND latest.inspection_id = report.inspection_id
@@ -1450,7 +1651,7 @@ export async function renewRentalReportLink(input: {
         'active', ?, '', ?, '', '', 0, 0, ?, ?
       FROM trade_rental_reports report
       JOIN trade_rental_inspections inspection ON inspection.id = report.inspection_id
-        AND inspection.firebase_uid = report.firebase_uid AND inspection.issued_report_id = report.id
+        AND inspection.firebase_uid = report.firebase_uid AND ${rentalCurrentIssuedReportSql()}
       WHERE report.id = ? AND report.firebase_uid = ? AND report.status = 'issued'
         AND inspection.id = ? AND inspection.status = 'issued'
         AND NOT EXISTS (SELECT 1 FROM trade_rental_report_links active_link
@@ -1484,15 +1685,7 @@ export async function renewRentalReportLink(input: {
 // A formatting revision retains the original issued report and its existing
 // links. Only an audited, successfully issued correction permits a historical
 // report to be read independently of the inspection's current report pointer.
-const issuedRentalReportVisibilitySql = `(inspection.issued_report_id = report.id OR EXISTS (
-  SELECT 1 FROM trade_rental_inspection_events correction
-  JOIN trade_rental_reports corrected ON corrected.id = correction.report_id
-    AND corrected.inspection_id = correction.inspection_id AND corrected.firebase_uid = correction.firebase_uid
-  WHERE correction.inspection_id = inspection.id AND correction.firebase_uid = inspection.firebase_uid
-    AND correction.event_type IN ('report_formatting_revision_issued', 'report_answer_revision_issued')
-    AND correction.actor_type = 'owner' AND correction.actor_uid = inspection.firebase_uid
-    AND json_extract(correction.metadata, '$.sourceReportId') = report.id
-    AND corrected.status = 'issued'))`;
+const issuedRentalReportVisibilitySql = rentalIssuedReportVisibilitySql();
 
 export async function authenticatedRentalReportPdf(input: {
   access: TeamAccess;

@@ -10,6 +10,7 @@ import { lifecycleGuardFixture } from "./helpers/creditex-lifecycle-guards-fixtu
 import * as collaboration from "../src/lib/trade-job-collaboration.ts";
 import * as jobLifecycle from "../src/lib/trade-job-lifecycle.ts";
 import * as crews from "../src/lib/trade-crews.ts";
+import * as serviceCatalogue from "../src/lib/energy-service-catalogue.mjs";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -140,6 +141,7 @@ function fixture(overrides = {}, effects = {}) {
     '@/lib/trade-calendar-sync-server': { cancelAppointmentInConnectedCalendars: async (...args) => { calendars.push(args); if (effects.calendar) await effects.calendar(...args); return {attempted:1,synced:1,failed:0}; } },
     '@/lib/direct-appointment-invite-server': { sendDirectAppointmentCalendarInvite: async (args) => { messages.push(args); if (effects.email) await effects.email(args); return {status:'accepted'}; } },
     '@/lib/trade-rental-credentials': loadTypescriptModule('../src/lib/trade-rental-credentials.ts'),
+    '@/lib/energy-service-catalogue.mjs': serviceCatalogue,
     '@/lib/trade-job-deletion-server': { scheduleJobFileCleanup() {} },
     '@/lib/trade-job-cancellation-server': loadTypescriptModule('../src/lib/trade-job-cancellation-server.ts',{
       './creditex-job-lifecycle-schema-guards':lifecycleGuardFixture(database,['trade_job_cancel_completion_history_guard']),
@@ -416,6 +418,37 @@ test('reschedule rechecks rental credentials for the new date before calling sch
  assert.equal(response.status,409);assert.equal(f.scheduleChanges.length,0);
  assert.equal((await f.patch('reschedule',{startsAt:'2026-10-11T09:00',durationMinutes:60,memberId:'worker'})).status,200);
  assert.equal(f.scheduleChanges.length,1);
+});
+
+test('rental appointment actions accept canonical and legacy service selections in both directions', async t => {
+  for (const serviceCategory of ['rental-inspection', 'minimum-rental-standards']) {
+    for (const capability of ['rental-inspection', 'minimum-rental-standards']) {
+      const f = fixture({ isOwner: true }); t.after(() => f.database.close());
+      f.database.prepare('UPDATE trade_work_orders SET service_category=?').run(serviceCategory);
+      f.database.exec(`CREATE TABLE trade_team_member_credentials(owner_uid text,team_member_id text,file_id text,rental_gate text,status text,credential_number text,jurisdiction text,credential_type text,expires_at text);
+        CREATE TABLE trade_team_member_files(id text,owner_uid text,team_member_id text,status text,expires_at text);
+        INSERT INTO trade_rental_inspections VALUES('inspection','owner','job');
+        INSERT INTO trade_rental_inspection_modules VALUES('inspection','owner','minimum_standards','draft');
+        INSERT INTO trade_team_members(id,owner_uid,display_name,status,member_uid,capabilities)
+          VALUES('unqualified','owner','No rental service','active','unqualified-user','["electrical"]');`);
+      f.database.prepare(`INSERT INTO trade_team_members(id,owner_uid,display_name,status,member_uid,capabilities)
+        VALUES('worker','owner','Worker','active','worker-user',?)`).run(JSON.stringify([capability]));
+      const response = await f.get();
+      assert.equal(response.status, 200);
+      assert.deepEqual((await response.json()).assignees, [{ id: 'worker', displayName: 'Worker' }]);
+      assert.equal((await f.patch('reschedule', { startsAt: '2026-10-11T09:00', durationMinutes: 60, memberId: 'worker' })).status, 200);
+      assert.equal(f.scheduleChanges.length, 1);
+      f.database.prepare('UPDATE trade_work_orders SET service_category=?').run('electrical');
+      assert.deepEqual((await (await f.get()).json()).assignees, [], 'the job service remains required alongside rental modules');
+      f.database.prepare('UPDATE trade_team_members SET capabilities=? WHERE id=?').run(JSON.stringify([capability, 'electrical']), 'worker');
+      assert.deepEqual((await (await f.get()).json()).assignees, [{ id: 'worker', displayName: 'Worker' }]);
+      f.database.prepare('UPDATE trade_work_orders SET service_category=?').run(serviceCategory);
+      f.database.prepare('UPDATE trade_team_members SET capabilities=? WHERE id=?').run('["electrical"]', 'worker');
+      assert.deepEqual((await (await f.get()).json()).assignees, []);
+      assert.equal((await f.patch('reschedule', { startsAt: '2026-10-11T09:00', durationMinutes: 60, memberId: 'worker' })).status, 409);
+      assert.equal(f.scheduleChanges.length, 1, 'removing rental services prevents delegation');
+    }
+  }
 });
 
 test('cancellation starts its email while calendar removal is still pending', async () => {

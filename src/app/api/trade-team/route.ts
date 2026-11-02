@@ -22,7 +22,7 @@ import {
   rentalInspectionAssignmentStatements,
 } from "@/lib/trade-rental-assignment-server";
 import { normalizeFieldAccessName } from "@/lib/trade-field-access-policy.mjs";
-import { normalizeEnergyServiceIds } from "@/lib/energy-service-catalogue.mjs";
+import { hasServiceCapability, normalizeEnergyServiceIds, serviceCapabilityIds } from "@/lib/energy-service-catalogue.mjs";
 import { getBusinessServiceStates, memberServiceStateProjection, validateMemberServiceStates } from "@/lib/trade-team-service-states";
 import { DEFAULT_TRADE_BRAND_THEME, TRADE_BRAND_THEME_KEYS } from "@/lib/trade-business-branding";
 
@@ -48,6 +48,10 @@ function memberCapabilities(value: unknown) {
   const requested = normalizeEnergyServiceIds(parsedList(value));
   if (!requested || requested.length > 30) throw new Error("CAPABILITY_NOT_ALLOWED");
   return requested;
+}
+
+function savedMemberCapabilities(value: unknown) {
+  return [...new Set(parsedList(value).map((id) => serviceCapabilityIds(id)[0]))];
 }
 
 async function memberServiceStates(db: D1Database, ownerUid: string, value: unknown, current: unknown = null, isOwner = false) {
@@ -482,8 +486,8 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     bindings.push(new Date().toISOString());
   }
   if (rosterCapability) {
-    conditions.push("EXISTS (SELECT 1 FROM json_each(trade_team_members.capabilities) WHERE value = ?)");
-    bindings.push(rosterCapability);
+    conditions.push("EXISTS (SELECT 1 FROM json_each(trade_team_members.capabilities) WHERE value IN (SELECT value FROM json_each(?)))");
+    bindings.push(JSON.stringify(serviceCapabilityIds(rosterCapability)));
   }
   const where = conditions.join(" AND ");
   const rosterTotalRow = !canManageTeam(access) ? null : await db.prepare(`SELECT COUNT(*) count
@@ -518,8 +522,8 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     assigneeBindings.push(`%${assigneeSearch.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`);
   }
   if (assigneeCapability) {
-    assigneeConditions.push("(member_uid = owner_uid OR EXISTS (SELECT 1 FROM json_each(trade_team_members.capabilities) WHERE value = ?))");
-    assigneeBindings.push(assigneeCapability);
+    assigneeConditions.push("(member_uid = owner_uid OR EXISTS (SELECT 1 FROM json_each(trade_team_members.capabilities) WHERE value IN (SELECT value FROM json_each(?))))");
+    assigneeBindings.push(JSON.stringify(serviceCapabilityIds(assigneeCapability)));
   }
   const canListAssignees = access.isOwner || access.canAssignJobs;
   const assigneeWhere = assigneeConditions.join(" AND ");
@@ -556,7 +560,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
     members: memberRows.results.map((row) => ({ id: row.id, email: row.email, displayName: row.display_name,
       firstName: row.first_name, lastName: row.last_name, phone: row.phone, fieldUsername: row.field_username,
       scheduleColour: row.schedule_colour,
-      capabilities: parsedList(row.capabilities), staffCode: String(row.id).slice(0, 8).toUpperCase(),
+      capabilities: savedMemberCapabilities(row.capabilities), staffCode: String(row.id).slice(0, 8).toUpperCase(),
       ...memberServiceStateProjection(row.service_states, businessServiceStates, row.member_uid === access.ownerUid),
       status: row.status,
       presence: row.presence,
@@ -585,7 +589,7 @@ async function teamPayload(access: TeamAccess, options: RosterOptions = {}) {
         canSearchCustomers: Boolean(row.can_search_customers),
       } })),
     assignees: assigneeRows.results.map((row) => ({ id: row.id, displayName: row.display_name,
-      status: row.status, capabilities: parsedList(row.capabilities), isSelf: row.id === access.memberId,
+      status: row.status, capabilities: savedMemberCapabilities(row.capabilities), isSelf: row.id === access.memberId,
       ...memberServiceStateProjection(row.service_states, businessServiceStates, row.member_uid === access.ownerUid),
       isOwner: row.member_uid === access.ownerUid })),
     assigneeRoster: { page: assigneePage, pageSize: assigneePageSize, total: assigneeTotal,
@@ -1016,7 +1020,7 @@ export async function PATCH(request: Request) {
         if (!member) throw new Error("MEMBER_NOT_FOUND");
         const serviceCategory = String(job.service_category || "");
         if (String(member.member_uid || "") !== access.ownerUid && serviceCategory
-          && !parsedList(member.capabilities).includes(serviceCategory)) {
+          && !hasServiceCapability(parsedList(member.capabilities), serviceCategory)) {
           throw new Error("MEMBER_CAPABILITY_REQUIRED");
         }
         label = String(member.display_name);

@@ -7,6 +7,7 @@ import { sendTradeCustomerEmail, tradeCustomerEmailReadiness } from '@/lib/trade
 import { rentalReportEmailDraft } from './rental-report-email-template.mjs';
 import { readRentalReportProviderReceipt } from './trade-rental-report-provider-events';
 import { readRentalReportAttachmentVerification } from './trade-rental-report-provider-verification';
+import { rentalCurrentIssuedReportSql } from './trade-rental-report-visibility';
 
 type Row = Record<string, unknown>;
 type Input = { access: TeamAccess; workOrderId: string; inspectionId: string; reportId: string; expectedRecipientEmail: string; origin: string; admin?: Pick<AdminIdentity, 'uid' | 'role'> };
@@ -101,7 +102,9 @@ export async function rentalReportDeliveryRecipient(ownerUid: string, workOrderI
 export async function rentalReportDeliveryState(ownerUid: string, inspectionId: string) {
   const row = await getD1().prepare(`SELECT event.event_type, event.report_id, event.request_id, event.metadata, event.created_at FROM trade_rental_inspection_events event
     JOIN trade_rental_inspections inspection ON inspection.id = event.inspection_id AND inspection.firebase_uid = event.firebase_uid
-      AND inspection.issued_report_id = event.report_id AND inspection.status = 'issued'
+      AND inspection.status = 'issued'
+    JOIN trade_rental_reports report ON report.id=event.report_id AND report.inspection_id=inspection.id
+      AND report.firebase_uid=inspection.firebase_uid AND report.status='issued' AND ${rentalCurrentIssuedReportSql()}
     WHERE event.firebase_uid = ? AND event.inspection_id = ? AND event.event_type IN ('report_email_requested', 'report_email_accepted', 'report_email_failed')
     ORDER BY event.created_at DESC, CASE event.event_type WHEN 'report_email_accepted' THEN 0 WHEN 'report_email_failed' THEN 1 ELSE 2 END LIMIT 1`)
     .bind(ownerUid, inspectionId).first<Row>();
@@ -165,7 +168,7 @@ export async function emailRentalAssessmentReport(input: Input) {
   const report = await db.prepare(`SELECT r.report_number, r.pdf_sha256, i.assessor_member_id
     FROM trade_rental_reports r JOIN trade_rental_inspections i ON i.id = r.inspection_id AND i.firebase_uid = r.firebase_uid
     WHERE r.id = ? AND r.firebase_uid = ? AND r.inspection_id = ? AND r.status = 'issued'
-      AND i.work_order_id = ? AND i.status = 'issued' AND i.issued_report_id = r.id`)
+      AND i.work_order_id = ? AND i.status = 'issued' AND ${rentalCurrentIssuedReportSql('r','i')}`)
     .bind(input.reportId, input.access.ownerUid, input.inspectionId, input.workOrderId).first<Row>();
   if (!report) throw new Error('RENTAL_REPORT_LINK_NOT_FOUND');
   if (!adminDelivery && !input.access.isOwner && String(report.assessor_member_id || '') !== input.access.memberId) throw new Error('ASSESSOR_REQUIRED');
@@ -214,9 +217,11 @@ export async function emailRentalAssessmentReport(input: Input) {
   const attempt = `${prefix}:${requests.length + 1}`;
   const claim = await db.prepare(`INSERT OR IGNORE INTO trade_rental_inspection_events
     (id, inspection_id, report_id, firebase_uid, actor_type, actor_uid, event_type, request_id, summary, metadata, created_at)
-    SELECT ?, inspection.id, inspection.issued_report_id, inspection.firebase_uid, ?, ?, 'report_email_requested', ?, ?, ?, ?
-    FROM trade_rental_inspections inspection WHERE inspection.id = ? AND inspection.firebase_uid = ?
-      AND inspection.work_order_id = ? AND inspection.status = 'issued' AND inspection.issued_report_id = ?
+    SELECT ?, inspection.id, report.id, inspection.firebase_uid, ?, ?, 'report_email_requested', ?, ?, ?, ?
+    FROM trade_rental_inspections inspection JOIN trade_rental_reports report ON report.inspection_id=inspection.id
+      AND report.firebase_uid=inspection.firebase_uid AND report.status='issued'
+    WHERE inspection.id = ? AND inspection.firebase_uid = ?
+      AND inspection.work_order_id = ? AND inspection.status = 'issued' AND report.id = ? AND ${rentalCurrentIssuedReportSql()}
       AND COALESCE((SELECT review.event_type FROM trade_rental_inspection_events review
         WHERE review.inspection_id = inspection.id AND review.firebase_uid = inspection.firebase_uid
           AND review.event_type IN ('report_email_review_held', 'report_email_review_released') ORDER BY review.rowid DESC LIMIT 1), '') <> 'report_email_review_held'`)

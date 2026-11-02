@@ -84,8 +84,6 @@ const ordinarySteps = ["Work", "Customer", "Forms", "Appointment", "Review"];
 const rentalInspectionSteps = ["Work", "Customer", "Forms", "Appointment", "Review"];
 const rentalInspectionModules: ReadonlyArray<{ key: RentalInspectionModule; label: string; help: string }> = [
   { key: "minimum_standards", label: "Rental minimum standards assessment", help: "Selected by default. Untick it when this job is only for separate safety checks." },
-  { key: "electrical_safety_check", label: "Electrical safety check", help: "Adds the separate licensed electrical safety workflow." },
-  { key: "gas_safety_check", label: "Gas safety check", help: "Adds the separate licensed gas safety workflow." },
   { key: "smoke_alarm_check", label: "Smoke alarm and blind cord safety check", help: "Annual smoke alarm service with the included blind cord safety check on this visit." },
 ];
 const MAX_PLANNED_COMPLIANCE_ACTIVITIES = 12;
@@ -258,6 +256,7 @@ export function TradeNewJobForm({
   const [formPickerOpen, setFormPickerOpen] = useState(false);
   const [selectedRentalInspectionModules, setSelectedRentalInspectionModules] = useState<RentalInspectionModule[]>(() => serviceCategory === "rental-inspection" ? ["minimum_standards"] : []);
   const [attachPiesa, setAttachPiesa] = useState(false);
+  const [selectedSafetyChecks, setSelectedSafetyChecks] = useState<Extract<TradeJobFormSelection, { kind: "safety-check" }>[]>([]);
   const [activityDraftOpen, setActivityDraftOpen] = useState(false);
   const [draftClaimOutputCode, setDraftClaimOutputCode] = useState<ComplianceClaimOutputCode | "">("");
   const [draftProgramTemplateId, setDraftProgramTemplateId] = useState("");
@@ -317,6 +316,7 @@ export function TradeNewJobForm({
     setServiceCategory(value);
     setSelectedForms([]);
     setAttachPiesa(false);
+    setSelectedSafetyChecks([]);
     setFormPickerOpen(false);
     setAssignableMembers(canChooseTeamAssignee ? teamMembers : selfMember ? [selfMember] : []);
     setAssigneeSearch("");
@@ -622,6 +622,7 @@ export function TradeNewJobForm({
     ...selectedRentalInspectionModules.map(moduleKey => ({ kind: "rental" as const, moduleKey, name: rentalInspectionModules.find(module => module.key === moduleKey)?.label || moduleKey })),
     ...plannedActivityDetails.map(({ selection, activity }) => ({ kind: "creditex" as const, ...selection, name: activity.title })),
     ...(attachPiesa ? [{ kind: "piesa" as const, name: "Pre-installation electrical safety assessment (Insulation)" }] : []),
+    ...selectedSafetyChecks,
   ];
   function selectForm(option: TradeJobFormLibraryOption) {
     if (busy || option.unavailableReason || option.added || allSelectedForms.some(item => tradeJobFormSelectionId(item) === option.id)) return;
@@ -632,6 +633,7 @@ export function TradeNewJobForm({
       setSelectedForms(current => [...current, selection]);
     } else if (selection.kind === "rental") setSelectedRentalInspectionModules(current => [...current, selection.moduleKey]);
     else if (selection.kind === "piesa") setAttachPiesa(true);
+    else if (selection.kind === "safety-check") setSelectedSafetyChecks(current => [...current, selection]);
     else {
       if (plannedActivities.length >= MAX_PLANNED_COMPLIANCE_ACTIVITIES) { setMessage("Select up to 12 Creditex activities during setup."); return; }
       const variantId = activityRequiresPremisesVariant(selection.activityTemplateId) ? activityPremisesVariantId(selection.activityTemplateId, buildingType) : selection.variantId;
@@ -646,6 +648,7 @@ export function TradeNewJobForm({
     if (selection.kind === "business") setSelectedForms(current => current.filter(item => item.templateKey !== selection.templateKey));
     else if (selection.kind === "rental") setSelectedRentalInspectionModules(current => current.filter(key => key !== selection.moduleKey));
     else if (selection.kind === "piesa") setAttachPiesa(false);
+    else if (selection.kind === "safety-check") setSelectedSafetyChecks(current => current.filter(item => item.checkKind !== selection.checkKind));
     else removePlannedActivity(selection);
     setHighestStep(current => Math.min(current, 3));
   }
@@ -657,6 +660,15 @@ export function TradeNewJobForm({
       ? current.filter((item) => item !== module)
       : [...current, module]);
     setHighestStep((current) => Math.min(current, 3));
+  }
+
+  function selectRentalVisit(moduleKeys: readonly RentalInspectionModule[]) {
+    setSelectedRentalInspectionModules(moduleKeys.filter(key => key !== "electrical_safety_check" && key !== "gas_safety_check"));
+    const safetyChecks: Extract<TradeJobFormSelection, { kind: "safety-check" }>[] = [];
+    if (moduleKeys.includes("electrical_safety_check")) safetyChecks.push({ kind: "safety-check", checkKind: "electrical", name: serviceLabels["electrical-safety-check"] });
+    if (moduleKeys.includes("gas_safety_check")) safetyChecks.push({ kind: "safety-check", checkKind: "gas", name: serviceLabels["gas-safety-check"] });
+    setSelectedSafetyChecks(safetyChecks);
+    setHighestStep(current => Math.min(current, 3));
   }
   const reviewAddress = customerMode === "new" || newSite
     ? [newAddress.addressLine2, newAddress.addressLine1, newAddress.suburb, newAddress.addressState, newAddress.postcode].filter(Boolean).join(", ")
@@ -727,7 +739,7 @@ export function TradeNewJobForm({
 
   function next(nextStep: number) {
     setMessage("");
-    if (serviceCategory === "rental-inspection" && step === 3 && !selectedRentalInspectionModules.length) {
+    if (serviceCategory === "rental-inspection" && step === 3 && !selectedRentalInspectionModules.length && !selectedSafetyChecks.length) {
       setMessage("Choose at least one inspection or safety-check service.");
       return;
     }
@@ -771,7 +783,7 @@ export function TradeNewJobForm({
 
   return <form ref={formRef} noValidate className={`crm-form crm-new-job crm-job-wizard${step === 4 ? " crm-job-wizard-scheduling" : ""}`} onSubmit={(event) => {
     if (!validateVisibleStep()) { event.preventDefault(); return; }
-    if (serviceCategory === "rental-inspection" && !selectedRentalInspectionModules.length) {
+    if (serviceCategory === "rental-inspection" && !selectedRentalInspectionModules.length && !selectedSafetyChecks.length) {
       event.preventDefault(); setMessage("Choose at least one inspection or safety-check service."); setStep(3); return;
     }
     if (!appointmentCalendarReady) {
@@ -805,6 +817,7 @@ export function TradeNewJobForm({
     <input type="hidden" name="rentalInspectionModulesJson" value={rentalInspectionModulesJson} />
     <input type="hidden" name="attachVeuElectricalAssessment" value={String(attachPiesa)} />
     <input type="hidden" name="formSelectionsJson" value={JSON.stringify(selectedForms.map(({ templateKey, templateVersion }) => ({ templateKey, templateVersion })))} />
+    <input type="hidden" name="safetyCheckKindsJson" value={JSON.stringify(selectedSafetyChecks.map(selection => selection.checkKind))} />
     <input type="hidden" name="programTemplateId" value={legacyComplianceActivity?.programTemplateId || ""} />
     <input type="hidden" name="activityTemplateId" value={legacyComplianceActivity?.activityTemplateId || ""} />
     <input type="hidden" name="siteLabel" value="Primary site" />
@@ -870,14 +883,14 @@ export function TradeNewJobForm({
         {canManageFieldEvidence && <button type="button" className="btn btn-secondary" disabled={busy} aria-expanded={formPickerOpen} onClick={() => { resetActivityDraft(); setFormPickerOpen((value) => !value); }}>{formPickerOpen ? "Close form library" : "Add form"}</button>}
       </div>
       {serviceCategory === "rental-inspection" ? !formPickerOpen && <div className="crm-planned-activity-list" aria-label="Rental inspection modules">
-        <div className="crm-compliance-notice wide"><strong>One report for this visit</strong><p>Choose a visit bundle or select individual services below. Future annual visits remain separate.</p>
-          {RENTAL_VISIT_PRESETS.map((preset) => <button key={preset.key} type="button" className="btn btn-secondary" onClick={() => setSelectedRentalInspectionModules([...preset.moduleKeys])}>{preset.label}</button>)}
+        <div className="crm-compliance-notice wide"><strong>Forms for this visit</strong><p>Choose a visit bundle or add individual forms. Electrical and gas checks use their official safety forms. Future annual visits remain separate.</p>
+          {RENTAL_VISIT_PRESETS.map((preset) => <button key={preset.key} type="button" className="btn btn-secondary" onClick={() => selectRentalVisit(preset.moduleKeys)}>{preset.label}</button>)}
         </div>
         {rentalInspectionModules.map((module) => <label className="crm-compliance-notice crm-planned-activity-card" key={module.key}>
           <span className="crm-inline-heading"><strong>{module.label}</strong><input type="checkbox" checked={selectedRentalInspectionModules.includes(module.key)} onChange={() => toggleRentalInspectionModule(module.key)} /></span>
           <small>{module.help}</small>
         </label>)}
-        {!selectedRentalInspectionModules.length && <p className="crm-wizard-message" role="alert">Choose at least one inspection or safety-check service.</p>}
+        {!selectedRentalInspectionModules.length && !selectedSafetyChecks.length && <p className="crm-wizard-message" role="alert">Choose at least one inspection or safety-check service.</p>}
         <p className="crm-form-note">Every selected module remains a separate record and requires the appropriate qualified worker.</p>
       </div> : <>
       {!formPickerOpen && plannedActivityDetails.length > 0 && <div className="crm-planned-activity-list" aria-label="Planned government activities">

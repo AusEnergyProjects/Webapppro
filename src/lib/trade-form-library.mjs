@@ -133,8 +133,8 @@ function validIsoDate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-export function tradeFormTemplatesFor(serviceCategory) {
-  return templates.filter((template) => template.categories.includes(String(serviceCategory || "other")))
+export function tradeFormTemplatesFor(serviceCategory, { allCategories = false } = {}) {
+  return templates.filter((template) => allCategories || template.categories.includes(String(serviceCategory || "other")))
     .map((template) => structuredClone(template));
 }
 

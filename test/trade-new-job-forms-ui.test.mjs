@@ -26,6 +26,8 @@ const businessSelection = (key = "business-scope", version = 2) => ({ kind: "bus
 const rentalSelection = { kind: "rental", moduleKey: "minimum_standards", name: "Rental minimum standards assessment" };
 const creditexSelection = { kind: "creditex", programTemplateId: programme.templateId, activityTemplateId: activity.templateId, name: activity.title };
 const piesaSelection = { kind: "piesa", name: "Pre-installation electrical safety assessment (Insulation)" };
+const electricalSelection = { kind: "safety-check", checkKind: "electrical", name: "Electrical safety check" };
+const gasSelection = { kind: "safety-check", checkKind: "gas", name: "Gas safety check" };
 const formOption = (selection = businessSelection(), extra = {}) => ({
   id: formLibraryContract.tradeJobFormSelectionId(selection), name: selection.name,
   group: selection.kind === "business" ? "Business forms" : selection.kind === "rental" ? "Rental assessments" : "Creditex forms",
@@ -255,18 +257,19 @@ test("restricted desktop creator has no form attachment controls and retains ord
   assert.equal(nodes(tree, (node) => node.props?.name === "formSelectionsJson")[0].props.value, "[]");
 });
 
-test("ordinary job starts with no implicit rental module and all four form kinds use their canonical payloads", async () => {
+test("ordinary job starts with no implicit rental module and every form kind uses its canonical payload", async () => {
   const h = wizard();
   let tree = await openForms(h);
   assert.equal(inputValue(tree, "rentalInspectionModulesJson"), "[]");
   assert.equal(inputValue(tree, "attachVeuElectricalAssessment"), "false");
   assert.equal(inputValue(tree, "complianceActivitiesJson"), "[]");
-  const options = [formOption(), formOption(rentalSelection), formOption(creditexSelection), formOption(piesaSelection)];
+  const options = [formOption(), formOption(rentalSelection), formOption(creditexSelection), formOption(piesaSelection), formOption(electricalSelection), formOption(gasSelection)];
   for (const option of options) { libraryIn(tree).props.onSelect(option); tree = h.render(); }
   assert.deepEqual(JSON.parse(inputValue(tree, "formSelectionsJson")), [{ templateKey: "business-scope", templateVersion: 2 }]);
   assert.deepEqual(JSON.parse(inputValue(tree, "rentalInspectionModulesJson")), ["minimum_standards"]);
   assert.deepEqual(JSON.parse(inputValue(tree, "complianceActivitiesJson")), [{ programTemplateId: programme.templateId, activityTemplateId: activity.templateId }]);
   assert.equal(inputValue(tree, "attachVeuElectricalAssessment"), "true");
+  assert.deepEqual(JSON.parse(inputValue(tree, "safetyCheckKindsJson")), ["electrical", "gas"]);
   assert.equal(inputValue(tree, "complianceIntentMode"), "planned");
   assert.deepEqual(libraryIn(tree).props.selectedIds, options.map(option => option.id));
   const review = nodes(tree, node => node.props?.["data-step"] === "5")[0];
@@ -280,7 +283,32 @@ test("ordinary job starts with no implicit rental module and all four form kinds
   assert.equal(inputValue(tree, "rentalInspectionModulesJson"), "[]");
   assert.equal(inputValue(tree, "complianceActivitiesJson"), "[]");
   assert.equal(inputValue(tree, "attachVeuElectricalAssessment"), "false");
+  assert.equal(inputValue(tree, "safetyCheckKindsJson"), "[]");
   assert.equal(nodes(tree, node => node.type === "select" && node.props.name === "appointmentType")[0].props.value, "site_visit");
+});
+
+test("legacy rental wizard accepts an official safety form without requiring a rental checklist", async () => {
+  const h = wizard({ initial: { serviceCategory: "rental-inspection" } });
+  let tree = await openForms(h);
+  button(tree, `Remove ${rentalSelection.name}`).props.onClick(); tree = h.render();
+  button(tree, "Set appointment").props.onClick(); tree = h.render();
+  assert.match(text(tree), /Choose at least one inspection or safety-check service/);
+  libraryIn(tree).props.onSelect(formOption(gasSelection)); tree = h.render();
+  button(tree, "Set appointment").props.onClick(); tree = h.render();
+  assert.equal(nodes(tree, node => node.props?.["data-step"] === "4")[0].props.hidden, false);
+  assert.equal(inputValue(tree, "rentalInspectionModulesJson"), "[]");
+  assert.deepEqual(JSON.parse(inputValue(tree, "safetyCheckKindsJson")), ["gas"]);
+});
+
+test("rental visit bundles select real official safety forms and keep retired checklists out of the create payload", async () => {
+  const h = wizard({ initial: { serviceCategory: "rental-inspection" } }, {
+    "@/lib/rental-safety-visit.mjs": { RENTAL_VISIT_PRESETS: [{ key: "combined", label: "Combined safety visit", moduleKeys: ["minimum_standards", "electrical_safety_check", "gas_safety_check", "smoke_alarm_check"] }] },
+  });
+  let tree = await openForms(h);
+  button(tree, "Close form library").props.onClick(); tree = h.render();
+  button(tree, "Combined safety visit").props.onClick(); tree = h.render();
+  assert.deepEqual(JSON.parse(inputValue(tree, "rentalInspectionModulesJson")), ["minimum_standards", "smoke_alarm_check"]);
+  assert.deepEqual(JSON.parse(inputValue(tree, "safetyCheckKindsJson")), ["electrical", "gas"]);
 });
 
 test("wizard prevents busy, unavailable, duplicate keys and more than twenty business selections", async () => {
@@ -369,10 +397,12 @@ test("saved-job Add form can explicitly open and close the canonical attachment 
   assert.equal(libraryIn(tree), undefined);
 });
 
-test("saved rental and PIESA choices create their actual canonical records", async () => {
+test("saved rental, PIESA and official safety choices create their actual canonical records", async () => {
   for (const [selection, endpoint, body] of [
     [rentalSelection, "/api/field/job-activities", { kind: "rental", moduleKey: "minimum_standards", expectedRevision: 9, workOrderId: "saved-job" }],
     [piesaSelection, "/api/trade-veu-electrical-assessments", { action: "start", workOrderId: "saved-job" }],
+    [electricalSelection, "/api/trade-safety-checks", { action: "start", kind: "electrical", workOrderId: "saved-job" }],
+    [gasSelection, "/api/trade-safety-checks", { action: "start", kind: "gas", workOrderId: "saved-job" }],
   ]) {
     const h = savedPanel({ libraryOpen: true }); let tree = await h.settle();
     await libraryIn(tree).props.onSelect(formOption(selection), 9); tree = await h.settle();

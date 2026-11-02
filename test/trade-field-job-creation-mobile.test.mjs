@@ -107,7 +107,7 @@ test("provider-selected locality remains signed while only manual addresses are 
   assert.equal(shouldReconcile("manual_pending_review", true, "3000", "VIC"), false);
   assert.equal(shouldReconcile("manual_pending_review", false, "300", "VIC"), false);
   assert.match(mobile, /if \(!shouldReconcileAddressLocality\(addressProvenance\.entryMode, Boolean\(selectedCustomer\), postcode, addressState\)\)/);
-  assert.match(mobile, /\[addressProvenance\.entryMode, addressState, postcode, selectedCustomer\]/);
+  assert.match(mobile, /\[addressProvenance\.entryMode, addressState, postcode, selectedCustomer, apiRequest\]/);
   assert.match(mobile, /localityLookupController\.current\?\.abort\(\); localityLookupController\.current = null;\s*setAddressLine1\(selection\.addressLine1\)/);
   assert.match(mobile, /setAddressProvenance\(manualAddressProvenance\(\)\);\s*const matches =/);
   assert.match(mobile, /setLocalities\(\[\]\); setLocalityBusy\(false\); setLocalityMessage\('Address suggestion selected\. Its suburb and postcode are preserved\.'\)/);

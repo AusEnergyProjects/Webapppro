@@ -223,6 +223,21 @@ function prepareModuleFinishes(h) {
   };
 }
 
+test('finishing a correction issues a fresh revision despite retained issued history and never emails it automatically', async () => {
+  const h = harness(); prepareFinish(h);
+  h.state.result.correction = { id: 'correction', sourceReportId: 'original-report', status: 'in_progress' };
+  h.state.result.inspection = { id: 'correction', revision: 7, status: 'in_progress', issuedReportId: '' };
+  h.state.result.reports = [{ id: 'original-report', status: 'issued' }];
+  const input = { workOrderId: 'job-1', module: clone(h.state.result.modules[0]), reviewed: clone(h.state.result), email: false, recipientEmail: '' };
+  await h.queue.enqueueRentalFinish(input); await h.queue.processRentalSaveQueue('job-1');
+  const state = await h.queue.getRentalSaveState('job-1');
+  assert.equal(state.pending, 0, JSON.stringify(state.records.map(entry => entry.error)));
+  const issue = h.state.calls.filter(call => call.body?.action === 'issue_report');
+  assert.equal(issue.length, 1); assert.equal(issue[0].body.expectedInspectionRevision, 9, 'Issuance receives the revision after fresh declarations and module completion');
+  assert.equal(h.state.calls.filter(call => call.body?.action === 'email_report').length, 0);
+  assert.equal(h.state.result.inspection.issuedReportId, 'report-1');
+});
+
 test('four module finishes saved offline process later module saves and issue and email only after every signed module completes', async () => {
   const h = harness(), gate = deferred(), connected = prepareModuleFinishes(h);
   h.state.handler = async () => { await gate.promise; throw new Error('Offline'); };

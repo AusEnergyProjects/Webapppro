@@ -2,6 +2,24 @@ import { AEA_SERVICE_IDENTITIES, AEA_BUNDLE_IDENTITIES, isAeaReservedService } f
 
 /** @type {Readonly<Record<string, string>>} */
 export const LEGACY_ENERGY_SERVICE_ALIASES = Object.freeze({ "rental-inspection": "minimum-rental-standards" });
+
+/**
+ * Equivalent persisted IDs for one service, shared by assignment checks and SQL guards.
+ * @param {string} serviceCategory
+ * @returns {string[]}
+ */
+export function serviceCapabilityIds(serviceCategory) {
+  const canonical = Object.hasOwn(LEGACY_ENERGY_SERVICE_ALIASES, serviceCategory)
+    ? LEGACY_ENERGY_SERVICE_ALIASES[serviceCategory] : serviceCategory;
+  return [canonical, ...Object.entries(LEGACY_ENERGY_SERVICE_ALIASES)
+    .filter(([, value]) => value === canonical).map(([alias]) => alias)];
+}
+
+/** @param {readonly string[]} capabilities @param {string} serviceCategory */
+export function hasServiceCapability(capabilities, serviceCategory) {
+  return serviceCapabilityIds(serviceCategory).some((id) => capabilities.includes(id));
+}
+
 /** One authority for persisted aliases, including legacy combined services. */
 export const ENERGY_SERVICE_ID_EXPANSIONS = Object.freeze({
   ...Object.fromEntries(Object.entries(LEGACY_ENERGY_SERVICE_ALIASES).map(([alias, canonical]) => [alias, Object.freeze([canonical])])),

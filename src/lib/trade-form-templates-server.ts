@@ -25,7 +25,7 @@ function parseList<T>(value: unknown): T[] {
 
 export async function publishedTradeFormTemplatesFor(serviceCategory: string, database?: D1Database, ownerUid = "",
   options: { allCategories?: boolean; includeBuiltIns?: boolean } = {}): Promise<TradeFormTemplate[]> {
-  const builtIns = options.includeBuiltIns === false ? [] : tradeFormTemplatesFor(serviceCategory) as TradeFormTemplate[];
+  const builtIns = options.includeBuiltIns === false ? [] : tradeFormTemplatesFor(serviceCategory, { allCategories: options.allCategories }) as TradeFormTemplate[];
   const rows = await (database || getD1()).prepare(`SELECT template_key, version, name, jurisdiction, categories, description, guidance, fields, status, scope_owner_uid
     FROM trade_form_templates candidate
     WHERE (scope_owner_uid = '' OR scope_owner_uid = ?) AND status <> 'draft'

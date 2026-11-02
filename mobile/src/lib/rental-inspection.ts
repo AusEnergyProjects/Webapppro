@@ -123,6 +123,7 @@ export type RentalAssessmentEvidence = {
 
 export type RentalAssessmentResult = {
   ok?: boolean;
+  correction?: { id: string; sourceReportId: string; status: string } | null;
   deliveryRecipient?: { email: string; name: string } | null;
   reportDelivery?: { status: string; reportId?: string; recipientSha256?: string; recipientEmail?: string; sentAt?: string };
   inspection?: {
@@ -167,6 +168,7 @@ export type RentalAssessmentResult = {
     pdfUrl: string;
   };
   permissions?: {
+    canCorrectReport?: boolean;
     canEdit: boolean;
     canIssue: boolean;
     canRevokeLink: boolean;

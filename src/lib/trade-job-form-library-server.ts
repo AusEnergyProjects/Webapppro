@@ -5,6 +5,8 @@ import { RENTAL_ASSESSMENT_MODULES } from "./trade-rental-assessment.mjs";
 import { createVeuElectricalForm } from "./veu-electrical-safety-form";
 import { publishedTradeFormTemplatesFor, type TradeFormTemplate } from "./trade-form-templates-server";
 import { tradeJobFormSelectionId, type TradeJobFormLibraryOption, type TradeJobFormSelection } from "./trade-job-form-library";
+import { createOfficialSafetyCheckForm } from "./official-safety-check-forms";
+import type { SafetyCheckKind } from "./job-safety-check";
 
 export type SavedJobFormEligibility = {
   revision: number;
@@ -26,10 +28,12 @@ function planningReason(state: string, label: string) {
   return "";
 }
 
-export function buildTradeJobFormLibrary({ serviceCategory, addressState, buildingType, businessTemplates,
-  saved, attachedBusinessIds = [], piesaAdded = false, piesaUnavailableReason = "", businessUnavailableReason = "" }: {
+export function buildTradeJobFormLibrary({ addressState, buildingType, businessTemplates,
+  saved, attachedBusinessIds = [], piesaAdded = false, piesaUnavailableReason = "", businessUnavailableReason = "",
+  attachedSafetyCheckKinds = [], safetyCheckUnavailableReason = "" }: {
   serviceCategory: string; addressState: string; buildingType: string; businessTemplates: TradeFormTemplate[];
   saved?: SavedJobFormEligibility; attachedBusinessIds?: string[]; piesaAdded?: boolean; piesaUnavailableReason?: string; businessUnavailableReason?: string;
+  attachedSafetyCheckKinds?: SafetyCheckKind[]; safetyCheckUnavailableReason?: string;
 }): TradeJobFormLibraryOption[] {
   const options: TradeJobFormLibraryOption[] = [];
   const fieldForms = activityFieldCatalogue();
@@ -71,12 +75,21 @@ export function buildTradeJobFormLibrary({ serviceCategory, addressState, buildi
       ? "The pre-installation electrical safety assessment covers Victorian properties." : piesaUnavailableReason,
     ...(saved ? { added: piesaAdded } : {}),
   }));
+  for (const checkKind of ["electrical", "gas"] as const) {
+    const form = createOfficialSafetyCheckForm(checkKind);
+    options.push(option({ kind: "safety-check", checkKind, name: form.title }, {
+      group: "Rental assessments", jurisdiction: "VIC", categories: [`${checkKind}-safety-check`],
+      description: `Official ${checkKind} safety check with the inspector's answers, evidence, signature and completed PDF.`,
+      unavailableReason: addressState !== "VIC" ? "Official safety check forms currently cover Victorian properties."
+        : safetyCheckUnavailableReason || (saved ? saved.unavailableReason : ""),
+      ...(saved ? { added: attachedSafetyCheckKinds.includes(checkKind) } : {}),
+    }));
+  }
   for (const template of businessTemplates) {
     const selection: TradeJobFormSelection = { kind: "business", templateKey: template.key, templateVersion: template.version, name: template.name };
     options.push(option(selection, { group: "Business forms", jurisdiction: template.jurisdiction,
       description: template.description, categories: template.categories,
-      unavailableReason: businessUnavailableReason || (!template.categories.includes(serviceCategory || "other") ? "This published form is not available for this job's work type."
-        : template.jurisdiction !== "AU" && template.jurisdiction !== addressState ? `This form covers ${template.jurisdiction} properties.` : ""),
+      unavailableReason: businessUnavailableReason || (template.jurisdiction !== "AU" && template.jurisdiction !== addressState ? `This form covers ${template.jurisdiction} properties.` : ""),
       ...(saved ? { added: attachedBusinessIds.includes(tradeJobFormSelectionId(selection)) } : {}),
     }));
   }
@@ -86,6 +99,6 @@ export function buildTradeJobFormLibrary({ serviceCategory, addressState, buildi
 export async function loadTradeJobFormLibrary(input: Omit<Parameters<typeof buildTradeJobFormLibrary>[0], "businessTemplates">,
   database: D1Database, ownerUid: string) {
   const businessTemplates = await publishedTradeFormTemplatesFor(input.serviceCategory, database, ownerUid,
-    { allCategories: true, includeBuiltIns: false });
+    { allCategories: true });
   return buildTradeJobFormLibrary({ ...input, businessTemplates });
 }

@@ -12,6 +12,9 @@ import * as rentalAssessment from "../src/lib/trade-rental-assessment.mjs";
 import * as rentalCredentials from "../src/lib/trade-rental-credentials.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const attachments = loadModule(read("../src/lib/trade-job-form-attachment-server.ts"), {
+  "./trade-message-media-access": {}, "./trade-form-templates-server": {}, "./trade-rental-assessment.mjs": rentalAssessment,
+});
 const native = read("../mobile/src/app/new-job.tsx");
 const crm = read("../src/app/api/trade-crm/route.ts");
 const optionsSource = read("../src/app/api/field/job-options/route.ts");
@@ -76,6 +79,7 @@ function fixture(overrides = {}) {
     "@/lib/energy-service-catalogue.mjs": energyServices,
     "@/lib/australian-government-program-catalogue": catalogue,
     "@/lib/trade-compliance-intent": intents,
+    "@/lib/trade-job-form-attachment-server": attachments,
     "@/lib/trade-rental-assessment.mjs": rentalAssessment,
     "@/lib/trade-rental-credentials": rentalCredentials,
   });
@@ -129,6 +133,73 @@ test("electrical, plumbing and insulation specialists can be registered and assi
   } finally { db.close(); }
 });
 
+test("rental worker choices accept saved canonical and legacy services while retaining every required capability", async () => {
+  const { db, get } = fixture();
+  try {
+    db.prepare("INSERT INTO trade_team_members VALUES (?, 'business', ?, ?, 'active', ?)")
+      .run("canonical", "canonical-user", "Canonical worker", '["minimum-rental-standards","hot-water"]');
+    db.prepare("INSERT INTO trade_team_members VALUES (?, 'business', ?, ?, 'active', ?)")
+      .run("hot-only", "hot-user", "Hot water only", '["hot-water"]');
+    for (const serviceCategory of ["rental-inspection", "minimum-rental-standards"]) {
+      const response = await get({ serviceCategory });
+      assert.equal(response.status, 200);
+      assert.deepEqual((await response.json()).assignees.map((item) => item.id).sort(), ["both", "canonical", "rental", "self"]);
+      const combined = await get({ serviceCategory, activities: JSON.stringify([selection("VEU", "3")]) });
+      assert.equal(combined.status, 200);
+      assert.deepEqual((await combined.json()).assignees.map((item) => item.id).sort(), ["both", "canonical", "self"]);
+    }
+  } finally { db.close(); }
+});
+
+test("selected rental forms constrain workers independently of the primary work category", async t => {
+  const { db, get } = fixture(); t.after(() => db.close());
+  db.prepare("INSERT INTO trade_team_members VALUES (?, 'business', ?, ?, 'active', ?)")
+    .run("hot-only", "hot-user", "Hot water only", '["hot-water"]');
+  const response = await get({ serviceCategory: "hot-water", rentalModules: '["minimum_standards"]' });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).assignees.map(item => item.id).sort(), ["both", "self"]);
+  for (const rentalModules of ['["unknown"]', '["minimum_standards","minimum_standards"]', '{}']) {
+    assert.equal((await get({ serviceCategory: "hot-water", rentalModules })).status, 400);
+  }
+});
+
+test("official safety form worker options require the exact service and current licence for the appointment", async t => {
+  const { db, get } = fixture(); t.after(() => db.close());
+  for (const [memberId, capabilities] of [
+    ["licensed", ["hot-water", "electrical-safety-check"]],
+    ["wrong-service", ["hot-water"]],
+    ["no-licence", ["hot-water", "electrical-safety-check"]],
+  ]) {
+    db.prepare("INSERT INTO trade_team_members VALUES (?, 'business', ?, ?, 'active', ?)")
+      .run(memberId, `${memberId}-user`, memberId, JSON.stringify(capabilities));
+  }
+  for (const memberId of ["licensed", "wrong-service"]) {
+    db.prepare("INSERT INTO trade_team_member_files VALUES (?, 'business', ?, 'active', '2099-01-02')")
+      .run(`${memberId}-file`, memberId);
+    db.prepare("INSERT INTO trade_team_member_credentials VALUES (?, 'business', ?, ?, 'licensed_electrician', 'active', 'licence', 'VIC', '2099-01-02', 'TEST-1')")
+      .run(`${memberId}-credential`, memberId, `${memberId}-file`);
+  }
+  const query = { serviceCategory: "hot-water", safetyCheckKinds: '["electrical"]', appointmentDate: "2099-01-01" };
+  const response = await get(query);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).assignees.map(item => item.id), ["licensed"]);
+  assert.deepEqual((await (await get({ ...query, appointmentDate: "2099-01-03" })).json()).assignees, []);
+  for (const safetyCheckKinds of ['["unknown"]', '["gas","gas"]', '{}']) {
+    assert.equal((await get({ ...query, safetyCheckKinds })).status, 400);
+  }
+});
+
+test("form attachment permission is projected independently from ordinary job creation", async t => {
+  for (const [permissions, expected] of [
+    [{ isOwner: false, canCreateJobs: true, canViewFieldEvidence: false, canManageFieldEvidence: false }, false],
+    [{ isOwner: false, canCreateJobs: true, canViewFieldEvidence: true, canManageFieldEvidence: true }, true],
+  ]) {
+    const { db, get } = fixture(permissions); t.after(() => db.close());
+    const response = await get(); assert.equal(response.status, 200);
+    assert.equal((await response.json()).permissions.canAddForms, expected);
+  }
+});
+
 test("own-scope or incomplete scheduling grants cannot expose other workers through search or selected IDs", async () => {
   for (const permissions of [
     { canAssignJobs: false, jobScope: "team", canRescheduleJobs: true, scheduleScope: "team" },
@@ -167,7 +238,8 @@ test("a rental visit may explicitly add hot water and only offers workers with b
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.deepEqual(result.assignees.map((item) => item.id).sort(), ["both", "self"]);
-    const assertCapability = sourceFunction(crm, "assertMemberCapability", { parsedCapabilities: JSON.parse, canAccessCrewMember });
+    const assertCapability = sourceFunction(crm, "assertMemberCapability", { parsedCapabilities: JSON.parse, canAccessCrewMember,
+      hasServiceCapability: energyServices.hasServiceCapability });
     await assert.rejects(assertCapability(d1, { uid: "business", access: { isOwner: true } }, "rental", "hot-water"), /MEMBER_CAPABILITY_REQUIRED/);
     assert.ok(await assertCapability(d1, { uid: "business", access: { isOwner: true } }, "both", "hot-water"));
     assert.equal(await assertCapability(d1, { uid: "business", access: { isOwner: true } }, "inactive", "hot-water"), null);
@@ -221,7 +293,8 @@ test("specialised rental checks require credentials valid for the appointment ev
     assert.deepEqual((await (await get(selected)).json()).assignees.map((item) => item.id), ["both"]);
     const extra = await (await get({ ...selected, rentalModules: '["electrical_safety_check","gas_safety_check"]' })).json();
     assert.deepEqual(extra.assignees, []);
-    const guard = sourceFunction(crm, "tradeCrmScheduleMemberGuardStatement", { ...rentalCredentials, crewMutationGuard });
+    const guard = sourceFunction(crm, "tradeCrmScheduleMemberGuardStatement", { ...rentalCredentials, crewMutationGuard,
+      serviceCapabilityIds: energyServices.serviceCapabilityIds });
     const guardInput = { access: { isOwner: true }, ownerUid: "business", memberId: "both", serviceCategory: "rental-inspection", changedAt: "2026-09-07T00:00:00Z",
       credentialDate: "2030-01-01", rentalGates: ["licensed_electrician"] };
     await guard(d1, guardInput).run();

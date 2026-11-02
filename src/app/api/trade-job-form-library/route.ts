@@ -6,6 +6,7 @@ import { assertTradeFormAttachmentAccess, TradeFormSelectionError } from "@/lib/
 import { ENERGY_SERVICE_IDS, LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
 import { loadTradeJobFormLibrary, type SavedJobFormEligibility } from "@/lib/trade-job-form-library-server";
 import { GET as jobActivityLibrary } from "../field/job-activities/route";
+import type { SafetyCheckKind } from "@/lib/job-safety-check";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,8 @@ export async function GET(request: Request) {
     let piesaAdded = false;
     let piesaUnavailableReason = "";
     let businessUnavailableReason = "";
+    let attachedSafetyCheckKinds: SafetyCheckKind[] = [];
+    let safetyCheckUnavailableReason = "";
     if (workOrderId) {
       if (!/^[A-Za-z0-9:_-]{1,180}$/.test(workOrderId)) return adminJson({ ok: false, error: "Choose an available job." }, 400);
       const activityUrl = new URL(request.url);
@@ -69,15 +72,20 @@ export async function GET(request: Request) {
       attachedBusinessIds = attached.results.map(entry => `business:${entry.template_key}:${entry.template_version}`);
       piesaAdded = Boolean(await database.prepare("SELECT id FROM trade_veu_electrical_assessments WHERE work_order_id = ? AND owner_uid = ?")
         .bind(workOrderId, access.ownerUid).first());
+      const safetyChecks = await database.prepare("SELECT kind FROM trade_safety_checks WHERE work_order_id = ? AND owner_uid = ?")
+        .bind(workOrderId, access.ownerUid).all<{ kind: SafetyCheckKind }>();
+      attachedSafetyCheckKinds = safetyChecks.results.map(check => check.kind);
       if (["imported", "completed", "cancelled"].includes(job.stage)) {
         piesaUnavailableReason = "Imported, completed and cancelled jobs cannot have more forms added.";
         businessUnavailableReason = piesaUnavailableReason;
+        safetyCheckUnavailableReason = piesaUnavailableReason;
       }
     } else if (!serviceCategories.has(serviceCategory) || addressState && !states.has(addressState) || !buildingTypes.has(buildingType)) {
       return adminJson({ ok: false, error: "Choose a valid work type, job address state and premises type." }, 400);
     }
     const options = await loadTradeJobFormLibrary({ serviceCategory, addressState, buildingType, saved,
-      attachedBusinessIds, piesaAdded, piesaUnavailableReason, businessUnavailableReason }, database, access.ownerUid);
+      attachedBusinessIds, piesaAdded, piesaUnavailableReason, businessUnavailableReason,
+      attachedSafetyCheckKinds, safetyCheckUnavailableReason }, database, access.ownerUid);
     return adminJson({ ok: true, options, ...(saved ? { revision: saved.revision } : {}) });
   } catch (error) {
     const mfa = mfaErrorResponse(error); if (mfa) return mfa;

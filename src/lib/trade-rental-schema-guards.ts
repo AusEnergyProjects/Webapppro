@@ -2,6 +2,7 @@ import { JOB_DELETION_SCHEMA_GUARDS, upgradeJobDeletionGuards } from "./trade-jo
 // Sites splits migration SQL on semicolons, so rental trigger bodies are installed
 // through D1 prepared statements after migration 0160 has created the tables.
 import { canonicalTlinkSchemaGuardSql } from "./tlink-schema-guards.ts";
+import { isRentalCorrectionReportGuardSql } from "./trade-rental-correction-report-guards.ts";
 
 type RentalSchemaGuardDefinition = {
   readonly name: string;
@@ -485,6 +486,7 @@ async function installRentalSchemaGuards(database: D1Database) {
   for (const definition of TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS) {
     const current = installed.get(definition.name);
     if (current && canonicalTlinkSchemaGuardSql(current) !== canonicalTlinkSchemaGuardSql(definition.sql)) {
+      if (isRentalCorrectionReportGuardSql(current, definition)) continue;
       const previous = previousFormattingGuards.get(definition.name);
       const previousHash = previousRentalGuardHashes.get(definition.name);
       const knownPrevious = previous && canonicalTlinkSchemaGuardSql(current) === canonicalTlinkSchemaGuardSql(previous)
@@ -502,7 +504,8 @@ async function installRentalSchemaGuards(database: D1Database) {
     .all<{ name: string; sql: string | null }>();
   const verifiedMap = new Map(verified.results.map((row) => [String(row.name), String(row.sql || "")]));
   const unavailable = TRADE_RENTAL_SCHEMA_GUARD_DEFINITIONS.filter((definition) =>
-    canonicalTlinkSchemaGuardSql(verifiedMap.get(definition.name) || "") !== canonicalTlinkSchemaGuardSql(definition.sql));
+    canonicalTlinkSchemaGuardSql(verifiedMap.get(definition.name) || "") !== canonicalTlinkSchemaGuardSql(definition.sql)
+      && !isRentalCorrectionReportGuardSql(verifiedMap.get(definition.name) || "", definition));
   if (unavailable.length) {
     throw new Error(`TRADE_RENTAL_SCHEMA_GUARDS_UNAVAILABLE:${unavailable.map((definition) => definition.name).join(",")}`);
   }

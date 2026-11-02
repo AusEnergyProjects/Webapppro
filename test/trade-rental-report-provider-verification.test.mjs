@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,12 +9,13 @@ import ts from 'typescript';
 const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const sha = value => createHash('sha256').update(value).digest('hex');
 function load(mocks, path = '../src/lib/trade-rental-report-provider-verification.ts') {
+  mocks = { ...RENTAL_REPORT_TEST_DEPENDENCIES, ...mocks };
   const output = ts.transpileModule(read(path), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', output)(name => mocks[name] || {}, module, module.exports);
-  return module.exports;
+  const moduleRecord = { exports: {} };
+  new Function('require', 'module', 'exports', output)(name => mocks[name] || {}, moduleRecord, moduleRecord.exports);
+  return moduleRecord.exports;
 }
 function testD1(database) {
   const statement = (sql, values = []) => ({
@@ -27,7 +29,7 @@ function testD1(database) {
 function fixture({ pdf = Buffer.from('%PDF-1.7\nJames Winstanley rental report'), provider = 'resend', apiKey = 'secret-server-only' } = {}) {
   const database = new DatabaseSync(':memory:');
   database.exec(`CREATE TABLE trade_work_orders(id text,firebase_uid text,partner_type text,record_status text);
-    CREATE TABLE trade_rental_reports(id text,inspection_id text,firebase_uid text,status text,report_number text,pdf_sha256 text,pdf_size_bytes integer);
+    CREATE TABLE trade_rental_reports(id text,inspection_id text,firebase_uid text,status text,report_number text,pdf_sha256 text,pdf_size_bytes integer,revision INTEGER DEFAULT 1,report_snapshot TEXT DEFAULT '{}',issued_by_uid TEXT DEFAULT 'actor');
     CREATE TABLE trade_rental_inspections(id text PRIMARY KEY,firebase_uid text,work_order_id text,status text,issued_report_id text);
     INSERT INTO trade_work_orders VALUES('job','owner','installer','active');
     INSERT INTO trade_rental_inspections VALUES('inspection','owner','job','issued','report');`);
@@ -40,7 +42,7 @@ function fixture({ pdf = Buffer.from('%PDF-1.7\nJames Winstanley rental report')
   const key = sha(`rental-report-email|owner|report|${pdfSha256}|${recipientSha256}`);
   const now = new Date().toISOString();
   const messageId = 'provider-message-1';
-  database.prepare('INSERT INTO trade_rental_reports VALUES(?,?,?,?,?,?,?)').run('report','inspection','owner','issued','RMS-X5FZU6EZ-R1',pdfSha256,pdf.length);
+  database.prepare('INSERT INTO trade_rental_reports(id,inspection_id,firebase_uid,status,report_number,pdf_sha256,pdf_size_bytes) VALUES(?,?,?,?,?,?,?)').run('report','inspection','owner','issued','RMS-X5FZU6EZ-R1',pdfSha256,pdf.length);
   database.prepare(`INSERT INTO trade_email_submissions
     (id,owner_uid,actor_uid,connection_id,request_key,content_hash,sender_email,recipient_email,subject,provider,status,provider_message_id,error_code,created_at,updated_at)
     VALUES('submission','owner','actor','platform',?,'hash','service@example.test',?,'Report',?,'accepted',?,'',?,?)`)

@@ -24,6 +24,7 @@ import { installFieldCorrectionFixture } from './helpers/activity-field-correcti
 import { FIELD_CORRECTION_GUARD_NAMES, lifecycleGuardFixture } from './helpers/creditex-lifecycle-guards-fixture.mjs';
 import { installEmptyTradeCrews } from './helpers/trade-crews-fixture.mjs';
 import { jobSalesOutcomeFixture } from './helpers/trade-job-sales-outcome-fixture.mjs';
+import * as safetyForms from '../src/lib/official-safety-check-forms.ts';
 
 const read = file => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 function load(file, dependencies = {}) {
@@ -69,7 +70,7 @@ function fixture(t, accessPatch = {}, options = {}) {
     trade_rental_inspection_modules: 'id inspection_id firebase_uid module_key required selected_required status template_version template_name required_capability template_snapshot answers revision completed_by_uid completed_at created_at updated_at',
     trade_rental_inspection_events: 'id inspection_id report_id report_link_id firebase_uid actor_type actor_uid event_type request_id summary metadata source_ip_sha256 user_agent_sha256 created_at',
   };
-  for (const [table, columns] of Object.entries(tables)) sql.exec(`CREATE TABLE ${table} (${columns.split(' ').map(column => `${column} TEXT ${column === 'id' ? 'PRIMARY KEY' : ''} DEFAULT ''`).join(',')})`);
+  for (const [table, columns] of Object.entries(tables)) sql.exec(`CREATE TABLE ${table} (${columns.split(' ').map(column => `${column} TEXT ${column === 'id' ? 'PRIMARY KEY' : ''} ${table === 'trade_work_order_events' && column === 'summary' ? 'NOT NULL' : ''} DEFAULT ''`).join(',')})`);
   sql.exec(`ALTER TABLE trade_work_orders ADD revision INTEGER NOT NULL DEFAULT 1;
     CREATE TABLE trade_crm_write_guards(id TEXT PRIMARY KEY,firebase_uid TEXT,operation_id TEXT,step_number INTEGER,verified INTEGER CHECK(verified=1),created_at TEXT);
     CREATE TABLE trade_job_forms(id TEXT PRIMARY KEY,work_order_id TEXT,firebase_uid TEXT,template_key TEXT,template_version INTEGER,
@@ -110,6 +111,9 @@ function fixture(t, accessPatch = {}, options = {}) {
   const piesaGuards = load('src/lib/trade-veu-electrical-schema-guards.ts', { './tlink-schema-guards': schemaGuardSql });
   for (const guard of piesaGuards.PIESA_SCHEMA_GUARDS) sql.exec(guard.sql);
   const piesaDraft = load('src/lib/trade-veu-electrical-draft.ts', { './trade-activity-forms': activityForms, './veu-electrical-safety-form': electricalForm });
+  const safetyGuards = load('src/lib/trade-safety-check-schema-guards.ts', { './tlink-schema-guards': schemaGuardSql });
+  for (const guard of safetyGuards.SAFETY_CHECK_SCHEMA_GUARDS) sql.exec(guard.sql);
+  const safetyDraft = load('src/lib/trade-safety-check-draft.ts', { './trade-activity-forms': activityForms, './official-safety-check-forms': safetyForms });
   const access = { ownerUid: 'owner', memberId: 'member', actorUid: 'worker', actorEmail: 'worker@example.test', isOwner: false,
     canCreateJobs: true, canManageCustomers: true, canViewFieldEvidence: true, canManageFieldEvidence: true, canRescheduleJobs: true,
     jobScope: 'own', scheduleScope: 'own', ...accessPatch };
@@ -196,6 +200,8 @@ function fixture(t, accessPatch = {}, options = {}) {
     '@/lib/trade-rental-assessment.mjs': rental,
     '@/lib/trade-rental-schema-guards': { ensureTradeRentalSchemaGuards: async () => {} },
     '@/lib/trade-veu-electrical-schema-guards': piesaGuards,
+    '@/lib/trade-safety-check-schema-guards': safetyGuards,
+    '@/lib/trade-safety-check-draft': safetyDraft,
     '@/lib/trade-veu-electrical-draft': piesaDraft,
     '@/lib/trade-rental-credentials': load('src/lib/trade-rental-credentials.ts'),
     '@/lib/trade-rental-assignment-server': { isRentalInspectionAssignmentConflict: () => false },
@@ -214,21 +220,29 @@ function fixture(t, accessPatch = {}, options = {}) {
     const response = await formsRoute.GET(new Request(`https://example.test/api/trade-job-forms?${new URLSearchParams(parameters)}`, { headers }));
     return { status: response.status, body: await response.json() };
   };
+  const attachForm = async body => {
+    const response = await formsRoute.POST(new Request('https://example.test/api/trade-job-forms', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    }));
+    return { status: response.status, body: await response.json() };
+  };
   const state = () => Object.fromEntries(['trade_crm_customers', 'trade_crm_service_sites', 'trade_crm_customer_contacts', 'trade_crm_site_contacts',
     'trade_work_orders', 'trade_crm_job_details', 'trade_crm_appointments', 'trade_job_forms', 'trade_work_order_events', 'trade_team_sync_changes',
     'trade_mobile_push_outbox', 'trade_crm_write_guards', 'trade_rental_inspections', 'trade_rental_inspection_modules', 'trade_rental_inspection_events',
-    'trade_veu_electrical_assessments', 'trade_veu_electrical_versions', 'trade_work_order_compliance_intents',
+    'trade_veu_electrical_assessments', 'trade_veu_electrical_versions', 'trade_work_order_compliance_intents', 'trade_safety_checks', 'trade_safety_check_versions',
     ...(options.creditex ? ['trade_activity_field_records', 'trade_activity_field_record_versions'] : [])].map(table => [table, sql.prepare(`SELECT COUNT(*) count FROM ${table}`).get().count]));
-  return { sql, db, publish, access, send, get, state, activityOpenCalls, activityServer, beforeBatch: hook => { beforeBatch = hook; } };
+  return { sql, db, publish, access, send, get, attachForm, state, activityOpenCalls, activityServer, beforeBatch: hook => { beforeBatch = hook; } };
 }
 
-test('pre-create library matches saved-job canonical metadata and exposes only published owner/category choices', async t => {
+test('pre-create library matches saved-job metadata and exposes all published business choices across categories', async t => {
   const f = fixture(t), before = f.state();
   const initial = await f.get({ mode: 'library', serviceCategory: 'hot-water' }); assert.equal(initial.status, 200);
   assert.deepEqual(f.state(), before); assert.equal(initial.body.serviceCategory, 'hot-water');
   assert.ok(initial.body.templates.some(item => item.key === 'business-check'));
   assert.ok(initial.body.templates.some(item => item.key === 'pre-start-risk-readiness'));
-  assert.doesNotMatch(JSON.stringify(initial.body), /foreign-check|draft-check|withdrawn-check|wrong-category|"fields"|"answers"/);
+  assert.ok(initial.body.templates.some(item => item.key === 'wrong-category'));
+  assert.ok(initial.body.templates.some(item => item.key === 'electrical-commissioning-support'));
+  assert.doesNotMatch(JSON.stringify(initial.body), /foreign-check|draft-check|withdrawn-check|"fields"|"answers"/);
   const created = await f.send(create()); assert.equal(created.status, 201, JSON.stringify(created.body));
   const saved = await f.get({ workOrderId: created.body.id }); assert.equal(saved.status, 200);
   assert.deepEqual(saved.body.templates, initial.body.templates);
@@ -250,13 +264,168 @@ for (const action of ['create_job', 'create_scheduled_job']) test(`${action} sto
   assert.equal(JSON.parse(f.sql.prepare("SELECT template_snapshot FROM trade_job_forms WHERE template_key='business-check'").get().template_snapshot).name, 'business-check');
 });
 
+for (const action of ['create_job', 'create_scheduled_job']) {
+  for (const [serviceCategory, capability] of [
+    ['minimum-rental-standards', 'rental-inspection'],
+    ['rental-inspection', 'minimum-rental-standards'],
+    ['minimum-rental-standards', 'minimum-rental-standards'],
+  ]) test(`rental service aliases: ${action} accepts ${capability} for ${serviceCategory}`, async t => {
+    const f = fixture(t);
+    f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run(JSON.stringify([capability]));
+    const result = await f.send(create({ action, serviceCategory, formSelectionsJson: '[]',
+      rentalInspectionModulesJson: '["minimum_standards"]', rentalAssessmentScope: 'current_minimum_standards' }));
+    assert.equal(result.status, 201, JSON.stringify(result.body));
+    const job = f.sql.prepare('SELECT * FROM trade_work_orders').get();
+    assert.equal(job.service_category, serviceCategory);
+    assert.equal(job.assignee_member_id, 'member');
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_crm_customers').get().count, 1);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_crm_service_sites').get().count, 1);
+    assert.equal(f.sql.prepare('SELECT assessor_member_id FROM trade_rental_inspections').get().assessor_member_id, 'member');
+    if (action === 'create_scheduled_job') {
+      assert.equal(f.sql.prepare('SELECT assignee_member_id FROM trade_crm_appointments').get().assignee_member_id, 'member');
+    }
+  });
+
+  test(`rental service aliases: ${action} still rejects a worker without the service`, async t => {
+    const f = fixture(t), before = f.state();
+    const result = await f.send(create({ action, serviceCategory: 'minimum-rental-standards', formSelectionsJson: '[]' }));
+    assert.equal(result.status, 409, JSON.stringify(result.body));
+    assert.match(result.body.error, /not enabled/);
+    assert.deepEqual(f.state(), before);
+  });
+
+  test(`rental service aliases: ${action} rolls back if the service is removed before commit`, async t => {
+    const f = fixture(t);
+    f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run('["rental-inspection"]');
+    const before = f.state();
+    f.beforeBatch(() => f.sql.exec("UPDATE trade_team_members SET capabilities='[]'"));
+    const result = await f.send(create({ action, serviceCategory: 'minimum-rental-standards', formSelectionsJson: '[]',
+      rentalInspectionModulesJson: '["minimum_standards"]', rentalAssessmentScope: 'current_minimum_standards' }));
+    assert.equal(result.status, 409, JSON.stringify(result.body));
+    assert.deepEqual(f.state(), before);
+  });
+}
+
+test('an explicitly chosen published business form can be attached across primary work categories', async t => {
+  const f = fixture(t);
+  const result = await f.send(create({ formSelectionsJson: JSON.stringify([selection('wrong-category')]) }));
+  assert.equal(result.status, 201, JSON.stringify(result.body));
+  assert.equal(f.sql.prepare('SELECT template_key FROM trade_job_forms').get().template_key, 'wrong-category');
+});
+
+test('cross-category business selection still requires the service address jurisdiction', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE trade_form_templates SET jurisdiction='NSW' WHERE template_key='wrong-category'");
+  const before = f.state();
+  const result = await f.send(create({ formSelectionsJson: JSON.stringify([selection('wrong-category')]) }));
+  assert.equal(result.status, 400, JSON.stringify(result.body));
+  assert.match(result.body.error, /NSW/); assert.deepEqual(f.state(), before);
+});
+
+test('saved job accepts the same cross-category business form and retains its published snapshot', async t => {
+  const f = fixture(t), created = await f.send(create({ formSelectionsJson: '[]' }));
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const result = await f.attachForm({ workOrderId: created.body.id, templateKey: 'wrong-category', templateVersion: 1 });
+  assert.equal(result.status, 201, JSON.stringify(result.body));
+  assert.equal(f.sql.prepare('SELECT template_key FROM trade_job_forms').get().template_key, 'wrong-category');
+});
+
+test('saved-job cross-category attachment rolls back a publication withdrawn before commit', async t => {
+  const f = fixture(t), created = await f.send(create({ formSelectionsJson: '[]' }));
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const before = f.state(); f.beforeBatch(() => f.sql.exec("UPDATE trade_form_templates SET status='withdrawn' WHERE template_key='wrong-category'"));
+  const result = await f.attachForm({ workOrderId: created.body.id, templateKey: 'wrong-category', templateVersion: 1 });
+  assert.equal(result.status, 409, JSON.stringify(result.body)); assert.deepEqual(f.state(), before);
+});
+
+test('saved-job attachment rechecks the published jurisdiction at the atomic boundary', async t => {
+  const f = fixture(t), created = await f.send(create({ formSelectionsJson: '[]' }));
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  f.sql.exec("UPDATE trade_form_templates SET jurisdiction='VIC' WHERE template_key='wrong-category'");
+  const before = f.state(); f.beforeBatch(() => f.sql.exec("UPDATE trade_crm_service_sites SET address_state='NSW'"));
+  const result = await f.attachForm({ workOrderId: created.body.id, templateKey: 'wrong-category', templateVersion: 1 });
+  assert.equal(result.status, 409, JSON.stringify(result.body)); assert.deepEqual(f.state(), before);
+});
+
+function safetyWorker(f, kinds = ['electrical', 'gas']) {
+  f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run(JSON.stringify(['hot-water', ...kinds.map(kind => `${kind}-safety-check`)]));
+  for (const kind of kinds) {
+    f.sql.prepare('INSERT INTO trade_team_member_files VALUES(?,?,?,?,?)').run(`${kind}-file`, 'owner', 'member', 'active', '2999-01-01');
+    f.sql.prepare('INSERT INTO trade_team_member_credentials VALUES(?,?,?,?,?,?,?,?,?,?)')
+      .run(`${kind}-licence`, 'owner', 'member', `${kind}-file`, kind === 'electrical' ? 'licensed_electrician' : 'licensed_gasfitter',
+        'active', `SYNTHETIC-${kind}`, 'VIC', 'licence', '2999-01-01');
+  }
+}
+
+for (const action of ['create_job', 'create_scheduled_job']) test(`${action} atomically creates official electrical and gas PDF drafts with immutable versions`, async t => {
+  const f = fixture(t); safetyWorker(f);
+  f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run('["hot-water","rental-inspection","electrical-safety-check","gas-safety-check"]');
+  const result = await f.send(create({ action, safetyCheckKindsJson: '["electrical","gas"]', attachVeuElectricalAssessment: true,
+    rentalInspectionModulesJson: '["minimum_standards"]', rentalAssessmentScope: 'current_minimum_standards' }));
+  assert.equal(result.status, 201, JSON.stringify(result.body)); assert.deepEqual(result.body.safetyCheckKindsAttached, ['electrical', 'gas']);
+  const rows = f.sql.prepare('SELECT * FROM trade_safety_checks ORDER BY kind').all();
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.work_order_id, result.body.id); assert.equal(row.owner_uid, 'owner'); assert.equal(row.status, 'draft'); assert.equal(row.revision, 1);
+    const record = JSON.parse(row.payload);
+    assert.deepEqual(record.form, safetyForms.createOfficialSafetyCheckForm(row.kind));
+    assert.equal(record.formSha256, activityForms.activityHash(record.form)); assert.equal(row.payload_sha256, activityForms.activityHash(row.payload));
+    assert.equal(record.answers.property_address, row.kind === 'electrical' ? '12 Main St, Melbourne, VIC, 3000' : '12 Main St');
+    assert.equal(record.signerDefaults.customer, 'Test Customer'); assert.equal(record.signerDefaults.technician, '');
+    assert.deepEqual(record.signatures, []); assert.deepEqual(record.evidence, []); assert.equal(record.completedAt, '');
+    const version = f.sql.prepare('SELECT * FROM trade_safety_check_versions WHERE record_id=?').get(row.id);
+    assert.equal(version.revision, 1); assert.equal(version.payload, row.payload); assert.equal(version.payload_sha256, row.payload_sha256);
+  }
+  assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_job_forms').get().count, 2);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_veu_electrical_assessments').get().count, 1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) count FROM trade_rental_inspections').get().count, 1);
+});
+
+for (const value of [null, true, [], '{}', 'null', '{', '["electrical","electrical"]', '["unknown"]', '["electrical","gas","electrical"]']) {
+  test(`invalid safety check selection ${JSON.stringify(value)} creates no records`, async t => {
+    const f = fixture(t), before = f.state();
+    const result = await f.send(create({ safetyCheckKindsJson: value }));
+    assert.equal(result.status, 400, JSON.stringify(result.body)); assert.deepEqual(f.state(), before);
+  });
+}
+
+test('official safety selection preserves service, licence, jurisdiction and actor checks', async t => {
+  const request = create({ safetyCheckKindsJson: '["electrical"]' });
+  for (const scenario of ['missing service', 'missing licence', 'wrong jurisdiction', 'missing actor access']) {
+    const f = fixture(t, scenario === 'missing actor access' ? { canManageFieldEvidence: false } : {});
+    if (scenario !== 'missing service' && scenario !== 'missing licence') safetyWorker(f, ['electrical']);
+    if (scenario === 'missing licence') f.sql.prepare('UPDATE trade_team_members SET capabilities=?').run('["hot-water","electrical-safety-check"]');
+    const before = f.state();
+    const result = await f.send({ ...request, ...(scenario === 'wrong jurisdiction' ? { addressState: 'NSW', suburb: 'Sydney', postcode: '2000' } : {}) });
+    assert.ok([400, 403, 409].includes(result.status), `${scenario}: ${JSON.stringify(result.body)}`);
+    assert.deepEqual(f.state(), before);
+  }
+});
+
+for (const change of ["UPDATE trade_team_member_credentials SET status='revoked'", "UPDATE trade_team_members SET capabilities='[\"hot-water\"]'", 'UPDATE trade_team_members SET can_manage_field_evidence=0']) {
+  test(`official safety creation rolls back every form if authority changes: ${change}`, async t => {
+    const f = fixture(t); safetyWorker(f);
+    const before = f.state(); f.beforeBatch(() => f.sql.exec(change));
+    const result = await f.send(create({ safetyCheckKindsJson: '["electrical","gas"]', attachVeuElectricalAssessment: true }));
+    assert.equal(result.status, 409, JSON.stringify(result.body)); assert.deepEqual(f.state(), before);
+  });
+}
+
+test('a later official safety insert failure rolls back the customer, job, forms and immutable versions', async t => {
+  const f = fixture(t); safetyWorker(f);
+  f.sql.exec("CREATE TRIGGER synthetic_safety_failure BEFORE INSERT ON trade_safety_checks WHEN NEW.kind='gas' BEGIN SELECT RAISE(ABORT,'SYNTHETIC_SAFETY_FAILURE'); END");
+  const before = f.state();
+  const result = await f.send(create({ safetyCheckKindsJson: '["electrical","gas"]', attachVeuElectricalAssessment: true }));
+  assert.equal(result.status, 500, JSON.stringify(result.body)); assert.deepEqual(f.state(), before);
+});
+
 for (const [name, value] of [
   ['malformed', '{'], ['not a list', '{}'], ['null', 'null'], ['object payload', []], ['oversized', ' '.repeat(8193)],
   ['too many', JSON.stringify(Array.from({ length: 21 }, (_, i) => selection(`form-${i}`)))],
   ['duplicate', JSON.stringify([selection(), selection()])], ['fractional version', JSON.stringify([selection('business-check', 1.1)])],
   ['string version', JSON.stringify([selection('business-check', '1')])], ['foreign', JSON.stringify([selection('foreign-check')])],
   ['draft', JSON.stringify([selection('draft-check')])], ['withdrawn', JSON.stringify([selection('withdrawn-check')])],
-  ['wrong version', JSON.stringify([selection('business-check', 2)])], ['wrong category', JSON.stringify([selection('wrong-category')])],
+  ['wrong version', JSON.stringify([selection('business-check', 2)])],
   ['invalid key', JSON.stringify([selection('business-check ')])], ['partial selection', JSON.stringify([selection(), selection('foreign-check')])],
   ['client snapshot', JSON.stringify([{ ...selection(), templateSnapshot: { fields: [] } }])],
   ['client actor', JSON.stringify([{ ...selection(), actorUid: 'owner' }])],

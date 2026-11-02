@@ -9,11 +9,11 @@ import { Alert, Modal, PanResponder, Pressable, StyleSheet, Text, TextInput, Vie
 import { FieldButton } from '@/components/field-button';
 import { FieldSelect } from '@/components/field-select';
 import { FieldDatePicker } from '@/components/field-date-picker';
+import { FieldNewJobFormPicker } from '@/components/field-new-job-form-picker';
 import {
-  fieldActivitiesForBuildingType,
+  fieldBuildingTypeOptions,
   fieldActivityPremisesVariantId,
   fieldActivityRequiresPremisesVariant,
-  JobWorkSelection,
   type FieldJobOptions,
   type PlannedFieldActivity,
 } from '@/components/job-work-selection';
@@ -21,13 +21,7 @@ import { Screen } from '@/components/screen';
 import { ApiError } from '@/lib/api';
 import { colours, radius, spacing } from '@/lib/theme';
 import { useApp } from '@/providers/app-provider';
-
-const modules = [
-  { key: 'minimum_standards', label: 'Rental assessment', icon: 'home-outline' },
-  { key: 'electrical_safety_check', label: 'Electrical safety check', icon: 'flash-outline' },
-  { key: 'gas_safety_check', label: 'Gas safety check', icon: 'fire' },
-  { key: 'smoke_alarm_check', label: 'Smoke alarm check', icon: 'smoke-detector' },
-] as const;
+import { tradeJobFormSelectionId, type TradeJobFormLibraryOption, type TradeJobFormSelection } from '../../../src/lib/trade-job-form-library';
 
 type Locality = { suburb: string; state: string };
 type AddressPrediction = { id: string; label: string; provider: string };
@@ -70,9 +64,22 @@ function premisesVariantsReady(activities: PlannedFieldActivity[], buildingType:
   });
 }
 
+function selectedFormProblem(selections: TradeJobFormSelection[], options: TradeJobFormLibraryOption[]) {
+  for (const selection of selections) {
+    const current = options.find((option) => option.id === tradeJobFormSelectionId(selection));
+    if (!current) return `${selection.name} is no longer available. Remove it before continuing.`;
+    if (current.unavailableReason) return `${selection.name}: ${current.unavailableReason}`;
+    if (current.selection.name !== selection.name
+      || selection.kind === 'creditex' && current.selection.kind === 'creditex' && selection.variantId !== current.selection.variantId) {
+      return `${selection.name} changed. Remove it and choose its current form before continuing.`;
+    }
+  }
+  return '';
+}
+
 export default function NewJobScreen() {
   const apiRequest = useBusinessApi();
-  const { syncNow } = useApp();
+  const { syncNow, user } = useApp();
   const navigation = useNavigation();
   const allowExit = useRef(false);
   const [step, setStep] = useState(0);
@@ -81,10 +88,11 @@ export default function NewJobScreen() {
   const [time, setTime] = useState('09:00');
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [duration, setDuration] = useState(90);
-  const [selectedModules, setSelectedModules] = useState<string[]>(['minimum_standards']);
+  const [selectedForms, setSelectedForms] = useState<TradeJobFormSelection[]>([]);
   const [serviceCategory, setServiceCategory] = useState('');
   const [buildingType, setBuildingType] = useState('not_sure');
-  const [plannedActivities, setPlannedActivities] = useState<PlannedFieldActivity[]>([]);
+  const [formLibrary, setFormLibrary] = useState<{ key: string; options: TradeJobFormLibraryOption[]; error: string }>({ key: '', options: [], error: '' });
+  const [formLibraryAttempt, setFormLibraryAttempt] = useState(0);
   const [jobOptions, setJobOptions] = useState<FieldJobOptions | null>(null);
   const [optionsError, setOptionsError] = useState('');
   const [loadedOptionsKey, setLoadedOptionsKey] = useState('');
@@ -126,9 +134,17 @@ export default function NewJobScreen() {
     showCancelPrompt(() => navigation.dispatch(data.action));
   });
 
+  const plannedActivities: PlannedFieldActivity[] = selectedForms.flatMap((selection) => selection.kind === 'creditex'
+    ? [{ programTemplateId: selection.programTemplateId, activityTemplateId: selection.activityTemplateId, ...(selection.variantId ? { variantId: selection.variantId } : {}) }] : []);
+  const rentalModulesJson = JSON.stringify(selectedForms.flatMap((selection) => selection.kind === 'rental' ? [selection.moduleKey] : []));
+  const safetyCheckKindsJson = JSON.stringify(selectedForms.flatMap((selection) => selection.kind === 'safety-check' ? [selection.checkKind] : []));
   const activitiesJson = JSON.stringify(plannedActivities);
-  const rentalModulesJson = JSON.stringify(serviceCategory === 'rental-inspection' ? selectedModules : []);
-  const optionsKey = JSON.stringify([addressState, serviceCategory, assigneeSearch, assigneeMemberId, activitiesJson, rentalModulesJson, selectedDate, optionsAttempt]);
+  const canAddForms = jobOptions?.permissions.canAddForms === true;
+  const formLibraryKey = JSON.stringify([user?.localOwnerKey, serviceCategory, addressState, buildingType, formLibraryAttempt, canAddForms]);
+  const formsLoading = canAddForms && Boolean(serviceCategory) && formLibrary.key !== formLibraryKey;
+  const formOptions = formLibrary.key === formLibraryKey ? formLibrary.options : [];
+  const formLibraryError = formLibrary.key === formLibraryKey ? formLibrary.error : '';
+  const optionsKey = JSON.stringify([user?.localOwnerKey, addressState, serviceCategory, assigneeSearch, assigneeMemberId, activitiesJson, rentalModulesJson, safetyCheckKindsJson, selectedDate, optionsAttempt]);
   const optionsLoading = loadedOptionsKey !== optionsKey;
   useEffect(() => () => { addressResolveController.current?.abort(); localityLookupController.current?.abort(); }, []);
 
@@ -136,7 +152,7 @@ export default function NewJobScreen() {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setOptionsError('');
-      const query = new URLSearchParams({ state: addressState, serviceCategory, search: assigneeSearch, selectedMemberId: assigneeMemberId, activities: activitiesJson, rentalModules: rentalModulesJson, appointmentDate: selectedDate });
+      const query = new URLSearchParams({ state: addressState, serviceCategory, search: assigneeSearch, selectedMemberId: assigneeMemberId, activities: activitiesJson, rentalModules: rentalModulesJson, safetyCheckKinds: safetyCheckKindsJson, appointmentDate: selectedDate });
       void apiRequest<FieldJobOptions>(`/api/field/job-options?${query}`, { signal: controller.signal })
         .then((result) => {
           if (controller.signal.aborted) return;
@@ -147,7 +163,17 @@ export default function NewJobScreen() {
         .finally(() => { if (!controller.signal.aborted) setLoadedOptionsKey(optionsKey); });
     }, 200);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [addressState, serviceCategory, assigneeSearch, assigneeMemberId, activitiesJson, rentalModulesJson, selectedDate, optionsAttempt, optionsKey]);
+  }, [addressState, serviceCategory, assigneeSearch, assigneeMemberId, activitiesJson, rentalModulesJson, safetyCheckKindsJson, selectedDate, optionsAttempt, optionsKey, apiRequest]);
+
+  useEffect(() => {
+    if (!serviceCategory || !canAddForms) return;
+    const controller = new AbortController();
+    const query = new URLSearchParams({ serviceCategory, addressState, buildingType });
+    void apiRequest<{ options: TradeJobFormLibraryOption[] }>(`/api/trade-job-form-library?${query}`, { signal: controller.signal })
+      .then((result) => { if (!controller.signal.aborted) setFormLibrary({ key: formLibraryKey, options: result.options, error: '' }); })
+      .catch((caught) => { if (!controller.signal.aborted) setFormLibrary({ key: formLibraryKey, options: [], error: caught instanceof Error ? caught.message : 'The form library could not be loaded.' }); });
+    return () => controller.abort();
+  }, [serviceCategory, addressState, buildingType, canAddForms, formLibraryKey, apiRequest]);
 
   useEffect(() => {
     if (suppressAddressLookup.current) {
@@ -177,7 +203,7 @@ export default function NewJobScreen() {
       }).finally(() => { if (active) setAddressLookupBusy(false); });
     }, 280);
     return () => { active = false; controller.abort(); clearTimeout(timeout); };
-  }, [addressLine1, addressPredictionSession.token, selectedCustomer]);
+  }, [addressLine1, addressPredictionSession.token, selectedCustomer, apiRequest]);
 
   useEffect(() => {
     if (!shouldReconcileAddressLocality(addressProvenance.entryMode, Boolean(selectedCustomer), postcode, addressState)) {
@@ -203,7 +229,7 @@ export default function NewJobScreen() {
         .finally(() => { if (localityLookupController.current === controller) { localityLookupController.current = null; if (!cancelled) setLocalityBusy(false); } });
     }, 250);
     return () => { cancelled = true; controller.abort(); if (localityLookupController.current === controller) localityLookupController.current = null; clearTimeout(timeout); };
-  }, [addressProvenance.entryMode, addressState, postcode, selectedCustomer]);
+  }, [addressProvenance.entryMode, addressState, postcode, selectedCustomer, apiRequest]);
 
   useEffect(() => {
     const normalEmail = email.trim().toLowerCase();
@@ -217,12 +243,32 @@ export default function NewJobScreen() {
         .finally(() => { if (!cancelled) setCustomerLookupBusy(false); });
     }, 450);
     return () => { cancelled = true; clearTimeout(timeout); };
-  }, [email, selectedCustomer]);
+  }, [email, selectedCustomer, apiRequest]);
 
-  function toggleModule(key: string) { setSelectedModules((current) => current.includes(key) ? current.filter((value) => value !== key) : [...current, key]); }
   function changeBuildingType(value: string) {
     setBuildingType(value);
-    setPlannedActivities((current) => fieldActivitiesForBuildingType(current, value));
+    setSelectedForms((current) => current.map((selection) => {
+      if (selection.kind !== 'creditex') return selection;
+      const variantId = fieldActivityPremisesVariantId(selection.activityTemplateId, value);
+      return { kind: selection.kind, name: selection.name, programTemplateId: selection.programTemplateId,
+        activityTemplateId: selection.activityTemplateId, ...(variantId ? { variantId } : {}) };
+    }));
+  }
+  function selectForm(option: TradeJobFormLibraryOption) {
+    if (busy || formsLoading || formLibraryError || !canAddForms || option.unavailableReason || option.added) return;
+    if (!formOptions.some((current) => current.id === option.id)) return;
+    const selection = option.selection;
+    if (selectedForms.some((current) => tradeJobFormSelectionId(current) === option.id)) return;
+    if (selection.kind === 'business') {
+      if (selectedForms.some((current) => current.kind === 'business' && current.templateKey === selection.templateKey)) return;
+      if (selectedForms.filter((current) => current.kind === 'business').length >= 20) return setError('Select up to 20 business forms during job setup.');
+    }
+    if (selection.kind === 'creditex' && plannedActivities.length >= 12) return setError('Select up to 12 Creditex activities during job setup.');
+    setSelectedForms((current) => [...current, selection]); setError('');
+  }
+  function removeForm(selection: TradeJobFormSelection) {
+    if (busy) return;
+    setSelectedForms((current) => current.filter((item) => tradeJobFormSelectionId(item) !== tradeJobFormSelectionId(selection))); setError('');
   }
   function chooseCustomer(candidate: CustomerCandidate) {
     if (!candidate.serviceSiteId) return;
@@ -289,8 +335,15 @@ export default function NewJobScreen() {
     if (!jobOptions || optionsLoading) return 'Wait for current work and team options to load.';
     if (optionsError) return optionsError;
     if (!jobOptions.services.some((service) => service.id === serviceCategory)) return 'Choose the type of work for this job.';
-    if (serviceCategory === 'rental-inspection' && !selectedModules.length) return 'Choose at least one assessment or safety-check workflow.';
+    if (serviceCategory === 'rental-inspection' && !selectedForms.some(selection => selection.kind === 'rental' || selection.kind === 'safety-check')) return 'Choose at least one rental assessment or official safety check.';
     if (serviceCategory === 'rental-inspection' && addressState !== 'VIC') return 'Rental inspection jobs require a Victorian service address.';
+    if (selectedForms.length) {
+      if (!canAddForms) return 'Your current Team permissions do not allow adding forms. Remove the selected forms before continuing.';
+      if (formsLoading) return 'Wait for the current form library to load.';
+      if (formLibraryError) return formLibraryError;
+      const problem = selectedFormProblem(selectedForms, formOptions);
+      if (problem) return problem;
+    }
     if (!validPlannedActivities(plannedActivities, jobOptions)) return 'Remove any activity that is no longer available for this property.';
     if (!premisesVariantsReady(plannedActivities, buildingType)) return 'Choose residential or business premises for the selected activity form.';
     return '';
@@ -333,8 +386,12 @@ export default function NewJobScreen() {
           serviceCategory, buildingType, priority: 'standard', assigneeMemberId,
           complianceIntentMode: plannedActivities.length ? 'planned' : 'none',
           complianceActivitiesJson: JSON.stringify(plannedActivities),
+          formSelectionsJson: JSON.stringify(selectedForms.flatMap((selection) => selection.kind === 'business'
+            ? [{ templateKey: selection.templateKey, templateVersion: selection.templateVersion }] : [])),
+          attachVeuElectricalAssessment: selectedForms.some((selection) => selection.kind === 'piesa'),
+          safetyCheckKindsJson,
           startsAt: `${selectedDate}T${time}`, durationMinutes: duration, appointmentType: 'site_visit', appointmentNotes: notes.trim(), description: notes.trim(),
-          rentalInspectionModulesJson: serviceCategory === 'rental-inspection' ? JSON.stringify(selectedModules) : '[]', rentalAssessmentScope: 'current_minimum_standards', emailCalendarInvite,
+          rentalInspectionModulesJson: rentalModulesJson, rentalAssessmentScope: 'current_minimum_standards', emailCalendarInvite,
         }),
       });
       await syncNow();
@@ -377,12 +434,15 @@ export default function NewJobScreen() {
     {step === 1 ? <View style={styles.card}>
       {optionsLoading ? <Text style={styles.help}>Loading current work and team options...</Text> : null}
       {optionsError ? <><Text style={styles.error}>{optionsError}</Text><FieldButton variant="secondary" onPress={() => setOptionsAttempt((value) => value + 1)}>Retry work options</FieldButton></> : null}
-      {jobOptions ? <JobWorkSelection options={jobOptions} serviceCategory={serviceCategory} onServiceChange={setServiceCategory} buildingType={buildingType} onBuildingTypeChange={changeBuildingType} activities={plannedActivities} onActivitiesChange={setPlannedActivities} /> : null}
-      {serviceCategory === 'rental-inspection' ? <>
-        {selectedModules.includes('minimum_standards') ? <Text style={styles.help}>The rental assessment includes all current minimum standards and 2027 energy readiness.</Text> : null}
-        <Text style={styles.help}>Choose the inspections needed for this property.</Text>
-      {modules.map((module) => { const selected = selectedModules.includes(module.key); return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected }} key={module.key} onPress={() => toggleModule(module.key)} style={[styles.choice, selected && styles.choiceSelected]}><MaterialCommunityIcons name={module.icon} size={24} color={selected ? colours.green : colours.muted} /><Text style={styles.choiceText}>{module.label}</Text><MaterialCommunityIcons name={selected ? 'checkbox-marked-circle' : 'checkbox-blank-circle-outline'} size={25} color={selected ? colours.green : colours.muted} /></Pressable>; })}
+      {jobOptions ? <>
+        <FieldSelect label="Work type" placeholder="Choose the work you will do" value={serviceCategory} disabled={busy}
+          options={jobOptions.services.map((item) => ({ value: item.id, label: item.label }))} onChange={setServiceCategory} />
+        <FieldSelect label="Premises type" value={buildingType} disabled={busy} options={fieldBuildingTypeOptions} onChange={changeBuildingType} placeholder="Choose the premises" />
       </> : null}
+      {serviceCategory && (canAddForms || selectedForms.length > 0) ? <FieldNewJobFormPicker options={formOptions} selections={selectedForms}
+        onSelect={selectForm} onRemove={removeForm} loading={formsLoading} error={formLibraryError} disabled={busy}
+        onRetry={() => setFormLibraryAttempt((current) => current + 1)} /> : null}
+      {serviceCategory && jobOptions && !canAddForms ? <Text style={styles.help}>Your Team permissions do not allow adding job forms.</Text> : null}
     </View> : null}
     {step === 2 ? <View style={styles.card}>
       {jobOptions ? <>
@@ -394,6 +454,7 @@ export default function NewJobScreen() {
       </> : null}
       {optionsLoading ? <Text style={styles.help}>Checking worker access for the selected work...</Text> : null}
       {optionsError ? <><Text style={styles.error}>{optionsError}</Text><FieldButton variant="secondary" onPress={() => setOptionsAttempt((value) => value + 1)}>Retry worker options</FieldButton></> : null}
+      {selectedForms.length ? <View style={styles.formSummary}><Text style={styles.label}>Forms to create with this job</Text>{selectedForms.map((selection) => <Text key={tradeJobFormSelectionId(selection)} style={styles.help}>{selection.name}</Text>)}</View> : null}
       <View style={styles.dateStrip}>{dates.map((date) => { const key = dateKey(date); const selected = key === selectedDate; return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} key={key} onPress={() => setSelectedDate(key)} style={[styles.date, selected && styles.dateSelected]}><Text style={[styles.dateDay, selected && styles.selectedText]}>{date.toLocaleDateString('en-AU', { weekday: 'short' })}</Text><Text style={[styles.dateNumber, selected && styles.selectedText]}>{date.getDate()}</Text></Pressable>; })}</View>
       <FieldDatePicker label="Appointment date" value={selectedDate} minimum={dateKey(new Date())} onChange={setSelectedDate} disabled={busy} />
       <Text style={styles.label}>Start time</Text><Pressable accessibilityRole="button" accessibilityLabel={`Start time ${displayTime(time)}`} onPress={() => setTimePickerOpen(true)} style={styles.timeField}><MaterialCommunityIcons name="clock-outline" size={24} color={colours.green} /><View style={styles.timeFieldCopy}><Text style={styles.timeValue}>{displayTime(time)}</Text><Text style={styles.help}>Choose any 15-minute time across the full day</Text></View><MaterialCommunityIcons name="chevron-down" size={24} color={colours.muted} /></Pressable>
@@ -402,7 +463,7 @@ export default function NewJobScreen() {
       <Text style={styles.label}>Access or visit notes, optional</Text><TextInput multiline numberOfLines={3} style={[styles.input, styles.notes]} value={notes} onChangeText={setNotes} placeholder="Keys, parking, tenant contact or hazards" placeholderTextColor={colours.muted} selectionColor={colours.green} />
     </View> : null}
     {error ? <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text> : null}
-    {step < 2 ? <FieldButton onPress={nextStep}>Next</FieldButton> : <FieldButton loading={busy} disabled={optionsLoading || Boolean(optionsError) || !jobOptions || !assigneeMemberId} onPress={() => void createJob()}>Create scheduled job</FieldButton>}
+    {step < 2 ? <FieldButton onPress={nextStep}>Next</FieldButton> : <FieldButton loading={busy} disabled={optionsLoading || Boolean(optionsError) || !jobOptions || !assigneeMemberId || selectedForms.length > 0 && (formsLoading || Boolean(formLibraryError))} onPress={() => void createJob()}>Create scheduled job</FieldButton>}
     {step > 0 ? <FieldButton variant="secondary" disabled={busy} onPress={() => { setError(''); setStep((current) => previousSetupStep(current) ?? current); }}>Previous</FieldButton> : null}
     <FieldButton variant="quiet" disabled={busy} onPress={cancelSetup}>Cancel</FieldButton>
     <Modal animationType="fade" transparent visible={timePickerOpen} onRequestClose={() => setTimePickerOpen(false)}><View style={styles.modalBackdrop}><View accessibilityViewIsModal style={styles.timeModal}>
@@ -433,9 +494,9 @@ function Field({ label, editable = true, ...props }: { label: string; editable?:
 const styles = StyleSheet.create({
   hero: { gap: spacing.xs }, eyebrow: { color: colours.green, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 }, heading: { color: colours.ink, fontSize: 27, lineHeight: 33, fontWeight: '800' }, intro: { color: colours.muted, fontSize: 15, lineHeight: 22 },
   card: { backgroundColor: colours.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colours.line, padding: spacing.md, gap: spacing.sm }, cardTitle: { color: colours.ink, fontSize: 19, fontWeight: '800' }, help: { color: colours.muted, lineHeight: 20 },
-  choice: { minHeight: 58, borderWidth: 1, borderColor: colours.line, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, choiceSelected: { backgroundColor: colours.mint, borderColor: colours.green }, choiceText: { flex: 1, color: colours.ink, fontWeight: '700' },
   row: { flexDirection: 'row', gap: spacing.sm }, field: { flex: 1, gap: spacing.xs }, label: { color: colours.ink, fontWeight: '700', marginTop: spacing.xs }, input: { minHeight: 50, borderWidth: 1, borderColor: colours.line, borderRadius: radius.sm, paddingHorizontal: spacing.md, color: colours.ink, backgroundColor: colours.surfaceRaised, fontSize: 16 }, inputLocked: { backgroundColor: colours.mint, color: colours.muted }, notes: { minHeight: 88, paddingTop: spacing.sm, textAlignVertical: 'top' },
   inlineStatus: { color: colours.muted, fontSize: 13, lineHeight: 18 }, inlineError: { color: colours.red },
+  formSummary: { gap: spacing.xs },
   addressSuggestions: { backgroundColor: colours.surfaceRaised, borderColor: colours.line, borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' }, addressSuggestion: { alignItems: 'center', borderBottomColor: colours.line, borderBottomWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, addressSuggestionText: { color: colours.ink, flex: 1, fontWeight: '700', lineHeight: 20 },
   addressAttribution: { color: colours.muted, fontSize: 12, fontWeight: '700', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, textAlign: 'right' },
   suburbChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }, suburbChoice: { borderWidth: 1, borderColor: colours.line, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, suburbChoiceSelected: { backgroundColor: colours.green, borderColor: colours.green }, suburbChoiceText: { color: colours.ink, fontWeight: '700' }, suburbChoiceTextSelected: { color: colours.cream },

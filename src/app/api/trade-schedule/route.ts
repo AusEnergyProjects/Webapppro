@@ -1,5 +1,6 @@
 import { CreditexComplianceError, creditexMutationConflict } from "@/lib/creditex-onboarding-server";
 import { getD1 } from "../../../../db";
+import { hasServiceCapability, serviceCapabilityIds } from "@/lib/energy-service-catalogue.mjs";
 import { assertCertificateJobEligibility } from "@/lib/trade-certificate-eligibility";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { canAssignJob, canViewSchedule, requireInstallerTeamAccess, type TeamAccess } from "@/lib/trade-team-server";
@@ -117,7 +118,7 @@ function crewScheduleGuardStatements(db: D1Database, access: TeamAccess, memberI
 
 function assertMemberCapability(member: Record<string, unknown>, serviceCategory: string, ownerUid: string) {
   if (String(member.member_uid || "") !== ownerUid && serviceCategory
-    && !parsedCapabilities(member.capabilities).includes(serviceCategory)) {
+    && !hasServiceCapability(parsedCapabilities(member.capabilities), serviceCategory)) {
     throw new Error("MEMBER_CAPABILITY_REQUIRED");
   }
 }
@@ -137,11 +138,11 @@ function scheduleMemberGuardStatement(
       SELECT 1 FROM trade_team_members selected_member
       WHERE selected_member.id = ? AND selected_member.owner_uid = ? AND selected_member.status = 'active'
         AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
-          SELECT 1 FROM json_each(selected_member.capabilities) WHERE value = ?
+          SELECT 1 FROM json_each(selected_member.capabilities) WHERE value IN (SELECT value FROM json_each(?))
         ))
     ) THEN 1 ELSE 0 END, ?)`)
     .bind(crypto.randomUUID(), ownerUid, `schedule-member:${crypto.randomUUID()}`,
-      memberId, ownerUid, ownerUid, serviceCategory, serviceCategory, changedAt);
+      memberId, ownerUid, ownerUid, serviceCategory, JSON.stringify(serviceCapabilityIds(serviceCategory)), changedAt);
 }
 
 async function schedulePayload(access: TeamAccess, rangeStart: string, rangeWeeks = 1) {

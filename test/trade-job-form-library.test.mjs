@@ -10,6 +10,7 @@ import * as piesa from '../src/lib/veu-electrical-safety-form.ts';
 import * as supporting from '../src/lib/trade-form-library.mjs';
 import * as services from '../src/lib/energy-service-catalogue.mjs';
 import * as contracts from '../src/lib/trade-job-form-library.ts';
+import * as safetyForms from '../src/lib/official-safety-check-forms.ts';
 
 function compile(path, dependencies) {
   const source = fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -26,6 +27,7 @@ function builder(loader = {}) {
     './australian-government-program-catalogue': catalogue, './trade-activity-forms-library': activityForms,
     './trade-compliance-intent': intent, './trade-rental-assessment.mjs': rental,
     './veu-electrical-safety-form': piesa, './trade-form-templates-server': loader, './trade-job-form-library': contracts,
+    './official-safety-check-forms': safetyForms,
   });
 }
 const template = (extras = {}) => ({ key: 'business-electrical-check', version: 3, name: 'Our electrical form',
@@ -39,11 +41,18 @@ test('new library offers rental assessment and smoke checks alongside PIESA with
   assert.ok(options.some(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'minimum_standards'));
   assert.ok(options.some(option => option.selection.kind === 'rental' && option.selection.moduleKey === 'smoke_alarm_check'));
   assert.ok(!options.some(option => option.selection.kind === 'rental' && ['electrical_safety_check', 'gas_safety_check'].includes(option.selection.moduleKey)));
+  assert.deepEqual(options.filter(option => option.selection.kind === 'safety-check').map(option => option.selection.checkKind).sort(), ['electrical', 'gas']);
+  for (const checkKind of ['electrical', 'gas']) {
+    const check = options.find(option => option.id === `safety-check:${checkKind}`);
+    assert.equal(check.name, safetyForms.createOfficialSafetyCheckForm(checkKind).title);
+    assert.equal(check.unavailableReason, '');
+    assert.match(check.searchText, new RegExp(`${checkKind}.*safety`));
+  }
   const electrical = options.find(option => option.selection.kind === 'piesa');
   assert.equal(electrical.name, piesa.createVeuElectricalForm().title);
   assert.equal(electrical.id, 'piesa:veu-pre-installation-electrical-safety-assessment');
   assert.equal(new Set(options.map(option => option.id)).size, options.length);
-  assert.doesNotMatch(JSON.stringify(options), /Pre-start risk and site readiness|Scheduled service visit record|"fields"|"answers"/);
+  assert.doesNotMatch(JSON.stringify(options), /"fields"|"answers"/);
   for (const option of options) assert.equal(option.id, contracts.tradeJobFormSelectionId(option.selection));
 });
 
@@ -60,6 +69,7 @@ test('actual premises variants and jurisdiction availability are derived from th
   const nsw = builder().buildTradeJobFormLibrary(input({ addressState: 'NSW' }));
   assert.match(nsw.find(option => option.selection.kind === 'rental').unavailableReason, /Victorian/);
   assert.match(nsw.find(option => option.selection.kind === 'piesa').unavailableReason, /Victorian/);
+  assert.ok(nsw.filter(option => option.selection.kind === 'safety-check').every(option => /Victorian/.test(option.unavailableReason)));
   assert.match(nsw.find(option => option.selection.kind === 'creditex' && option.jurisdiction === 'VIC').unavailableReason, /not available|closed|commenced|specialist/);
   assert.ok(nsw.some(option => option.selection.kind === 'creditex' && option.jurisdiction === 'AU' && !option.unavailableReason));
 });
@@ -70,7 +80,7 @@ test('published business forms across categories remain searchable with precise 
   const own = options.find(option => option.selection.kind === 'business' && option.name === 'Our electrical form');
   assert.equal(own.unavailableReason, ''); assert.deepEqual(own.categories, ['electrical']);
   assert.match(own.searchText, /our electrical form.*business forms.*au.*published by this business.*electrical/);
-  assert.match(options.find(option => option.name === 'Solar handover').unavailableReason, /work type/);
+  assert.equal(options.find(option => option.name === 'Solar handover').unavailableReason, '');
   assert.match(options.find(option => option.name === 'NSW electrical').unavailableReason, /NSW properties/);
 });
 
@@ -111,8 +121,12 @@ test('published library loader scopes all categories to owner/global and exclude
   assert.ok(existing.some(form => form.key === 'owner-electric'));
   assert.ok(!existing.some(form => form.key === 'owner-solar'));
   const result = await builder(loader).loadTradeJobFormLibrary(input(), db, 'owner');
-  assert.deepEqual(result.filter(option => option.selection.kind === 'business').map(option => option.name).sort(), all.map(form => form.name).sort());
-  assert.doesNotMatch(JSON.stringify(result), /Foreign secret|Unpublished draft|Old published|Retired latest|Pre-start risk and site readiness/);
+  const complete = await loader.publishedTradeFormTemplatesFor('electrical', db, 'owner', { allCategories: true });
+  assert.deepEqual(result.filter(option => option.selection.kind === 'business').map(option => option.name).sort(), complete.map(form => form.name).sort());
+  assert.ok(result.some(option => option.name === 'Pre-start risk and site readiness'));
+  assert.ok(result.some(option => option.name === 'Electrical commissioning support record'));
+  assert.ok(result.some(option => option.name === 'Hot water commissioning support record'));
+  assert.doesNotMatch(JSON.stringify(result), /Foreign secret|Unpublished draft|Old published|Retired latest/);
 });
 
 class TradeFormSelectionError extends Error { constructor(message, status) { super(message); this.status = status; } }
@@ -124,7 +138,7 @@ function routeFixture(overrides = {}) {
     calls.push({ sql, bindings });
     return { first: async () => sql.includes('FROM trade_work_orders') ? { service_category: 'electrical', stage: overrides.stage || 'scheduled', building_type: 'house_townhouse', address_state: 'VIC' }
       : sql.includes('trade_veu_electrical_assessments') ? { id: 'existing-piesa' } : null,
-    all: async () => ({ results: [{ template_key: 'business-electrical-check', template_version: 3 }] }) };
+    all: async () => ({ results: sql.includes('trade_safety_checks') ? [{ kind: 'gas' }] : [{ template_key: 'business-electrical-check', template_version: 3 }] }) };
   } }) };
   const captured = [];
   const route = compile('src/app/api/trade-job-form-library/route.ts', {
@@ -164,6 +178,7 @@ test('saved catalogue forwards original auth and uses actual job context, attach
   assert.equal(f.captured[0].activityRequest.headers.get('x-trade-owner-uid'), 'owner');
   const loaded = f.captured[1]; assert.equal(loaded.input.serviceCategory, 'electrical'); assert.equal(loaded.input.addressState, 'VIC');
   assert.equal(loaded.input.buildingType, 'house_townhouse'); assert.deepEqual(loaded.input.attachedBusinessIds, ['business:business-electrical-check:3']); assert.equal(loaded.input.piesaAdded, true);
+  assert.deepEqual(loaded.input.attachedSafetyCheckKinds, ['gas']);
   for (const call of f.calls) assert.deepEqual(call.bindings, ['job', 'owner']);
 });
 
@@ -178,6 +193,7 @@ test('completed job marks generic and PIESA forms unavailable as well as canonic
   const f = routeFixture({ stage: 'completed' }); await f.get('workOrderId=job');
   assert.match(f.captured[1].input.piesaUnavailableReason, /completed/);
   assert.match(f.captured[1].input.businessUnavailableReason, /completed/);
+  assert.match(f.captured[1].input.safetyCheckUnavailableReason, /completed/);
   const options = builder().buildTradeJobFormLibrary(input({ businessTemplates: [template()], businessUnavailableReason: 'Completed job is locked.' }));
   assert.equal(options.find(option => option.selection.kind === 'business').unavailableReason, 'Completed job is locked.');
 });

@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -80,6 +81,7 @@ function testD1(database) {
 }
 
 function loadTypescriptModule(path, mocks = {}) {
+  mocks = { ...RENTAL_REPORT_TEST_DEPENDENCIES, ...mocks };
   const output = ts.transpileModule(read(path), {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -101,13 +103,13 @@ function fixture({ failSend=false, largeReport=false, linkStatus="active", provi
  database.exec(`CREATE TABLE trade_work_orders(id text,firebase_uid text,partner_type text,record_status text,source_type text);
  CREATE TABLE trade_crm_job_details(work_order_id text,firebase_uid text,crm_customer_id text,customer_source text);
  CREATE TABLE trade_crm_customers(id text,firebase_uid text,email text,first_name text,last_name text,business_name text,record_status text);
- CREATE TABLE trade_rental_reports(id text,firebase_uid text,inspection_id text,status text,report_number text,pdf_sha256 text);
+ CREATE TABLE trade_rental_reports(id text,firebase_uid text,inspection_id text,status text,report_number text,pdf_sha256 text,revision integer DEFAULT 1,report_snapshot text DEFAULT '{}',issued_by_uid text DEFAULT 'actor');
  CREATE TABLE trade_rental_inspections(id text PRIMARY KEY,firebase_uid text,work_order_id text,status text,issued_report_id text,assessor_member_id text,revision integer DEFAULT 1);
  INSERT INTO trade_work_orders VALUES('job','owner','installer','active','internal');
  INSERT INTO trade_crm_job_details VALUES('job','owner','customer','trade_owned');
  INSERT INTO trade_crm_customers VALUES('customer','owner','jane@example.test','Jane','Smith','','active');
  INSERT INTO trade_rental_inspections VALUES('inspection','owner','job','issued','report','worker',1);
- INSERT INTO trade_rental_reports VALUES('report','owner','inspection','issued','RMS-123','hash');`);
+ INSERT INTO trade_rental_reports(id,firebase_uid,inspection_id,status,report_number,pdf_sha256) VALUES('report','owner','inspection','issued','RMS-123','hash');`);
  const migration = read('../drizzle/0160_trade_rental_inspections.sql');
  database.exec(migration.slice(migration.indexOf('CREATE TABLE `trade_rental_inspection_events`')).replaceAll('--> statement-breakpoint', ''));
  database.exec(read('../drizzle/0196_trade_outgoing_email.sql').replaceAll('--> statement-breakpoint', ''));
@@ -286,7 +288,7 @@ test('explicit owner approval releases the review and emails the exact issued re
 
 test('owner approval keeps delivery held while this inspection has a staged formatting revision',async()=>{
  const f=fixture();await f.hold();
- f.database.exec("INSERT INTO trade_rental_reports VALUES('corrected-report','owner','inspection','staged','RMS-123-R2','corrected-hash')");
+ f.database.exec("INSERT INTO trade_rental_reports(id,firebase_uid,inspection_id,status,report_number,pdf_sha256) VALUES('corrected-report','owner','inspection','staged','RMS-123-R2','corrected-hash')");
  await assert.rejects(()=>f.hold(false),/RENTAL_REPORT_FORMATTING_IN_PROGRESS/);
  assert.equal((await f.api.rentalReportDeliveryReview('owner','inspection')).status,'held');
  assert.equal(f.database.prepare("SELECT count(*) n FROM trade_rental_inspection_events WHERE event_type='report_email_review_released'").get().n,0);
@@ -305,7 +307,7 @@ test('owner review requires a strict current inspection revision before accessin
 
 test('a correction committing immediately before owner approval cannot release email for an unreviewed PDF revision',async()=>{
  const f=fixture();await f.hold();
- f.database.exec("INSERT INTO trade_rental_reports VALUES('corrected-report','owner','inspection','issued','RMS-123-R2','corrected-hash')");
+ f.database.exec("INSERT INTO trade_rental_reports(id,firebase_uid,inspection_id,status,report_number,pdf_sha256) VALUES('corrected-report','owner','inspection','issued','RMS-123-R2','corrected-hash')");
  f.db.setBeforeRun(()=>f.database.exec("UPDATE trade_rental_inspections SET issued_report_id='corrected-report',revision=2 WHERE id='inspection'"));
  await assert.rejects(()=>f.hold(false),/REPORT_DELIVERY_REVIEW_CHANGED/);
  assert.equal((await f.api.rentalReportDeliveryReview('owner','inspection')).status,'held');
@@ -327,7 +329,7 @@ test('a stale idempotent review cannot return a matching old held or released st
 
 test('a staged revision for another inspection does not block owner approval of this report',async()=>{
  const f=fixture();await f.hold();
- f.database.exec("INSERT INTO trade_rental_reports VALUES('other-corrected-report','owner','other-inspection','staged','OTHER-R2','other-hash')");
+ f.database.exec("INSERT INTO trade_rental_reports(id,firebase_uid,inspection_id,status,report_number,pdf_sha256) VALUES('other-corrected-report','owner','other-inspection','staged','OTHER-R2','other-hash')");
  assert.equal((await f.hold(false)).status,'released');
  assert.equal((await f.send()).status,'accepted');assert.equal(f.sent.length,1);
 });

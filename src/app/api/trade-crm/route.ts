@@ -1,6 +1,6 @@
 import { reconcileTradeFormJobProgress } from "@/lib/trade-form-job-progress";
 import { requireAdminJobReadAccess } from "@/lib/admin-job-read-access";
-import { assertTradeFormAttachmentAccess, initialRentalAssessmentModules, initialTradeJobForms, initialVeuElectricalAssessmentSelection, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard } from "@/lib/trade-job-form-attachment-server";
+import { assertTradeFormAttachmentAccess, initialRentalAssessmentModules, initialSafetyCheckKinds, initialTradeJobForms, initialVeuElectricalAssessmentSelection, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard } from "@/lib/trade-job-form-attachment-server";
 import { changeJobSalesOutcome, JobSalesOutcomeError, loadJobSalesOutcomes } from "@/lib/trade-job-sales-outcome-server";
 import { tradeJobNeedsSchedulingSql } from "@/lib/trade-job-scheduling-attention";
 import { canAccessCrewMember, crewScheduleMemberIds, crewMutationGuard } from "@/lib/trade-crews";
@@ -92,6 +92,8 @@ import {
 import {
   ENERGY_SERVICE_IDS,
   ENERGY_SERVICE_LABELS,
+  hasServiceCapability,
+  serviceCapabilityIds,
 } from "@/lib/energy-service-catalogue.mjs";
 import { canRescheduleWithinScope } from "@/lib/trade-team-permission-policy.mjs";
 import type {
@@ -1661,7 +1663,7 @@ async function assertMemberCapability(
     .bind(memberId, identity.uid).first<Record<string, unknown>>();
   if (!member) return null;
   if (String(member.member_uid || "") !== identity.uid && serviceCategory
-    && !parsedCapabilities(member.capabilities).includes(serviceCategory)) {
+    && !hasServiceCapability(parsedCapabilities(member.capabilities), serviceCategory)) {
     throw new Error("MEMBER_CAPABILITY_REQUIRED");
   }
   return member;
@@ -1696,7 +1698,7 @@ function tradeCrmScheduleMemberGuardStatement(
       SELECT 1 FROM trade_team_members selected_member
       WHERE selected_member.id = ? AND selected_member.owner_uid = ? AND selected_member.status = 'active'
         AND (selected_member.member_uid = ? OR ? = '' OR EXISTS (
-          SELECT 1 FROM json_each(selected_member.capabilities) WHERE value = ?
+          SELECT 1 FROM json_each(selected_member.capabilities) WHERE value IN (SELECT value FROM json_each(?))
         ))
         AND ${rentalAssignmentCredentialSql("selected_member.id", "selected_member.owner_uid")}
     ) THEN 1 ELSE 0 END, ?)`)
@@ -1709,7 +1711,7 @@ function tradeCrmScheduleMemberGuardStatement(
       ownerUid,
       ownerUid,
       serviceCategory,
-      serviceCategory,
+      JSON.stringify(serviceCapabilityIds(serviceCategory)),
       JSON.stringify(rentalGates),
       credentialDate,
       credentialDate,
@@ -2405,10 +2407,11 @@ export async function POST(request: Request) {
       const requestedCategory = cleanAdminText(body.serviceCategory, 60)
         || cleanAdminText(template?.service_category, 60);
       const serviceCategory = SERVICE_CATEGORIES.has(requestedCategory) ? requestedCategory : "other";
-      const initialForms = quickQuote ? [] : await initialTradeJobForms(body.formSelectionsJson, serviceCategory, identity.uid, db);
+      const initialForms = quickQuote ? [] : await initialTradeJobForms(body.formSelectionsJson, serviceCategory, identity.uid, db, String(serviceSite?.address_state || ""));
       const rentalModuleKeys = quickQuote ? [] : initialRentalAssessmentModules(body.rentalInspectionModulesJson, serviceCategory);
       const attachVeuElectricalAssessment = !quickQuote && initialVeuElectricalAssessmentSelection(body.attachVeuElectricalAssessment);
-      if (initialForms.length || rentalModuleKeys.length || attachVeuElectricalAssessment) {
+      const safetyCheckKinds = quickQuote ? [] : initialSafetyCheckKinds(body.safetyCheckKindsJson);
+      if (initialForms.length || rentalModuleKeys.length || attachVeuElectricalAssessment || safetyCheckKinds.length) {
         await assertTradeFormAttachmentAccess(identity.access, db, true);
       }
       if (!quickQuote && !rentalInspectionServiceAddressAccepted(rentalModuleKeys.length ? RENTAL_INSPECTION_SERVICE_CATEGORY : serviceCategory, serviceSite?.address_state)) {
@@ -2416,6 +2419,9 @@ export async function POST(request: Request) {
       }
       if (attachVeuElectricalAssessment && String(serviceSite?.address_state || "").toUpperCase() !== "VIC") {
         return adminJson({ ok: false, error: "The insulation electrical safety assessment requires a Victorian service address." }, 400);
+      }
+      if (safetyCheckKinds.length && String(serviceSite?.address_state || "").toUpperCase() !== "VIC") {
+        return adminJson({ ok: false, error: "The official electrical and gas safety checks require a Victorian service address." }, 400);
       }
       const displayName = createCustomer
         ? (businessName || `${firstName} ${lastName}`.trim())
@@ -2431,8 +2437,12 @@ export async function POST(request: Request) {
       const workNumber = await nextTlinkJobNumber(db, now);
       const requestedAssigneeMemberId = quickQuote ? "" : cleanAdminText(body.assigneeMemberId, 180);
       const assigneeMemberId = requestedAssigneeMemberId;
+      if (safetyCheckKinds.length && !assigneeMemberId) {
+        return adminJson({ ok: false, error: "Choose the qualified worker for the selected safety checks." }, 400);
+      }
       const requiredServiceCategories = [...new Set([serviceCategory, ...complianceIntents.map((intent) => intent.activity.serviceCategory),
-        ...(rentalModuleKeys.length ? [RENTAL_INSPECTION_SERVICE_CATEGORY] : [])])];
+        ...(rentalModuleKeys.length ? [RENTAL_INSPECTION_SERVICE_CATEGORY] : []),
+        ...safetyCheckKinds.map(kind => `${kind}-safety-check`)])];
       const trainingActivities = certificateActivityIds(complianceIntents.map((intent) => intent.activity.templateId));
       if (trainingActivities.length) await assertCertificateActivityEligibility(db, {
         ownerUid: identity.uid, actorMemberId: identity.memberId, assignedMemberId: assigneeMemberId,
@@ -2506,7 +2516,7 @@ export async function POST(request: Request) {
       );
       const recordStage = guided ? "scheduled" : "backlog";
       const pipelineStage = guided ? "scheduled" : "enquiry";
-      if (!quickQuote && serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length) {
+      if (!quickQuote && serviceCategory === RENTAL_INSPECTION_SERVICE_CATEGORY && !rentalModuleKeys.length && !safetyCheckKinds.length) {
         return adminJson({ ok: false, error: "Choose at least one rental assessment or safety-check module." }, 400);
       }
       const rentalAssessmentScope = normalizeRentalAssessmentScope(body.rentalAssessmentScope);
@@ -2514,7 +2524,8 @@ export async function POST(request: Request) {
       const rentalTemplate = rentalModuleKeys.length
         ? rentalAssessmentTemplateSnapshot(rentalModuleKeys, rentalAssessmentScope)
         : null;
-      const rentalGates = rentalAssignmentRequiredGates(rentalModuleKeys);
+      const rentalGates = rentalAssignmentRequiredGates([...rentalModuleKeys,
+        ...safetyCheckKinds.map(kind => kind === "electrical" ? "electrical_safety_check" : "gas_safety_check")]);
       const credentialDate = scheduledStart.slice(0, 10) || now.slice(0, 10);
       if (rentalGates.length && assigneeMemberId) {
         const eligible = await db.prepare(`SELECT member.id FROM trade_team_members member
@@ -2544,6 +2555,32 @@ export async function POST(request: Request) {
           },
         });
       })() : null;
+      const safetyDrafts = safetyCheckKinds.length ? await (async () => {
+        const [{ createSafetyCheckDraft }, { ensureSafetyCheckSchemaGuards }] = await Promise.all([
+          import("@/lib/trade-safety-check-draft"), import("@/lib/trade-safety-check-schema-guards"),
+        ]);
+        await ensureSafetyCheckSchemaGuards(db);
+        const customerName = createCustomer ? [firstName, lastName].filter(Boolean).join(" ")
+          : [existingCustomer?.first_name, existingCustomer?.last_name].filter(Boolean).join(" ");
+        return safetyCheckKinds.map(kind => createSafetyCheckDraft({
+          id: crypto.randomUUID(), workOrderId, ownerUid: identity.uid, kind, createdAt: now, customerName,
+          answers: {
+            property_address: [serviceSite?.address_line_1, serviceSite?.address_line_2,
+              ...(kind === "electrical" ? [serviceSite?.suburb, serviceSite?.address_state, serviceSite?.postcode] : [])].filter(Boolean).join(", "),
+            ...(kind === "gas" ? { "gas.client_name": customerName, "gas.suburb": String(serviceSite?.suburb || ""), "gas.postcode": String(serviceSite?.postcode || "") } : {}),
+          },
+        }));
+      })() : [];
+      const safetyDraftStatements: D1PreparedStatement[] = [];
+      if (safetyDrafts.length) {
+        const { initialSafetyCheckDraftStatement } = await import("@/lib/trade-safety-check-draft");
+        for (const draft of safetyDrafts) safetyDraftStatements.push(
+          initialSafetyCheckDraftStatement(db, draft, identity.access.actorUid),
+          db.prepare(`INSERT INTO trade_work_order_events (id, work_order_id, firebase_uid, event_type, summary, created_at)
+            VALUES (?, ?, ?, 'field_form_started', ?, ?)`)
+            .bind(crypto.randomUUID(), workOrderId, identity.uid, `${draft.form.title} started.`, now),
+        );
+      }
       const rentalPropertySnapshot = rentalTemplate ? JSON.stringify({
         schemaVersion: "tlink-rental-property-v1",
         customer: {
@@ -2610,7 +2647,7 @@ export async function POST(request: Request) {
               .bind(crypto.randomUUID(), workOrderId, identity.uid, `${formTemplate.name} started.`, now),
           ];
         }),
-        ...(rentalTemplate || piesaDraft ? (() => {
+        ...(rentalTemplate || piesaDraft || safetyDrafts.length ? (() => {
           const actor = tradeFormAttachmentAccessGuard(identity.access, true);
           return [creditexWriteGuard(db, identity.uid, actor.sql, actor.values)];
         })() : []),
@@ -2620,7 +2657,8 @@ export async function POST(request: Request) {
             VALUES (?, ?, ?, 'field_form_started', ?, ?)`)
             .bind(crypto.randomUUID(), workOrderId, identity.uid, "Pre-installation electrical safety assessment (Insulation) started.", now),
         ] : []),
-        ...(!guided && rentalTemplate && assigneeMemberId ? requiredServiceCategories.map((requiredCategory) => tradeCrmScheduleMemberGuardStatement(db, {
+        ...safetyDraftStatements,
+        ...(!guided && (rentalTemplate || safetyDrafts.length) && assigneeMemberId ? requiredServiceCategories.map((requiredCategory) => tradeCrmScheduleMemberGuardStatement(db, {
           access: identity.access, ownerUid: identity.uid, memberId: assigneeMemberId,
           serviceCategory: requiredCategory, changedAt: now, rentalGates, credentialDate,
         })) : []),
@@ -2898,6 +2936,7 @@ export async function POST(request: Request) {
         rentalInspectionAttached: Boolean(rentalTemplate),
         rentalInspectionModuleCount: rentalModuleKeys.length,
         veuElectricalAssessmentAttached: Boolean(piesaDraft),
+        safetyCheckKindsAttached: safetyCheckKinds,
         attachedFormCount: initialForms.length,
         calendarSynced, calendarFailed, calendarInvite, customerDocuments, quickQuote }, 201);
     }

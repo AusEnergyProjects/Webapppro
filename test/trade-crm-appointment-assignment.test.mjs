@@ -1,4 +1,5 @@
 import * as crewHelpers from "../src/lib/trade-crews.ts";
+import * as energyServices from "../src/lib/energy-service-catalogue.mjs";
 import { installEmptyTradeCrews } from "./helpers/trade-crews-fixture.mjs";
 import { GnafDirectoryUnavailableError } from "../src/lib/gnaf-directory.ts";
 import * as jobCollaboration from "../src/lib/trade-job-collaboration.ts";
@@ -506,6 +507,7 @@ function crmRoute(d1, actorAccess, syncAppointment = async () => ({ connected: 1
       projectInstallerWorkOrderToDataforceRecord: () => ({}),
     },
     "@/lib/energy-service-catalogue.mjs": {
+      ...energyServices,
       ENERGY_SERVICE_IDS: ["hot-water"],
       ENERGY_SERVICE_LABELS: { "hot-water": "Hot water" },
     },
@@ -595,6 +597,47 @@ test("create_appointment lets an authorised own-scope worker claim an unassigned
     revision: 4,
   });
   assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments WHERE assignee_member_id = 'member-a'").get().count, 1);
+});
+
+for (const [jobCategory, memberCapability] of [
+  ["rental-inspection", "minimum-rental-standards"],
+  ["minimum-rental-standards", "rental-inspection"],
+]) {
+  test(`own-scope worker can claim ${jobCategory} work with saved ${memberCapability} service`, async (t) => {
+    const { database, d1 } = fixture(); t.after(() => database.close());
+    database.prepare("UPDATE trade_work_orders SET service_category=?, assignee_member_id='', assignee_label='' WHERE id='job-1'").run(jobCategory);
+    database.prepare("UPDATE trade_team_members SET capabilities=? WHERE id='member-a'").run(JSON.stringify([memberCapability]));
+    const response = await crmRoute(d1, access({ canAssignJobs: true, scheduleScope: "own" })).POST(appointmentRequest("member-a"));
+    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()));
+    assert.equal(database.prepare("SELECT assignee_member_id FROM trade_work_orders WHERE id='job-1'").get().assignee_member_id, "member-a");
+    assert.equal(database.prepare("SELECT assignee_member_id FROM trade_crm_appointments").get().assignee_member_id, "member-a");
+  });
+}
+
+for (const capabilities of [[], ["hot-water"]]) {
+  test(`rental self-assignment rejects ${capabilities.length ? "a different service" : "office-only staff"}`, async (t) => {
+    const { database, d1 } = fixture(); t.after(() => database.close());
+    database.prepare("UPDATE trade_work_orders SET service_category='minimum-rental-standards', assignee_member_id='', assignee_label='' WHERE id='job-1'").run();
+    database.prepare("UPDATE trade_team_members SET capabilities=? WHERE id='member-a'").run(JSON.stringify(capabilities));
+    const response = await crmRoute(d1, access({ canAssignJobs: true, scheduleScope: "own" })).POST(appointmentRequest("member-a"));
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /not enabled for this service category/i);
+    assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+    assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-1'").get().revision, 3);
+  });
+}
+
+test("rental self-assignment rolls back when service access is removed after the initial alias check", async (t) => {
+  const { database, d1 } = fixture(); t.after(() => database.close());
+  database.prepare("UPDATE trade_work_orders SET service_category='minimum-rental-standards', assignee_member_id='', assignee_label='' WHERE id='job-1'").run();
+  database.prepare("UPDATE trade_team_members SET capabilities='[\"rental-inspection\"]' WHERE id='member-a'").run();
+  d1.setBeforeBatch(() => database.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='member-a'").run());
+  const response = await crmRoute(d1, access({ canAssignJobs: true, scheduleScope: "own" })).POST(appointmentRequest("member-a"));
+  assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+  assert.equal(d1.batchCalls, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointments").get().count, 0);
+  assert.equal(database.prepare("SELECT revision FROM trade_work_orders WHERE id='job-1'").get().revision, 3);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_team_sync_changes").get().count, 0);
 });
 
 test("create_appointment does not let an own-scope worker assign an unassigned job to someone else", async () => {

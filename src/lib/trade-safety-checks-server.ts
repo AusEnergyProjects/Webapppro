@@ -15,6 +15,7 @@ import { safetyCheckEmailDraft } from "./safety-check-email";
 import { sendTradeCustomerEmail } from "./trade-email-server";
 import { reminderProviderFailureOutcome } from "./service-reminder-delivery";
 import { reconcileTradeFormJobProgress, type FormJobProgress } from "./trade-form-job-progress";
+import { createSafetyCheckDraft } from "./trade-safety-check-draft";
 
 type Row = { kind:SafetyCheckKind;credential_snapshot:string;id:string;work_order_id:string;owner_uid:string;revision:number;status:string;payload:string;payload_sha256:string;
   pdf_object_key:string;pdf_sha256:string;pdf_size_bytes:number;actor_uid:string;created_at:string;updated_at:string;completed_at:string };
@@ -173,14 +174,13 @@ export async function startSafetyCheckRecord(access:TeamAccess,workOrderId:strin
   const job=await scope(access,workOrderId,true),db=getD1();await ensureSafetyCheckSchemaGuards(db);
   const existing=await db.prepare("SELECT * FROM trade_safety_checks WHERE work_order_id=? AND owner_uid=? AND kind=?").bind(workOrderId,access.ownerUid,kind).first<Row>();
   if(existing)return parse(existing);
-  const {context,profile}=await safetyCheckProfileDefaults(access,workOrderId,kind),now=stamp(),id=crypto.randomUUID(),form=createOfficialSafetyCheckForm(kind);
+  const {context,profile}=await safetyCheckProfileDefaults(access,workOrderId,kind),now=stamp(),id=crypto.randomUUID();
   const workerName=String(profile[kind==="electrical"?"electricianName":"gasfitterName"]||"");
   const licence=String(profile.licenceNumber||"");
-  const answers=normaliseActivityAnswers(form,{property_address:[context.address_line_1,context.address_line_2,...(kind==="electrical"?[context.suburb,context.address_state,context.postcode]:[])].filter(Boolean).join(", "),
+  const record=createSafetyCheckDraft({id,ownerUid:access.ownerUid,workOrderId,kind,createdAt:now,customerName:[context.first_name,context.last_name].filter(Boolean).join(" "),
+    answers:{property_address:[context.address_line_1,context.address_line_2,...(kind==="electrical"?[context.suburb,context.address_state,context.postcode]:[])].filter(Boolean).join(", "),
     inspector_name:workerName,inspector_licence:licence,...(kind==="gas"?{"gas.client_name":[context.first_name,context.last_name].filter(Boolean).join(" "),
-      "gas.suburb":context.suburb||"","gas.postcode":context.postcode||""}:{})});
-  const record:SafetyCheckRecord={id,ownerUid:access.ownerUid,workOrderId,kind,recordNumber:`${kind==="electrical"?"ESC":"GSC"}-${now.slice(0,10).replaceAll("-","")}-${id.slice(0,8).toUpperCase()}`,
-    revision:1,status:"draft",form,formSha256:activityHash(form),answers,evidence:[],signatures:[],signerDefaults:{customer:[context.first_name,context.last_name].filter(Boolean).join(" "),technician:workerName},createdAt:now,updatedAt:now,completedAt:""};
+      "gas.suburb":context.suburb||"","gas.postcode":context.postcode||""}:{})}});
   const payload=activityCanonical(record),guard=currentAccess(access,true);
   await scope(access,workOrderId,true);
   await db.prepare(`INSERT OR IGNORE INTO trade_safety_checks(id,work_order_id,owner_uid,kind,revision,status,payload,payload_sha256,actor_uid,created_at,updated_at)

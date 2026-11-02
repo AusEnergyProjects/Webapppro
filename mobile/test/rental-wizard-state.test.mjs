@@ -1094,6 +1094,102 @@ const renderedNodes = (node, predicate) => node == null || typeof node !== 'obje
 const renderedText = node => node == null || typeof node === 'boolean' ? '' : typeof node !== 'object' ? String(node)
   : Array.isArray(node) ? node.map(renderedText).join(' ') : renderedText(node.props?.children);
 
+test('completed native assessments reopen through the revision checked server action and require fresh declarations', async () => {
+  const active = { id: 'module', status: 'complete', revision: 8 };
+  const env = { active, canReopenCompleted: true, online: true, hasDraft: false, pendingSaves: [],
+    cacheRef: { current: { answers: { module: { assessorDeclaration: true, credentialConfirmed: true, coverageConfirmed: true }, other: { keep: true } }, drafts: { retained: { outcome: 'meets' } } } },
+    async perform(_name, action) { await action(); }, async request(body) { env.sent = body; },
+    setCache(value) { env.cache = value; }, setFirstSetupModuleId(value) { env.firstSetup = value; },
+    setPage(value) { env.page = value; }, async persist(value) { env.persisted = value; }, async onChanged() { env.changed = true; } };
+  const edit = mountedWorkflowFunction('editCompletedAnswers', env);
+  await edit();
+  assert.deepEqual(env.sent, { action: 'reopen_module', moduleId: 'module', expectedRevision: 8 });
+  assert.equal(env.cache.answers.module, undefined, 'Old local declarations cannot overwrite the reopened server draft');
+  assert.deepEqual(env.cache.answers.other, { keep: true }); assert.deepEqual(env.cache.drafts, { retained: { outcome: 'meets' } });
+  assert.equal(env.persisted, env.cache); assert.equal(env.page, 'categories'); assert.equal(env.changed, true);
+  for (const patch of [{ canReopenCompleted: false }, { online: false }, { hasDraft: true }, { pendingSaves: [{}] }]) {
+    const before = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch); delete env.sent;
+    await edit(); assert.equal(env.sent, undefined, JSON.stringify(patch)); Object.assign(env, before);
+  }
+  env.request = async () => { throw new Error('This assessment changed.'); };
+  env.cacheRef.current.answers.module = { assessorDeclaration: true }; env.page = 'review';
+  await assert.rejects(edit(), /assessment changed/);
+  assert.equal(env.cacheRef.current.answers.module.assessorDeclaration, true, 'A rejected reopen never clears retained data');
+  assert.equal(env.page, 'review');
+});
+
+test('native Edit answers respects server permission, issued locks and pending local work', () => {
+  const declaration = source.slice(source.indexOf('  const canReopenCompleted ='), source.indexOf('  const activeHasDraft ='));
+  const output = ts.transpileModule(declaration + '\nreturn canReopenCompleted;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const allowed = new Function('data', 'active', output);
+  const data = { permissions: { canEdit: true }, inspection: { status: 'submitted' } };
+  const active = { status: 'complete' };
+  assert.equal(allowed(data, active), true);
+  for (const status of ['issuing', 'issued', 'superseded', 'withdrawn']) assert.equal(allowed({ ...data, inspection: { status } }, active), false);
+  assert.equal(allowed({ ...data, permissions: { canEdit: false } }, active), false);
+  assert.equal(allowed(data, { status: 'draft' }), false);
+  const env = { canReopenCompleted: true, styles: {}, View: 'view', Text: 'text', FieldButton: 'button', busy: '', online: true,
+    hasDraft: false, pendingSaves: [], editCompletedAnswers() { env.clicked = true; } };
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === 'canReopenCompleted';
+  const button = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button')[0];
+  assert.equal(renderedText(button()), 'Edit answers'); assert.equal(button().props.disabled, false);
+  button().props.onPress(); assert.equal(env.clicked, true);
+  for (const patch of [{ busy: 'reopen' }, { online: false }, { hasDraft: true }, { pendingSaves: [{}] }]) {
+    const before = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch);
+    assert.equal(button().props.disabled, true, JSON.stringify(patch)); Object.assign(env, before);
+  }
+  env.canReopenCompleted = false; assert.equal(button(), undefined);
+});
+
+test('Edit report starts a separate correction using the current issued report and inspection revision', async () => {
+  const env = { report: { id: 'issued-r1' }, data: { inspection: { revision: 11 }, permissions: { canCorrectReport: true } },
+    online: true, hasDraft: false, pendingSaves: [], selectedModuleId: { current: 'original-module' },
+    async perform(_name, action) { await action(); }, async request(body) { env.sent = body; return { modules: [{ id: 'correction-module' }] }; },
+    setModuleId(value) { env.moduleId = value; }, setFirstSetupModuleId(value) { env.firstSetup = value; }, setPage(value) { env.page = value; },
+    async onChanged() { env.changed = true; } };
+  const edit = mountedWorkflowFunction('editIssuedReport', env);
+  await edit();
+  assert.deepEqual(env.sent, { action: 'begin_report_correction', reportId: 'issued-r1', expectedInspectionRevision: 11 });
+  assert.equal(env.moduleId, 'correction-module'); assert.equal(env.selectedModuleId.current, 'correction-module'); assert.equal(env.page, 'categories');
+  for (const patch of [{ online: false }, { hasDraft: true }, { pendingSaves: [{}] }, { data: { permissions: { canCorrectReport: false } } }]) {
+    const before = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch); delete env.sent;
+    await edit(); assert.equal(env.sent, undefined, JSON.stringify(patch)); Object.assign(env, before);
+  }
+  const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast) === 'report && data.permissions?.canCorrectReport';
+  Object.assign(env, { styles: {}, FieldButton: 'button', busy: '', editIssuedReport: edit });
+  const button = () => renderedNodes(renderedNativeBranch(select, env), node => node.type === 'button')[0];
+  assert.equal(renderedText(button()), 'Edit report'); assert.equal(button().props.disabled, false);
+  env.online = false; assert.equal(button().props.disabled, true);
+  env.online = true; env.data.permissions.canCorrectReport = false; assert.equal(button(), undefined);
+});
+
+test('a new correction identity replaces a higher original revision and discarding returns to the issued assessment', () => {
+  const declaration = source.slice(source.indexOf('  const applyResult = useCallback'), source.indexOf('  const openInitialSetup ='));
+  const output = ts.transpileModule(declaration + '\nreturn applyResult;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const env = { current: { inspection: { id: 'original', revision: 20 } }, useCallback: callback => callback,
+    setData(update) { env.current = update(env.current); }, setModuleId() {} };
+  const apply = new Function('environment', `with(environment) { ${output} }`)(env);
+  apply({ inspection: { id: 'original', revision: 19 } }); assert.equal(env.current.inspection.revision, 20);
+  apply({ inspection: { id: 'correction', revision: 1 } }); assert.equal(env.current.inspection.id, 'correction');
+  apply({ inspection: { id: 'original', revision: 20 } }); assert.equal(env.current.inspection.id, 'original');
+});
+
+test('Discard correction draft confirms the action and retains the issued report without submitting local changes', async () => {
+  const env = { data: { correction: { id: 'correction' }, permissions: { canEdit: true }, inspection: { revision: 4 } }, online: true,
+    pendingSaves: [], selectedModuleId: { current: 'correction-module' }, Alert: { alert(...args) { env.dialog = args; } },
+    async perform(_name, action) { await action(); }, async request(body) { env.sent = body; return { modules: [{ id: 'original-module' }] }; },
+    setModuleId(value) { env.moduleId = value; }, setFirstSetupModuleId() {}, setPage(value) { env.page = value; }, async onChanged() {} };
+  const discard = mountedWorkflowFunction('discardCorrectionDraft', env);
+  discard(); assert.equal(env.sent, undefined); assert.equal(env.dialog[0], 'Discard correction draft?');
+  assert.equal(env.dialog[2][0].style, 'cancel'); env.dialog[2][1].onPress(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(env.sent, { action: 'discard_report_correction', expectedInspectionRevision: 4 });
+  assert.equal(env.moduleId, 'original-module'); assert.equal(env.page, 'review');
+  for (const patch of [{ online: false }, { pendingSaves: [{}] }, { data: { permissions: { canEdit: false } } }]) {
+    const before = Object.fromEntries(Object.keys(patch).map(key => [key, env[key]])); Object.assign(env, patch); delete env.dialog;
+    discard(); assert.equal(env.dialog, undefined, JSON.stringify(patch)); Object.assign(env, before);
+  }
+});
+
 test('native update is explicit, revision checked and unavailable with metadata, photo, queue or offline work', async () => {
   const select = (node, ast) => ts.isConditionalExpression(node) && node.condition.getText(ast).includes('RENTAL_ASSESSMENT_TEMPLATE_VERSION');
   const env = { editable: true, active: { id: 'module', key: 'minimum_standards', revision: 8,

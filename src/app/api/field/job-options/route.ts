@@ -2,19 +2,33 @@ import { getD1 } from "../../../../../db";
 import { mfaErrorResponse, adminJson, cleanAdminText, sameOrigin } from "@/lib/admin-server";
 import { requireInstallerTeamAccess } from "@/lib/trade-team-server";
 import { tradeFieldPermissions } from "@/lib/trade-field-permissions";
-import { ENERGY_SERVICE_CATALOGUE } from "@/lib/energy-service-catalogue.mjs";
+import { ENERGY_SERVICE_CATALOGUE, serviceCapabilityIds } from "@/lib/energy-service-catalogue.mjs";
 import { GOVERNMENT_ACTIVITY_TEMPLATES, GOVERNMENT_PROGRAM_TEMPLATES } from "@/lib/australian-government-program-catalogue";
 import { resolveTradeComplianceIntents, TradeComplianceIntentError } from "@/lib/trade-compliance-intent";
-import { normalizeRentalAssessmentModules } from "@/lib/trade-rental-assessment.mjs";
+import { initialSafetyCheckKinds, TradeFormSelectionError } from "@/lib/trade-job-form-attachment-server";
+import { normalizeRentalAssessmentModules, RENTAL_ASSESSMENT_MODULE_KEYS } from "@/lib/trade-rental-assessment.mjs";
 import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/lib/trade-rental-credentials";
 
 export const runtime = "edge";
+
+function requestedRentalModules(value: string | null, category: string) {
+  if (value === null || value === "") return category === "rental-inspection" ? normalizeRentalAssessmentModules(undefined) : [];
+  const invalid = () => new TradeFormSelectionError("Choose valid rental assessment modules.");
+  if (value.length > 2048) throw invalid();
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw invalid(); }
+  if (!Array.isArray(parsed) || parsed.length > RENTAL_ASSESSMENT_MODULE_KEYS.length
+    || new Set(parsed).size !== parsed.length
+    || parsed.some(key => !RENTAL_ASSESSMENT_MODULE_KEYS.includes(key))) throw invalid();
+  return normalizeRentalAssessmentModules(parsed);
+}
 
 export async function GET(request: Request) {
   if (!sameOrigin(request)) return adminJson({ ok: false, error: "Request origin was not accepted." }, 403);
   try {
     const access = await requireInstallerTeamAccess(request);
-    const permissions = tradeFieldPermissions(access);
+    const permissions = { ...tradeFieldPermissions(access),
+      canAddForms: access.isOwner || Boolean(access.canViewFieldEvidence && access.canManageFieldEvidence) };
     if (!permissions.canCreateJobs) return adminJson({ ok: false, code: "JOB_CREATE_REQUIRED", error: "Your Team access does not allow new jobs." }, 403);
     const url = new URL(request.url);
     const state = cleanAdminText(url.searchParams.get("state"), 3).toUpperCase();
@@ -27,9 +41,10 @@ export async function GET(request: Request) {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne" }).format(new Date());
     const credentialDate = appointmentDate > today ? appointmentDate : today;
     const rawRentalModules = url.searchParams.get("rentalModules");
-    const rentalModules = category === "rental-inspection" ? normalizeRentalAssessmentModules(rawRentalModules || undefined) : [];
-    if (category === "rental-inspection" && rawRentalModules && rawRentalModules !== "[]" && !rentalModules.length) return adminJson({ ok: false, error: "Choose valid rental assessment modules." }, 400);
-    const rentalGates = rentalAssignmentRequiredGates(rentalModules);
+    const rentalModules = requestedRentalModules(rawRentalModules, category);
+    const safetyCheckKinds = initialSafetyCheckKinds(url.searchParams.get("safetyCheckKinds") ?? undefined);
+    const rentalGates = rentalAssignmentRequiredGates([...rentalModules,
+      ...safetyCheckKinds.map((kind) => kind === "electrical" ? "electrical_safety_check" : "gas_safety_check")]);
     const selectedActivities = resolveTradeComplianceIntents({
       mode: "none", activities: url.searchParams.get("activities") || "[]", siteJurisdiction: state,
     });
@@ -39,11 +54,15 @@ export async function GET(request: Request) {
       { id: "mounting-hardware", label: "Mounting hardware" }, { id: "controls", label: "Controls" },
     ];
     if (category && !services.some((item) => item.id === category)) return adminJson({ ok: false, error: "Choose a valid work type." }, 400);
-    const requiredCapabilities = [...new Set([category, ...selectedActivities.map((item) => item.activity.serviceCategory)].filter(Boolean))];
+    const requiredCapabilities = [...new Set([category, ...selectedActivities.map((item) => item.activity.serviceCategory),
+      ...(rentalModules.length ? ["rental-inspection"] : []),
+      ...safetyCheckKinds.map((kind) => kind === "electrical" ? "electrical-safety-check" : "gas-safety-check")].filter(Boolean))]
+      .map(serviceCapabilityIds);
     const rows = await getD1().prepare(`SELECT id, display_name FROM trade_team_members
       WHERE owner_uid = ? AND status = 'active' AND (? = 1 OR id = ?)
         AND (member_uid = ? OR NOT EXISTS (SELECT 1 FROM json_each(?) required_capability
-          WHERE NOT EXISTS (SELECT 1 FROM json_each(capabilities) member_capability WHERE member_capability.value = required_capability.value)))
+          WHERE NOT EXISTS (SELECT 1 FROM json_each(capabilities) member_capability
+            WHERE member_capability.value IN (SELECT value FROM json_each(required_capability.value)))))
         AND ${rentalAssignmentCredentialSql("trade_team_members.id", "trade_team_members.owner_uid")}
         AND (? = '' OR instr(lower(display_name), lower(?)) > 0 OR id = ? OR id = ?)
       ORDER BY id = ? DESC, id = ? DESC, display_name COLLATE NOCASE, id LIMIT 51`)
@@ -68,6 +87,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const mfa = mfaErrorResponse(error);
     if (mfa) return mfa;
+    if (error instanceof TradeFormSelectionError) return adminJson({ ok: false, error: error.message }, error.status);
     if (error instanceof TradeComplianceIntentError) return adminJson({ ok: false, code: error.code, error: error.message }, 400);
     if (error instanceof Error && error.message === "AUTH_REQUIRED") return adminJson({ ok: false, error: "Sign in to continue." }, 401);
     if (error instanceof Error && ["ABN_REVIEW_REQUIRED", "TEAM_ACCESS_RECORD_REQUIRED", "EMAIL_VERIFICATION_REQUIRED", "FIELD_ACCESS_REQUIRED"].includes(error.message)) return adminJson({ ok: false, error: "Active approved Team access is required." }, 403);

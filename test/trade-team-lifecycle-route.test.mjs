@@ -189,6 +189,28 @@ async function patch(route, body) {
   }));
 }
 
+for (const [requestedCapability, storedCapability] of [
+  ["minimum-rental-standards", "rental-inspection"],
+  ["rental-inspection", "minimum-rental-standards"],
+]) {
+  test(`team filters include saved ${storedCapability} when requesting ${requestedCapability}`, async (t) => {
+    const database = fixture(); t.after(() => database.close());
+    database.prepare("UPDATE trade_team_members SET capabilities=? WHERE id='target-1'").run(JSON.stringify([storedCapability, "controls", "mounting-hardware"]));
+    const before = database.prepare("SELECT capabilities FROM trade_team_members WHERE id='target-1'").get().capabilities;
+    const route = loadRoute(database, [], { ...managerAccess, canAssignJobs: true });
+    const response = await route.GET(new Request(`https://test/api/trade-team?capability=${requestedCapability}&assigneeCapability=${requestedCapability}`));
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const payload = await response.json();
+    assert.deepEqual(payload.members.map(member => member.id), ["target-1"]);
+    assert.deepEqual(payload.members[0].capabilities, ["minimum-rental-standards", "controls", "mounting-hardware"]);
+    assert.equal(payload.roster.total, 1);
+    assert.deepEqual(payload.assignees.map(member => member.id).sort(), ["owner-member", "target-1"]);
+    assert.equal(payload.assigneeRoster.total, 2);
+    assert.deepEqual(payload.assignees.find(member => member.id === "target-1").capabilities, ["minimum-rental-standards", "controls", "mounting-hardware"]);
+    assert.equal(database.prepare("SELECT capabilities FROM trade_team_members WHERE id='target-1'").get().capabilities, before);
+  });
+}
+
 test('team payload inherits only the authorised employer theme without changing permissions', async () => {
   const database = fixture();
   try {

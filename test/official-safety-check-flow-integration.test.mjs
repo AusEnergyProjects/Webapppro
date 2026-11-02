@@ -179,6 +179,7 @@ function fixture(t) {
     'cloudflare:workers': { env: { EVIDENCE: bucket } }, '../../db': { getD1: () => db }, './trade-job-collaboration': membership,
     './trade-account-predicates': predicates, './trade-activity-forms': activity, './trade-activity-form-flow': flow,
     './official-safety-check-forms': forms, './job-safety-check': records,
+    './trade-safety-check-draft': load('../src/lib/trade-safety-check-draft.ts', { './trade-activity-forms': activity, './official-safety-check-forms': forms }),
     './trade-safety-check-schema-guards': load('../src/lib/trade-safety-check-schema-guards.ts', { './tlink-schema-guards': schemaGuards }),
     './trade-rental-credentials': rentalCredentials, './safety-check-email': draftEmail, './trade-email-server': email,
     './service-reminder-delivery': reminder, './trade-form-job-progress': progress,

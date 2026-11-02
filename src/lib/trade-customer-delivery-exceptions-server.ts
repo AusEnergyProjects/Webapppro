@@ -1,6 +1,7 @@
 import type { TeamAccess } from "./trade-team-server";
 import type { CustomerDeliveryException, CustomerDeliveryExceptions } from "./trade-customer-delivery-exceptions.ts";
 import { jobMemberSql } from "./trade-job-collaboration.ts";
+import { rentalCurrentIssuedReportSql } from "./trade-rental-report-visibility.ts";
 
 type Row = { id: string; work_order_id: string; work_number: string; title: string; label: string; status: string; updated_at: string; tab: CustomerDeliveryException["tab"]; total: number };
 const CURRENT_SALES = "w.stage<>'cancelled' AND COALESCE(w.pipeline_stage,'')<>'lost'";
@@ -114,8 +115,10 @@ export async function loadCustomerDeliveryExceptions(db: D1Database, access: Pic
     SELECT 'report:'||event.id,w.id,'Completed assessment report',
       CASE WHEN json_extract(event.metadata,'$.outcome')='indeterminate' THEN 'reconciliation_required' ELSE 'failed' END,event.created_at,'files'
     FROM jobs w JOIN trade_rental_inspections inspection ON inspection.work_order_id=w.id AND inspection.firebase_uid=w.firebase_uid AND inspection.status='issued'
+    JOIN trade_rental_reports report ON report.inspection_id=inspection.id AND report.firebase_uid=w.firebase_uid AND report.status='issued'
+      AND ${rentalCurrentIssuedReportSql("report", "inspection")}
     JOIN trade_rental_inspection_events event ON event.id=(SELECT latest.id FROM trade_rental_inspection_events latest
-      WHERE latest.inspection_id=inspection.id AND latest.firebase_uid=w.firebase_uid AND latest.report_id=inspection.issued_report_id
+      WHERE latest.inspection_id=inspection.id AND latest.firebase_uid=w.firebase_uid AND latest.report_id=report.id
         AND latest.event_type IN ('report_email_requested','report_email_accepted','report_email_failed')
       ORDER BY latest.created_at DESC,CASE latest.event_type WHEN 'report_email_accepted' THEN 0 WHEN 'report_email_failed' THEN 1 ELSE 2 END,latest.id DESC LIMIT 1)
     WHERE w.full_review=1 AND event.event_type='report_email_failed'

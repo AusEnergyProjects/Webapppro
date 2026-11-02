@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -207,7 +208,7 @@ function reportBuilder(objects) {
   const compiled = ts.transpileModule(`${source}\nexport { buildReportSnapshot };`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const dependencies = {
+  const dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES,
     "cloudflare:workers": { env: { EVIDENCE: { get: async (key) => objects.has(key)
       ? { arrayBuffer: async () => objects.get(key).buffer } : null } } },
     "../../db": {}, "@/lib/trade-team-server": {}, "@/lib/trade-team-sync-server": {},

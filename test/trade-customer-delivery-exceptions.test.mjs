@@ -72,6 +72,13 @@ function fixture(t) {
   return { sqlite, insert, job, quote, delivery, receipt, load };
 }
 
+function issuedRentalReport(f, id, revision, assessmentCorrection) {
+  f.insert("trade_rental_reports", { id, inspection_id: "inspection", firebase_uid: "owner", report_number: `RMS-TEST-R${revision}`, revision,
+    status: "issued", report_snapshot: JSON.stringify({ schemaVersion: "tlink-rental-report-v1", report: { assessmentCorrection } }),
+    source_snapshot_sha256: "a".repeat(64), pdf_object_key: `reports/${id}.pdf`, pdf_sha256: "b".repeat(64), pdf_size_bytes: 5,
+    issued_by_uid: "owner", issued_by_member_id: owner.memberId, issuer_snapshot: "{}", staged_at: now, issued_at: now, created_at: now, updated_at: now });
+}
+
 test("only latest undecided quote delivery failures need action; resolved and automatic retry records stay quiet", async t => {
   const f = fixture(t);
   for (const id of ["failed", "resolved", "retry", "uncertain", "decided", "superseded"]) { f.job(id); f.quote(id); f.delivery(`first-${id}`, id); }
@@ -192,12 +199,45 @@ test("completed report exceptions follow only the currently issued report and cl
   f.insert("trade_rental_inspections", { id: "inspection", work_order_id: "assessment", firebase_uid: "owner", inspection_number: "INS-1", status: "issued",
     template_key: "vic-rental-minimum-standards", template_version: 1, rules_effective_from: "2026-01-01", module_selection_snapshot: '["minimum_standards"]',
     issued_report_id: "report-current", issued_at: now, created_at: now, updated_at: now });
+  issuedRentalReport(f, "report-current", 1);
   const event = (id, report, eventType, stamp, metadata = {}) => f.insert("trade_rental_inspection_events", { id, inspection_id: "inspection", report_id: report,
     firebase_uid: "owner", event_type: eventType, metadata: JSON.stringify(metadata), created_at: stamp });
   event("old", "report-old", "report_email_failed", now); assert.equal((await f.load()).total, 0);
   event("current", "report-current", "report_email_failed", now, { outcome: "indeterminate" });
   let result = await f.load(); assert.equal(result.total, 1); assert.equal(result.items[0].status, "uncertain"); assert.equal(result.items[0].tab, "files");
   event("accepted", "report-current", "report_email_accepted", later); result = await f.load(); assert.equal(result.total, 0);
+});
+
+test("report delivery exceptions follow the corrected revision while retaining the original accepted receipt", async t => {
+  const f = fixture(t); f.job("assessment", { stage: "completed" });
+  f.insert("trade_rental_inspections", { id: "inspection", work_order_id: "assessment", firebase_uid: "owner", inspection_number: "INS-1", status: "issued",
+    template_key: "vic-rental-minimum-standards", template_version: 1, rules_effective_from: "2026-01-01", module_selection_snapshot: '["minimum_standards"]',
+    issued_report_id: "original", issued_at: now, created_at: now, updated_at: now });
+  issuedRentalReport(f, "original", 1);
+  const event = (id, reportId, eventType, stamp, metadata = {}) => f.insert("trade_rental_inspection_events", { id, inspection_id: "inspection", report_id: reportId,
+    firebase_uid: "owner", actor_type: "owner", actor_uid: "owner", event_type: eventType, metadata: JSON.stringify(metadata), created_at: stamp });
+  event("original-accepted", "original", "report_email_accepted", now);
+  const originalReceipt = f.sqlite.prepare("SELECT * FROM trade_rental_inspection_events WHERE id='original-accepted'").get();
+  const originalReport = f.sqlite.prepare("SELECT * FROM trade_rental_reports WHERE id='original'").get();
+  issuedRentalReport(f, "corrected", 2, { correctionId: "correction-1", sourceReportId: "original" });
+  event("corrected-issued", "corrected", "report_assessment_correction_issued", later, { correctionId: "correction-1", sourceReportId: "original" });
+  assert.equal((await f.load()).total, 0, "an issued correction without a failed send does not create an exception");
+  event("corrected-failed", "corrected", "report_email_failed", "2026-10-02T05:00:00.000Z");
+  let result = await f.load();
+  assert.equal(result.total, 1); assert.equal(result.items[0].id, "report:corrected-failed");
+  assert.equal(result.items[0].status, "failed"); assert.equal(result.items[0].tab, "files");
+  event("original-later-accepted", "original", "report_email_accepted", "2026-10-02T06:00:00.000Z");
+  assert.equal((await f.load()).items[0].id, "report:corrected-failed", "the old revision's receipt cannot clear the corrected report's failure");
+  event("corrected-requested", "corrected", "report_email_requested", "2026-10-02T07:00:00.000Z");
+  assert.equal((await f.load()).total, 0, "a pending replacement send supersedes the earlier failed attempt");
+  event("corrected-uncertain", "corrected", "report_email_failed", "2026-10-02T08:00:00.000Z", { outcome: "indeterminate" });
+  result = await f.load(); assert.equal(result.items[0].status, "uncertain");
+  assert.equal(result.items[0].id, "report:corrected-uncertain");
+  event("corrected-accepted", "corrected", "report_email_accepted", "2026-10-02T09:00:00.000Z");
+  assert.equal((await f.load()).total, 0, "provider acceptance of the current revision clears its exception");
+  assert.equal(f.sqlite.prepare("SELECT issued_report_id FROM trade_rental_inspections WHERE id='inspection'").get().issued_report_id, "original");
+  assert.deepEqual(f.sqlite.prepare("SELECT * FROM trade_rental_reports WHERE id='original'").get(), originalReport);
+  assert.deepEqual(f.sqlite.prepare("SELECT * FROM trade_rental_inspection_events WHERE id='original-accepted'").get(), originalReceipt);
 });
 
 test("accepted invoice failures respect retries and replacement commercial documents", async t => {

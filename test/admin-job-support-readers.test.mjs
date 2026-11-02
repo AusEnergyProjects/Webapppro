@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -9,6 +10,7 @@ import * as collaboration from '../src/lib/trade-job-collaboration.ts';
 import * as bounded from '../src/lib/bounded-json-request.ts';
 
 function load(path, dependencies) {
+  dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES, ...dependencies };
   const source = fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loaded = { exports: {} };
@@ -81,7 +83,7 @@ function rentalFixture() {
   const objectKey = `trade-issued-documents/rental-report/report-a/revision-1/${hash}.pdf`;
   f.sqlite.exec(`CREATE TABLE trade_rental_inspections(id TEXT,firebase_uid TEXT,work_order_id TEXT,status TEXT,issued_report_id TEXT,assessor_member_id TEXT);
     CREATE TABLE trade_rental_reports(id TEXT,firebase_uid TEXT,inspection_id TEXT,report_number TEXT,revision INTEGER,status TEXT,
-      pdf_object_key TEXT,pdf_sha256 TEXT,pdf_size_bytes INTEGER,issued_at TEXT);
+      pdf_object_key TEXT,pdf_sha256 TEXT,pdf_size_bytes INTEGER,issued_at TEXT,report_snapshot TEXT DEFAULT '{}',issued_by_uid TEXT DEFAULT 'actor');
     CREATE TABLE trade_rental_inspection_events(inspection_id TEXT,firebase_uid TEXT,report_id TEXT,event_type TEXT,actor_type TEXT,actor_uid TEXT,metadata TEXT);
     CREATE TABLE trade_rental_report_links(id TEXT,firebase_uid TEXT,inspection_id TEXT,report_id TEXT,status TEXT,expires_at TEXT,
       view_count INTEGER,download_count INTEGER,token_issue INTEGER,token_hash TEXT,encrypted_token TEXT,created_at TEXT);
@@ -93,7 +95,7 @@ function rentalFixture() {
       ('share-a','business-a','inspection-a','report-a','active','2999-12-31',2,3,1,'private-token-hash','encrypted-private-secret','2026-10-26');`);
   for (const [id, owner, inspection] of [
     ['report-a', 'business-a', 'inspection-a'], ['report-other', 'business-a', 'inspection-other'], ['report-foreign', 'business-b', 'inspection-foreign'],
-  ]) f.sqlite.prepare('INSERT INTO trade_rental_reports VALUES (?,?,?,?,?,?,?,?,?,?)')
+  ]) f.sqlite.prepare('INSERT INTO trade_rental_reports(id,firebase_uid,inspection_id,report_number,revision,status,pdf_object_key,pdf_sha256,pdf_size_bytes,issued_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .run(id, owner, inspection, `RMS-${id}`, 1, 'issued', objectKey, hash, bytes.byteLength, '2026-10-26');
   const workers = { env: { EVIDENCE: { async get(key) { f.reads.push(key); return { arrayBuffer: async () => bytes.buffer }; } } } };
   const immutable = load('src/lib/trade-issued-document-store.ts', { 'cloudflare:workers': workers });

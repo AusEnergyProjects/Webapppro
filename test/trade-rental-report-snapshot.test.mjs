@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -15,7 +16,7 @@ test("dwelling report preserves earlier faults and evidence without treating the
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const evidenceBytes = new Uint8Array([1, 2, 3, 4]);
-  const dependencies = {
+  const dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES,
     "cloudflare:workers": { env: { EVIDENCE: { get: async () => ({ arrayBuffer: async () => evidenceBytes.buffer }) } } },
     "../../db": {}, "@/lib/trade-team-server": {}, "@/lib/trade-team-sync-server": {},
     "@/lib/trade-rental-assessment.mjs": assessment, "@/lib/trade-issued-document-store": {},
@@ -75,7 +76,7 @@ test("one shower observation renders a current pass, future recommendation and s
   const compiled = ts.transpileModule(`${sourceText}\nexport { buildReportSnapshot };`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const dependencies = {
+  const dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES,
     "cloudflare:workers": { env: { EVIDENCE: { get: async () => ({ arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }) } } },
     "../../db": {}, "@/lib/trade-team-server": {}, "@/lib/trade-team-sync-server": {},
     "@/lib/trade-rental-assessment.mjs": assessment, "@/lib/trade-issued-document-store": {},

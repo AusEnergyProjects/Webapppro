@@ -2,6 +2,7 @@ export type TradeJobFormSelection =
   | { kind: "business"; templateKey: string; templateVersion: number; name: string }
   | { kind: "rental"; moduleKey: "minimum_standards" | "electrical_safety_check" | "gas_safety_check" | "smoke_alarm_check"; name: string }
   | { kind: "creditex"; programTemplateId: string; activityTemplateId: string; variantId?: string; name: string }
+  | { kind: "safety-check"; checkKind: "electrical" | "gas"; name: string }
   | { kind: "piesa"; name: string };
 
 export type TradeJobFormLibraryOption = {
@@ -23,5 +24,6 @@ export function tradeJobFormSelectionId(selection: TradeJobFormSelection): strin
     case "rental": return `rental:${selection.moduleKey}`;
     case "creditex": return `creditex:${selection.programTemplateId}:${selection.activityTemplateId}`;
     case "piesa": return "piesa:veu-pre-installation-electrical-safety-assessment";
+    case "safety-check": return `safety-check:${selection.checkKind}`;
   }
 }

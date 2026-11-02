@@ -10,8 +10,9 @@ TLink is the native iOS and Android app for technicians, trades and assessors us
 - A native Connect inbox keeps team chats, groups, permitted customer SMS, photos, voice notes and internal voice/video calls inside TLink, using the app's dark theme. Requests use the existing device-bound authentication directly.
 - Explicit notification permission setup, phone-settings recovery, per-device mute and safe team-conversation routing from notification taps.
 - A worker-specific week calendar, day schedule, assigned-job cards and one-tap workflow launch.
-- A simple plus flow for workers who are allowed to create a new self-assigned rental or safety job.
-- Independent rental minimum standards, electrical safety, gas safety and smoke alarm scopes. Minimum standards is selected by default, every scope can be cleared and at least one scope is required.
+- A New Job flow with explicit worker assignment and text search across available rental assessments, official safety checks, PIESA, Creditex activities and supporting business forms.
+- Selected forms attach with the job in one transaction. Worker service eligibility, current licences, business access and form publication are checked again when saving.
+- Completed rental answers can be reopened before issue. Issued reports use a separate correction draft with retained answers and evidence, fresh completion, and a new immutable report revision. Previous PDFs and delivery receipts remain available, and sending a corrected report is an explicit action.
 - A permanent Check for update control backed by EAS Update and the TLink full-build release endpoint.
 - Assigned-job bootstrap and delta sync through contract version 3.
 - SQLCipher-encrypted job, action, conflict and upload metadata.

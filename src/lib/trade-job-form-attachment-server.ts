@@ -2,6 +2,7 @@ import type { TeamAccess } from './trade-team-server';
 import { messageActorGuard } from './trade-message-media-access';
 import { publishedTradeFormTemplatesFor, type TradeFormTemplate } from './trade-form-templates-server';
 import { normalizeRentalAssessmentModules, RENTAL_ASSESSMENT_MODULE_KEYS, RENTAL_INSPECTION_SERVICE_CATEGORY } from './trade-rental-assessment.mjs';
+import type { SafetyCheckKind } from './job-safety-check';
 
 export class TradeFormSelectionError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -29,6 +30,17 @@ export function initialVeuElectricalAssessmentSelection(value: unknown): boolean
   throw new TradeFormSelectionError("Choose whether to add the insulation electrical safety assessment.");
 }
 
+export function initialSafetyCheckKinds(value: unknown): SafetyCheckKind[] {
+  if (value === undefined || value === "") return [];
+  const invalid = () => new TradeFormSelectionError("Choose the official electrical or gas safety check from the form library.");
+  if (typeof value !== "string" || value.length > 256) throw invalid();
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw invalid(); }
+  if (!Array.isArray(parsed) || parsed.length > 2 || new Set(parsed).size !== parsed.length
+    || parsed.some(kind => kind !== "electrical" && kind !== "gas")) throw invalid();
+  return parsed;
+}
+
 export function tradeFormTemplateMetadata(template: TradeFormTemplate) {
   return { key: template.key, version: template.version, name: template.name, jurisdiction: template.jurisdiction,
     description: template.description, guidance: template.guidance, fieldCount: template.fields.length };
@@ -54,7 +66,7 @@ export async function assertTradeFormAttachmentAccess(access: TeamAccess, databa
   }
 }
 
-export async function initialTradeJobForms(value: unknown, serviceCategory: string, ownerUid: string, database: D1Database) {
+export async function initialTradeJobForms(value: unknown, serviceCategory: string, ownerUid: string, database: D1Database, addressState = "") {
   if (value === undefined || value === "") return [];
   const invalid = () => new TradeFormSelectionError("Choose up to 20 available forms before saving this job.");
   if (typeof value !== "string" || value.length > 8192) throw invalid();
@@ -74,10 +86,13 @@ export async function initialTradeJobForms(value: unknown, serviceCategory: stri
     selected.push({ templateKey: selection.templateKey, templateVersion: selection.templateVersion });
   }
   if (!selected.length) return [];
-  const templates = await publishedTradeFormTemplatesFor(serviceCategory, database, ownerUid);
+  const templates = await publishedTradeFormTemplatesFor(serviceCategory, database, ownerUid, { allCategories: true });
   return selected.map(selection => {
     const template = templates.find(item => item.key === selection.templateKey && item.version === selection.templateVersion);
-    if (!template) throw new TradeFormSelectionError("A selected form is no longer published for this work type. Refresh the form library.");
+    if (!template) throw new TradeFormSelectionError("A selected form is no longer published for this business. Refresh the form library.");
+    if (template.jurisdiction !== "AU" && template.jurisdiction !== addressState) {
+      throw new TradeFormSelectionError(`A selected form covers ${template.jurisdiction} properties. Choose a form for this job's service address.`);
+    }
     return template;
   });
 }

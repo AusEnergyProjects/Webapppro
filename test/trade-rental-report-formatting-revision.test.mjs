@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -12,6 +13,7 @@ const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const encode = (value) => new TextEncoder().encode(value);
 
 function loadTypescript(path, mocks) {
+  mocks = { ...RENTAL_REPORT_TEST_DEPENDENCIES, ...mocks };
   const output = ts.transpileModule(read(path), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true,
   } }).outputText;

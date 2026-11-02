@@ -309,6 +309,48 @@ const swappedChanges = [
   { appointmentId: "appointment-b", expectedRevision: 1, memberId: "member-a", startsAt: "2099-01-05T10:00", durationMinutes: 60 },
 ];
 
+for (const [jobCategory, memberCapability] of [
+  ["rental-inspection", "minimum-rental-standards"],
+  ["minimum-rental-standards", "rental-inspection"],
+]) {
+  test(`schedule reassigns ${jobCategory} to a worker enabled for ${memberCapability}`, async (t) => {
+    const { database, d1 } = fixture(); t.after(() => database.close());
+    database.prepare("UPDATE trade_work_orders SET service_category=? WHERE id='job-a'").run(jobCategory);
+    database.prepare("UPDATE trade_team_members SET capabilities=? WHERE id='member-b'").run(JSON.stringify([memberCapability]));
+    const response = await scheduleRoute(d1).PATCH(batchRequest([{ ...swappedChanges[0], memberId: "member-b" }]));
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.equal(database.prepare("SELECT assignee_member_id FROM trade_crm_appointments WHERE id='appointment-a'").get().assignee_member_id, "member-b");
+    assert.equal(database.prepare("SELECT revision FROM trade_crm_appointments WHERE id='appointment-a'").get().revision, 2);
+  });
+}
+
+test("schedule rental reassignment still rejects office-only workers and service revocation during save", async (t) => {
+  for (const concurrent of [false, true]) {
+    await t.test(concurrent ? "revoked during save" : "office-only", async () => {
+      const { database, d1 } = fixture();
+      try {
+        database.prepare("UPDATE trade_work_orders SET service_category='minimum-rental-standards' WHERE id='job-a'").run();
+        database.prepare("UPDATE trade_team_members SET capabilities=? WHERE id='member-b'").run(concurrent ? '["rental-inspection"]' : '[]');
+        let reachedBatch = false;
+        if (concurrent) d1.setBeforeBatch(() => {
+          reachedBatch = true;
+          database.prepare("UPDATE trade_team_members SET capabilities='[]' WHERE id='member-b'").run();
+        });
+        const appointments = database.prepare("SELECT * FROM trade_crm_appointments ORDER BY id").all();
+        const jobs = database.prepare("SELECT * FROM trade_work_orders ORDER BY id").all();
+        const notifications = []; const synced = [];
+        const response = await scheduleRoute(d1, notifications, synced).PATCH(batchRequest([{ ...swappedChanges[0], memberId: "member-b" }]));
+        assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+        assert.equal(reachedBatch, concurrent);
+        assert.deepEqual(database.prepare("SELECT * FROM trade_crm_appointments ORDER BY id").all(), appointments);
+        assert.deepEqual(database.prepare("SELECT * FROM trade_work_orders ORDER BY id").all(), jobs);
+        assert.equal(database.prepare("SELECT COUNT(*) count FROM trade_crm_appointment_revisions").get().count, 0);
+        assert.deepEqual(notifications, []); assert.deepEqual(synced, []);
+      } finally { database.close(); }
+    });
+  }
+});
+
 function crewFixture() {
   const value = fixture();
   value.database.exec(`

@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -16,7 +17,7 @@ const identity = { reportId: 'report', revision: 1 };
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function service(bucket) {
-  const dependencies = {
+  const dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES,
     'cloudflare:workers': { env: { EVIDENCE: bucket } },
     '../../db': {}, '@/lib/trade-team-server': {}, '@/lib/trade-team-sync-server': {},
     '@/lib/trade-rental-assessment.mjs': {}, '@/lib/trade-issued-document-store': {},

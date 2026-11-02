@@ -1,5 +1,6 @@
 import { getD1 } from '../../db';
 import { readRentalReportProviderReceipt, recordRentalReportProviderEvent, recoverRentalReportAcceptedEvent } from './trade-rental-report-provider-events';
+import { rentalIssuedReportVisibilitySql } from './trade-rental-report-visibility';
 
 type Row = Record<string, unknown>;
 type VerificationInput = { ownerUid: string; workOrderId: string; reportId: string; expectedRecipientEmail: string; actorUid: string };
@@ -71,7 +72,7 @@ export async function readRentalReportAttachmentVerification(db: D1Database,
     JOIN trade_rental_reports report ON report.id = event.report_id AND report.firebase_uid = event.firebase_uid
       AND report.inspection_id = event.inspection_id AND report.status = 'issued'
     JOIN trade_rental_inspections inspection ON inspection.id = report.inspection_id AND inspection.firebase_uid = report.firebase_uid
-      AND inspection.issued_report_id = report.id AND inspection.status = 'issued'
+      AND ${rentalIssuedReportVisibilitySql()} AND inspection.status = 'issued'
     WHERE event.firebase_uid = ? AND event.inspection_id = ? AND event.report_id = ?
       AND event.event_type = 'report_email_attachment_verified' AND json_extract(event.metadata, '$.provider') = 'resend'
       AND json_extract(event.metadata, '$.recipientSha256') = ?
@@ -105,7 +106,7 @@ export async function verifyRentalReportProviderDelivery(input: VerificationInpu
   const report = await db.prepare(`SELECT report.id, report.inspection_id, report.report_number, report.pdf_sha256, report.pdf_size_bytes
     FROM trade_rental_reports report
     JOIN trade_rental_inspections inspection ON inspection.id = report.inspection_id AND inspection.firebase_uid = report.firebase_uid
-      AND inspection.issued_report_id = report.id AND inspection.status = 'issued'
+      AND ${rentalIssuedReportVisibilitySql()} AND inspection.status = 'issued'
     JOIN trade_work_orders job ON job.id = inspection.work_order_id AND job.firebase_uid = inspection.firebase_uid
       AND job.partner_type = 'installer' AND job.record_status = 'active'
     WHERE report.firebase_uid = ? AND job.id = ? AND report.id = ? AND report.status = 'issued'`)
@@ -197,7 +198,7 @@ export async function verifyRentalReportProviderDelivery(input: VerificationInpu
       SELECT ?, report.inspection_id, report.id, report.firebase_uid, 'system', ?, 'report_email_attachment_verified', ?, ?, ?, ?
       FROM trade_rental_reports report JOIN trade_rental_inspections inspection
         ON inspection.id = report.inspection_id AND inspection.firebase_uid = report.firebase_uid
-        AND inspection.issued_report_id = report.id AND inspection.status = 'issued'
+        AND ${rentalIssuedReportVisibilitySql()} AND inspection.status = 'issued'
       WHERE report.id = ? AND report.firebase_uid = ? AND report.status = 'issued' AND inspection.work_order_id = ?
         AND report.pdf_sha256 = ? AND report.pdf_size_bytes = ?
         AND EXISTS (SELECT 1 FROM trade_rental_inspection_events accepted WHERE accepted.id = ?

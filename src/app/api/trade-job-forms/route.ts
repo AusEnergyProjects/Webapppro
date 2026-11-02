@@ -7,8 +7,8 @@ import {
   jobSyncChangeStatements,
   nextJobRevision,
 } from "@/lib/trade-team-sync-server";
-import { publishedTradeFormTemplate, publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
-import { assertTradeFormAttachmentAccess, TradeFormSelectionError, tradeFormTemplateMetadata } from "@/lib/trade-job-form-attachment-server";
+import { publishedTradeFormTemplatesFor } from "@/lib/trade-form-templates-server";
+import { assertTradeFormAttachmentAccess, TradeFormSelectionError, tradeFormAttachmentAccessGuard, tradeFormPublicationGuard, tradeFormTemplateMetadata } from "@/lib/trade-job-form-attachment-server";
 import { ENERGY_SERVICE_IDS, LEGACY_ENERGY_SERVICE_ALIASES } from "@/lib/energy-service-catalogue.mjs";
 import { TRADE_JOB_FORM_COLUMNS, tradeJobFormProjection, saveTradeJobForm, TradeJobFormError } from "@/lib/trade-job-forms-server";
 
@@ -52,7 +52,7 @@ async function formPayload(ownerUid: string, workOrderId: string) {
   return {
     serviceCategory: String(work.service_category),
     protectedJob: work.source_type === "opportunity" || work.customer_source === "platform_private",
-    templates: (await publishedTradeFormTemplatesFor(String(work.service_category), undefined, ownerUid)).map(tradeFormTemplateMetadata),
+    templates: (await publishedTradeFormTemplatesFor(String(work.service_category), undefined, ownerUid, { allCategories: true })).map(tradeFormTemplateMetadata),
     forms: rows.results.map(tradeJobFormProjection),
   };
 }
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
         return adminJson({ ok: false, error: "Choose an available work type." }, 400);
       }
       return adminJson({ ok: true, serviceCategory,
-        templates: (await publishedTradeFormTemplatesFor(serviceCategory, getD1(), access.ownerUid)).map(tradeFormTemplateMetadata) });
+        templates: (await publishedTradeFormTemplatesFor(serviceCategory, getD1(), access.ownerUid, { allCategories: true })).map(tradeFormTemplateMetadata) });
     }
     const workOrderId = cleanAdminText(parameters.get("workOrderId"), 180);
     const { access } = await accessAndJob(request, workOrderId);
@@ -91,16 +91,24 @@ export async function POST(request: Request) {
     const workOrderId = cleanAdminText(body.workOrderId, 180);
     const { access, job } = await accessAndJob(request, workOrderId);
     if (!access.canManageFieldEvidence) throw new Error("FIELD_EVIDENCE_MANAGEMENT_REQUIRED");
+    await assertTradeFormAttachmentAccess(access, getD1());
     const templateKey = cleanAdminText(body.templateKey, 100);
     const templateVersion = Math.max(1, Math.min(1000, Math.round(Number(body.templateVersion || 1))));
-    const work = await getD1().prepare(`SELECT service_category, stage, revision
-      FROM trade_work_orders WHERE id = ? AND firebase_uid = ? AND record_status = 'active'`)
+    const work = await getD1().prepare(`SELECT w.service_category, w.stage, w.revision, site.address_state
+      FROM trade_work_orders w LEFT JOIN trade_crm_job_details details ON details.work_order_id = w.id AND details.firebase_uid = w.firebase_uid
+      LEFT JOIN trade_crm_service_sites site ON site.id = details.service_site_id AND site.firebase_uid = w.firebase_uid
+        AND site.customer_id = details.crm_customer_id AND site.record_status = 'active'
+      WHERE w.id = ? AND w.firebase_uid = ? AND w.record_status = 'active'`)
       .bind(workOrderId, access.ownerUid).first<Record<string, unknown>>();
     if (!work) throw new Error("JOB_NOT_FOUND");
     if (Number(work.revision) !== Number(job.revision)) throw new Error("ONLINE_MUTATION_CONFLICT");
     if (["imported", "completed", "cancelled"].includes(String(work.stage))) throw new Error("TERMINAL_JOB_LOCKED");
-    const template = await publishedTradeFormTemplate(templateKey, templateVersion, String(work?.service_category || "other"), undefined, access.ownerUid);
-    if (!template) return adminJson({ ok: false, error: "Choose a form available for this work type." }, 400);
+    const template = (await publishedTradeFormTemplatesFor(String(work.service_category || "other"), undefined, access.ownerUid, { allCategories: true }))
+      .find(item => item.key === templateKey && item.version === templateVersion);
+    if (!template) return adminJson({ ok: false, error: "Choose a currently published form available to your business." }, 400);
+    if (template.jurisdiction !== "AU" && template.jurisdiction !== String(work.address_state || "")) {
+      return adminJson({ ok: false, error: `This form covers ${template.jurisdiction} properties. Choose a form for this job's service address.` }, 400);
+    }
     const existing = await getD1().prepare(`SELECT id FROM trade_job_forms
       WHERE work_order_id = ? AND firebase_uid = ? AND template_key = ? AND template_version = ?`)
       .bind(workOrderId, access.ownerUid, template.key, template.version).first();
@@ -109,22 +117,32 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const revision = nextJobRevision(job.revision);
     const jobStage = String(work.stage);
+    const actor = tradeFormAttachmentAccessGuard(access);
+    const publication = tradeFormPublicationGuard(template, access.ownerUid);
     await guardedOnlineChildMutationBatch(getD1(), [
       getD1().prepare(`INSERT INTO trade_job_forms
         (id, work_order_id, firebase_uid, template_key, template_version, template_name, jurisdiction,
          template_snapshot, answers, status, revision, completed_by_uid, completed_at, created_at, updated_at)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?, '{}', 'draft', 1, '', '', ?, ?
-        WHERE EXISTS (
+        WHERE (${actor.sql}) AND (${publication.sql}) AND EXISTS (
           SELECT 1 FROM trade_work_orders work_order
           WHERE work_order.id = ? AND work_order.firebase_uid = ?
             AND work_order.record_status = 'active'
             AND work_order.stage = ?
             AND work_order.stage NOT IN ('imported', 'completed', 'cancelled')
             AND work_order.revision = ?
+            AND (? = 'AU' OR EXISTS (
+              SELECT 1 FROM trade_crm_job_details current_details JOIN trade_crm_service_sites current_site
+                ON current_site.id = current_details.service_site_id AND current_site.firebase_uid = current_details.firebase_uid
+                  AND current_site.customer_id = current_details.crm_customer_id AND current_site.record_status = 'active'
+              WHERE current_details.work_order_id = work_order.id AND current_details.firebase_uid = work_order.firebase_uid
+                AND current_site.address_state = ?
+            ))
         )
         ON CONFLICT(work_order_id, template_key, template_version) DO NOTHING`)
         .bind(id, workOrderId, access.ownerUid, template.key, template.version, template.name, template.jurisdiction,
-          JSON.stringify(template), now, now, workOrderId, access.ownerUid, jobStage, Number(work.revision)),
+          JSON.stringify(template), now, now, ...actor.values, ...publication.values,
+          workOrderId, access.ownerUid, jobStage, Number(work.revision), template.jurisdiction, template.jurisdiction),
       getD1().prepare(`UPDATE trade_work_orders SET revision = ?, updated_at = ?
         WHERE id = ? AND firebase_uid = ? AND record_status = 'active'
           AND stage = ? AND stage NOT IN ('imported', 'completed', 'cancelled') AND revision = ?

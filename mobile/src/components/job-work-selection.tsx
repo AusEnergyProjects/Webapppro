@@ -5,7 +5,7 @@ import { FieldButton } from './field-button';
 import { colours, spacing } from '@/lib/theme';
 
 export type FieldPermissions = {
-  canCreateJobs: boolean; canAssignJobs: boolean;
+  canCreateJobs: boolean; canAssignJobs: boolean; canAddForms: boolean;
   canViewQuotes: boolean; canManageQuotes: boolean; canSendQuotes: boolean;
   canViewInvoices: boolean; canManageInvoices: boolean;
   canViewPriceBook: boolean; canManagePriceBook: boolean; canApplyDiscounts: boolean;

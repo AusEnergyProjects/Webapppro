@@ -2,6 +2,7 @@ import { getD1 } from "../../db";
 import { type AdminIdentity, writeAdminAudit } from "./admin-server";
 import type { TeamAccess } from "./trade-team-server";
 import { ownerRentalReportPresentation } from "./trade-rental-report-server";
+import { rentalCurrentIssuedReportSql } from "./trade-rental-report-visibility";
 import { verifyRentalReportProviderDelivery } from "./trade-rental-report-provider-verification";
 import {
   emailRentalAssessmentReport, rentalReportDeliveryRecipient,
@@ -37,8 +38,8 @@ async function context(workOrderId: string, origin: string) {
       AND account.partner_type = 'installer'
     JOIN trade_rental_inspections inspection ON inspection.work_order_id = work.id
       AND inspection.firebase_uid = work.firebase_uid AND inspection.status = 'issued'
-    JOIN trade_rental_reports report ON report.id = inspection.issued_report_id
-      AND report.inspection_id = inspection.id AND report.firebase_uid = work.firebase_uid AND report.status = 'issued'
+    JOIN trade_rental_reports report ON report.inspection_id = inspection.id AND report.firebase_uid = work.firebase_uid
+      AND report.status = 'issued' AND ${rentalCurrentIssuedReportSql()}
     WHERE work.id = ? AND work.partner_type = 'installer' AND work.record_status = 'active' LIMIT 1`)
     .bind(identifier(workOrderId)).first<CurrentReport>();
   if (!report) throw new AdminRentalEmailError("RENTAL_REPORT_NOT_FOUND", "This job has no current issued rental report.", 404);

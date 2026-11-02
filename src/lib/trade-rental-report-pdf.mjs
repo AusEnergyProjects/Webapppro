@@ -414,6 +414,11 @@ export async function createRentalAssessmentPdfBytes(snapshot, evidenceAssets = 
   keyValue("Assessment provider", branding.issuerLabel);
   if (branding.homestar) keyValue("Commissioned by", branding.commissionerLabel);
   keyValue("Report reference", snapshot.report.number);
+  if (snapshot.report.assessmentCorrection) {
+    const correction = snapshot.report.assessmentCorrection;
+    const reason = safe(correction.reason).trim();
+    text(`Corrected assessment issued ${dateTime(snapshot.report.issuedAt)}. This revision corrects ${safe(correction.sourceReportNumber)}. The original report is retained.${reason ? ` Reason: ${reason}` : ""}`, { size: 8.5, lineHeight: 12, after: 8 });
+  }
   if (snapshot.report.answerCorrection) {
     const correction = snapshot.report.answerCorrection;
     text(`Owner correction: Cooling access changed from ${correction.fromValue} to ${correction.toValue} on ${dateTime(correction.correctedAt)}. The original ${correction.sourceReportNumber} is retained.`, { size: 8.5, lineHeight: 12, after: 8 });

@@ -140,6 +140,7 @@ function fixture(stage = "in_progress", revision = 5) {
       customer_source text NOT NULL DEFAULT 'internal',
       pipeline_stage text NOT NULL DEFAULT 'enquiry',
       crm_customer_id text NOT NULL DEFAULT '',
+      service_site_id text NOT NULL DEFAULT '',
       quote_status text NOT NULL DEFAULT 'not_started'
     );
     CREATE TABLE trade_crm_quotes (
@@ -170,6 +171,7 @@ function fixture(stage = "in_progress", revision = 5) {
       owner_uid text NOT NULL,
       member_uid text NOT NULL DEFAULT '',
       can_view_field_evidence integer NOT NULL DEFAULT 0,
+      can_manage_field_evidence integer NOT NULL DEFAULT 0,
       display_name text NOT NULL,
       capabilities text NOT NULL DEFAULT '[]',
       status text NOT NULL
@@ -205,6 +207,16 @@ function fixture(stage = "in_progress", revision = 5) {
       updated_at text NOT NULL,
       UNIQUE (work_order_id, template_key, template_version)
     );
+    CREATE TABLE trade_crm_service_sites (
+      id text PRIMARY KEY, firebase_uid text NOT NULL, customer_id text NOT NULL,
+      address_state text NOT NULL, record_status text NOT NULL
+    );
+    CREATE TABLE trade_form_templates (
+      template_key text NOT NULL, version integer NOT NULL, name text NOT NULL,
+      jurisdiction text NOT NULL, categories text NOT NULL, description text NOT NULL,
+      guidance text NOT NULL, fields text NOT NULL, status text NOT NULL, scope_owner_uid text NOT NULL
+    );
+    INSERT INTO trade_form_templates VALUES ('new-form',1,'New form','AU','["other"]','','','[]','published','owner-1');
     CREATE TABLE trade_rental_inspections (
       id text PRIMARY KEY NOT NULL,
       work_order_id text NOT NULL,
@@ -271,6 +283,9 @@ function fixture(stage = "in_progress", revision = 5) {
   database.prepare(`INSERT INTO trade_team_members
     (id, owner_uid, member_uid, display_name, capabilities, status)
     VALUES ('member-2', 'owner-1', 'member-2-uid', 'Technician Two', '["other"]', 'active')`).run();
+  database.prepare(`INSERT INTO trade_team_members
+    (id, owner_uid, member_uid, display_name, capabilities, status, can_view_field_evidence, can_manage_field_evidence)
+    VALUES ('member-1', 'owner-1', 'actor-1', 'Actor', '["other"]', 'active', 1, 1)`).run();
   database.prepare(`INSERT INTO trade_work_order_tasks
     (id, work_order_id, firebase_uid, title, status, revision, created_at, updated_at)
     VALUES ('task-1', 'job-1', 'owner-1', 'Existing task', 'pending', 2, 'initial', 'initial')`).run();
@@ -439,6 +454,9 @@ function formsRoute(db, actualLibrary = false) {
     "./trade-team-sync-server": syncHelpers,
     "./asset-lifecycle.mjs": { addMonthsToIsoDate: () => "2027-01-01" },
   });
+  const templates = loadTypescriptModule("../src/lib/trade-form-templates-server.ts", {
+    "../../db": { getD1: () => db }, "@/lib/trade-form-library.mjs": tradeFormLibrary,
+  });
   return loadTypescriptModule("../src/app/api/trade-job-forms/route.ts", {
     "../../../../db": { getD1: () => db },
     "@/lib/admin-server": adminServer,
@@ -449,20 +467,9 @@ function formsRoute(db, actualLibrary = false) {
     "@/lib/trade-team-sync-server": syncHelpers,
     "@/lib/trade-form-library.mjs": formLibrary,
     "@/lib/trade-job-forms-server": formReader,
-    "@/lib/trade-form-templates-server": {
-      publishedTradeFormTemplate: async (key, version) => ({
-        key,
-        version,
-        name: "New form",
-        jurisdiction: "AU",
-        fields: [],
-      }),
-      publishedTradeFormTemplatesFor: async () => [],
-    },
+    "@/lib/trade-form-templates-server": templates,
     "@/lib/trade-job-form-attachment-server": loadTypescriptModule("../src/lib/trade-job-form-attachment-server.ts", {
-      "./trade-form-templates-server": loadTypescriptModule("../src/lib/trade-form-templates-server.ts", {
-        "../../db": { getD1: () => db }, "@/lib/trade-form-library.mjs": tradeFormLibrary,
-      }),
+      "./trade-form-templates-server": templates,
       "./trade-message-media-access": formActors,
       "./trade-rental-assessment.mjs": rentalAssessment,
     }),

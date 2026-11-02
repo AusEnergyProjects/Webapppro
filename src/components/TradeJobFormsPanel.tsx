@@ -78,6 +78,8 @@ export function TradeJobFormsPanel({ user, workOrderId, readOnly = false, canMan
         }
         if (selection.kind === "piesa") {
           await mutate("/api/trade-veu-electrical-assessments", { action: "start" }); attached = true;
+        } else if (selection.kind === "safety-check") {
+          await mutate("/api/trade-safety-checks", { action: "start", kind: selection.checkKind }); attached = true;
         } else {
           if (!Number.isSafeInteger(revision)) throw new Error("Refresh the form library before adding this form.");
           await mutate("/api/field/job-activities", selection.kind === "rental"

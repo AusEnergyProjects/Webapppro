@@ -182,7 +182,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const onChangedRef = useRef(onChanged);
   useEffect(() => { onChangedRef.current = onChanged; }, [onChanged]);
   const applyResult = useCallback((result: RentalAssessmentResult) => {
-    setData((current) => (current.inspection?.revision || 0) > (result.inspection?.revision || 0) ? current : result);
+    setData((current) => current.inspection?.id === result.inspection?.id
+      && (current.inspection?.revision || 0) > (result.inspection?.revision || 0) ? current : result);
     setModuleId((selected) => result.modules?.some((entry) => entry.id === selected) ? selected : result.modules?.[0]?.id || '');
   }, []);
   const openInitialSetup = useCallback((result: RentalAssessmentResult, records: RentalSaveRecord[], selectedId = selectedModuleId.current) => {
@@ -375,6 +376,8 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
   const detailField = responseFields[detailIndex];
   const editable = data.permissions?.canEdit === true && active?.status !== 'complete'
     && (!['answer', 'details', 'finding', 'safety'].includes(page) || !queuedAnswer);
+  const canReopenCompleted = data.permissions?.canEdit === true && active?.status === 'complete'
+    && !['issuing', 'issued', 'superseded', 'withdrawn'].includes(data.inspection?.status || '');
   const activeHasDraft = activeDrafts.length > 0;
   const observationsReady = active ? rentalObservationsComplete(data, active.id) && !activeHasDraft && !pendingSaves.length : false;
   const metadata = active?.template.metadataFields.map(rentalAssessorMetadataField).filter((f) => f.key !== 'roomRoster' && f.phase !== 'profile' && f.source !== 'team_profile' && f.source !== 'automatic' && !(active.key === 'minimum_standards' && f.key === 'credentialConfirmed')
@@ -387,7 +390,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
     pageTitle: page === 'metadata' ? field?.label || 'Assessment details' : page === 'review' ? 'Review and complete' : detailField && page === 'details' ? detailField.label : check?.prompt || section?.title || 'Assessment',
     enabled: loaded && editable && !(finishRequest?.finish?.issueReport && finishRequest.status !== 'conflict') && Boolean(active) && !['categories', 'earlier', 'photo-removal'].includes(page) });
   const queuedMetadata = pendingSaves.find((entry) => entry.draftKey === `metadata:${active?.id}:${field?.key}`);
-  const report = data.reports?.find((r) => r.status === 'issued');
+  const report = data.reports?.find((r) => r.status === 'issued' && (!data.correction || r.id === data.inspection?.issuedReportId));
   const allComplete = data.modules?.every((m) => m.status === 'complete') === true;
   const remainingModules = (data.modules || []).filter((entry) => entry.id !== active?.id && entry.status !== 'complete'
     && (!saves.some((save) => save.module.id === entry.id && save.finish && save.status !== 'conflict')
@@ -395,7 +398,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       || unfinishedDrafts(entry, data, cache, saves).length > 0
       || unfinishedMetadata(entry, cache, saves).length > 0));
   const issueReport = remainingModules.length === 0;
-  const canEmailReport = Boolean(data.deliveryRecipient?.email) && (report ? data.permissions?.canRevokeLink === true : issueReport && data.permissions?.canIssue === true);
+  const canEmailReport = Boolean(data.deliveryRecipient?.email) && (report ? data.permissions?.canRevokeLink === true : !data.correction && issueReport && data.permissions?.canIssue === true);
   const finishActionLabel = canEmailReport ? 'Finish and email report' : issueReport ? 'Finish assessment' : `Finish ${active?.title || 'assessment'}`;
   const photoRemovals = saves.filter((entry) => entry.photoRemoval && entry.status !== 'conflict');
   const removedMedia = new Set(photoRemovals.flatMap((entry) => {
@@ -442,6 +445,42 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       setError(e instanceof Error ? e.message : 'Please try again.');
     }
     finally { busyRef.current = false; if (mounted.current) setBusy(''); }
+  }
+  async function editCompletedAnswers() {
+    if (!active || !canReopenCompleted || !online || hasDraft || pendingSaves.length) return;
+    await perform('reopen', async () => {
+      await request({ action: 'reopen_module', moduleId: active.id, expectedRevision: active.revision });
+      const nextCache = { ...cacheRef.current, answers: { ...cacheRef.current.answers } };
+      delete nextCache.answers[active.id];
+      cacheRef.current = nextCache; setCache(nextCache);
+      setFirstSetupModuleId(''); setPage('categories');
+      await persist(nextCache);
+      void onChanged().catch(() => { /* The reopened assessment is already saved on the server. */ });
+    });
+  }
+  async function editIssuedReport() {
+    if (!report || data.permissions?.canCorrectReport !== true || !online || hasDraft || pendingSaves.length) return;
+    await perform('correct-report', async () => {
+      const result = await request({ action: 'begin_report_correction', reportId: report.id,
+        expectedInspectionRevision: data.inspection?.revision });
+      const selectedId = result.modules?.[0]?.id || '';
+      setModuleId(selectedId); selectedModuleId.current = selectedId;
+      setFirstSetupModuleId(''); setPage('categories');
+      void onChanged().catch(() => { /* The separate correction draft is already retained. */ });
+    });
+  }
+  function discardCorrectionDraft() {
+    if (!data.correction || data.permissions?.canEdit !== true || !online || pendingSaves.length) return;
+    Alert.alert('Discard correction draft?', 'The issued report stays unchanged. This correction will be retained as discarded history.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard draft', style: 'destructive', onPress: () => void perform('discard-correction', async () => {
+        const result = await request({ action: 'discard_report_correction', expectedInspectionRevision: data.inspection?.revision });
+        const selectedId = result.modules?.[0]?.id || '';
+        setModuleId(selectedId); selectedModuleId.current = selectedId;
+        setFirstSetupModuleId(''); setPage('review');
+        void onChanged().catch(() => { /* The original issued report remains saved. */ });
+      }) },
+    ]);
   }
   async function leave() {
     await perform('leave', async () => { await persist(); onReturnToJob(); });
@@ -861,6 +900,13 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       {!loaded ? <Text style={styles.body}>Opening assessment...</Text> : !active ? <Text style={styles.body}>{error || (!online ? 'Reconnect once to open this assessment. Your draft is saved on this phone.' : 'This assessment is not available.')}</Text> : <>
       {!online ? <Text style={styles.small}>Working offline. Answers and photos stay on this phone and sync when reception returns.</Text> : null}
+      {data.correction ? <Text style={styles.body}>{data.correction.status === 'issued' ? 'Corrected report saved. Previous report versions remain available below.' : 'Edit this correction draft, then finish to create a new report revision. The previous report stays unchanged. The corrected report will not be emailed automatically.'}</Text> : null}
+      {data.correction && data.permissions?.canEdit ? <FieldButton variant="quiet" disabled={Boolean(busy) || !online || pendingSaves.length > 0} onPress={discardCorrectionDraft}>Discard correction draft</FieldButton> : null}
+      {report && data.permissions?.canCorrectReport ? <FieldButton variant="secondary" disabled={Boolean(busy) || !online || hasDraft || pendingSaves.length > 0} loading={busy === 'correct-report'} onPress={() => void editIssuedReport()}>Edit report</FieldButton> : null}
+      {canReopenCompleted ? <View style={styles.syncNotice}>
+        <Text style={styles.body}>This assessment is complete. Edit answers to reopen it, then finish again after your changes. Saved answers and photos stay attached.</Text>
+        <FieldButton variant="secondary" disabled={Boolean(busy) || !online || hasDraft || pendingSaves.length > 0} loading={busy === 'reopen'} onPress={() => void editCompletedAnswers()}>Edit answers</FieldButton>
+      </View> : null}
       {pendingSaves.length ? <View style={styles.syncNotice}><Text style={styles.small}>{pendingSaves.some((entry) => entry.photoRemoval && entry.status === 'conflict') ? 'Your answers are saved. A photo removal needs your choice before you can finish.' : finishRequest ? 'Your finish request is saved. You can return to the job while it completes.' : `${pendingSaves.length} saved ${pendingSaves.length === 1 ? 'answer' : 'answers'}. You can keep assessing while they sync.`}{pendingPhotos ? ` ${pendingPhotos} ${pendingPhotos === 1 ? 'photo remains' : 'photos remain'} on this phone until linked to the report.` : ''}</Text>
         {pendingSaves.filter((entry) => entry.error).slice(0, 1).map((record) => <View key={record.id}><Text accessibilityRole="alert" style={styles.error}>{record.photoRemoval && record.status === 'conflict' ? 'A photo has not been removed yet. Choose Remove or Keep before finishing.' : record.error}</Text>
           {page !== 'photo-removal' ? <FieldButton variant="quiet" disabled={Boolean(busy)} onPress={() => record.finish ? setPage('review') : openQueuedAnswer(record)}>{record.finish ? 'Review finish request' : record.photoRemoval ? 'Choose what to do with this photo' : 'Open saved answer'}</FieldButton> : null}
@@ -886,7 +932,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
       </> : page === 'categories' ? <>
         <Text style={styles.title}>{active.key === 'minimum_standards' ? RENTAL_ASSESSOR_TITLE : active.title}</Text>
         {data.modules && data.modules.length > 1 ? <FieldSelect label="Assessment" value={active.id} disabled={Boolean(busy)} options={data.modules.map((m) => ({ value: m.id, label: m.title }))} onChange={(id) => { setModuleId(id); selectedModuleId.current = id; setFirstSetupModuleId(''); openInitialSetup(data, saves, id); }} /> : null}
-        {editable && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < RENTAL_ASSESSMENT_TEMPLATE_VERSION) ? <>
+        {editable && !data.correction && active.key === 'minimum_standards' && (active.template.assessmentScope !== 'current_minimum_standards' || Number(active.template.templateVersion || 1) < RENTAL_ASSESSMENT_TEMPLATE_VERSION) ? <>
           <FieldButton disabled={Boolean(busy) || hasDraft || earlierDrafts.length > 0 || pendingSaves.length > 0 || !online} onPress={() => void perform('scope', async () => { await request({ action: 'set_assessment_scope', moduleId: active.id, scope: 'current_minimum_standards', expectedInspectionRevision: data.inspection?.revision, expectedModuleRevision: active.revision }); })}>{active.template.assessmentScope === 'current_minimum_standards' ? 'Update assessment questions' : 'Open the complete rental assessment'}</FieldButton>
           {hasDraft || earlierDrafts.length || pendingSaves.length ? <Text style={styles.small}>Finish or sync your edited answers before updating the assessment questions.</Text> : <Text style={styles.small}>Add the latest quoting questions and HomeStar option. Saved answers and evidence stay attached.</Text>}
         </> : null}
@@ -958,6 +1004,7 @@ export function RentalInspectionWorkflow({ workOrderId, summary, online, onChang
         {data.reportDelivery?.status === 'accepted' ? <Text style={styles.body}>Report email accepted for delivery{data.reportDelivery.recipientEmail ? ` to ${data.reportDelivery.recipientEmail}` : ''}.</Text> : null}
         {finishRequest ? <><Text style={styles.body}>{finishRequest.status === 'conflict' ? finishRequest.error : finishRequest.finish?.email ? `Finish is saved. The report will be emailed to ${finishRequest.finish.recipientEmail} when sync and validation finish.` : 'Finish is saved and will complete when sync and validation finish.'}</Text><FieldButton variant="secondary" disabled={Boolean(busy)} onPress={() => void leave()}>Return to job</FieldButton></> : null}
         {report ? <><Text style={styles.body}>{report.reportNumber}</Text>{report.link?.shareUrl ? <><FieldButton onPress={() => void Share.share({ message: report.link?.shareUrl || '', url: report.link?.shareUrl })}>Share report</FieldButton><FieldButton variant="secondary" onPress={() => void Linking.openURL(report.link?.shareUrl || '')}>Open report</FieldButton></> : <Text style={styles.body}>The report is retained in this job. Ask the owner to manage its sharing link.</Text>}</> : null}
+        {data.correction ? data.reports?.filter((entry) => entry.status === 'issued' && entry.id !== report?.id).map((entry) => <View key={entry.id}><Text style={styles.body}>Previous report: {entry.reportNumber}</Text>{entry.link?.shareUrl ? <FieldButton variant="secondary" onPress={() => void Linking.openURL(entry.link?.shareUrl || '')}>Open previous report</FieldButton> : <Text style={styles.small}>Retained in the job report history.</Text>}</View>) : null}
       </> : draft && item && section && check ? <>
         <Text style={styles.small}>{section.title + ' | ' + (cursor.checkIndex + 1) + ' of ' + section.checks.length}</Text>
         <Text style={styles.title}>{presentation?.prompt || check.prompt}</Text>

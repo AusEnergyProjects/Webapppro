@@ -1,3 +1,4 @@
+import { RENTAL_REPORT_TEST_DEPENDENCIES } from './helpers/rental-correction-report-fixture.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -7,6 +8,7 @@ import ts from "typescript";
 import * as bounded from "../src/lib/bounded-json-request.ts";
 
 function load(path, dependencies) {
+  dependencies = { ...RENTAL_REPORT_TEST_DEPENDENCIES, ...dependencies };
   const source = fs.readFileSync(new URL(path, import.meta.url), "utf8");
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const result = { exports: {} };
@@ -21,11 +23,12 @@ function fixture() {
   sql.exec(`CREATE TABLE trade_accounts(firebase_uid TEXT,business_name TEXT,partner_type TEXT);
     CREATE TABLE trade_work_orders(id TEXT,firebase_uid TEXT,partner_type TEXT,record_status TEXT);
     CREATE TABLE trade_rental_inspections(id TEXT,work_order_id TEXT,firebase_uid TEXT,status TEXT,issued_report_id TEXT);
-    CREATE TABLE trade_rental_reports(id TEXT,inspection_id TEXT,firebase_uid TEXT,status TEXT,report_number TEXT);
+    CREATE TABLE trade_rental_reports(id TEXT,inspection_id TEXT,firebase_uid TEXT,status TEXT,report_number TEXT,revision INTEGER DEFAULT 1,report_snapshot TEXT DEFAULT '{}',issued_by_uid TEXT DEFAULT 'actor');
+    CREATE TABLE trade_rental_inspection_events(inspection_id TEXT,firebase_uid TEXT,report_id TEXT,event_type TEXT,actor_type TEXT,actor_uid TEXT,metadata TEXT);
     INSERT INTO trade_accounts VALUES('business-a','Applied Trade Services','installer'),('business-b','Another business','installer');
     INSERT INTO trade_work_orders VALUES('job-a','business-a','installer','active'),('job-b','business-b','installer','active');
     INSERT INTO trade_rental_inspections VALUES('inspection-a','job-a','business-a','issued','report-a'),('inspection-b','job-b','business-b','issued','report-b');
-    INSERT INTO trade_rental_reports VALUES('report-a','inspection-a','business-a','issued','RMS-A-R1'),('report-b','inspection-b','business-b','issued','RMS-B-R1');`);
+    INSERT INTO trade_rental_reports(id,inspection_id,firebase_uid,status,report_number) VALUES('report-a','inspection-a','business-a','issued','RMS-A-R1'),('report-b','inspection-b','business-b','issued','RMS-B-R1');`);
   const admin = { uid: "real-admin", email: "admin@example.test", role: "admin", displayName: "Admin" };
   const state = { recipient: "hello@appliedtradeservices.com.au", review: null, delivery: null, linkStatus: "active", auditFailure: false, authFailure: "", send: null };
   const calls = { auth: [], audits: [], sends: [], verifications: [], lifetime: [] };
@@ -128,7 +131,7 @@ test("owner holds, staged corrections, inactive links and uncertain delivery can
   for (const block of ["held", "staged", "link", "accepted", "sending", "reconciliation_required"]) {
     const f = fixture();
     if (block === "held") f.state.review = { status: "held", message: "Owner review is required." };
-    else if (block === "staged") f.sql.exec("INSERT INTO trade_rental_reports VALUES('report-new','inspection-a','business-a','staged','RMS-A-R2')");
+    else if (block === "staged") f.sql.exec("INSERT INTO trade_rental_reports(id,inspection_id,firebase_uid,status,report_number) VALUES('report-new','inspection-a','business-a','staged','RMS-A-R2')");
     else if (block === "link") f.state.linkStatus = "expired";
     else f.state.delivery = { status: block, reportId: "report-a", message: block };
     assert.equal((await (await f.get()).json()).canSend, false, block);

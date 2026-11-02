@@ -13,6 +13,7 @@ import { rentalAssignmentRequiredGates, rentalAssignmentCredentialSql } from "@/
 import { deleteTradeJob, scheduleJobFileCleanup } from "@/lib/trade-job-deletion-server";
 import { assertTradeJobCanCancel,tradeJobCancellationGuard } from "@/lib/trade-job-cancellation-server";
 import { deriveTradeJobLifecycle } from "@/lib/trade-job-lifecycle";
+import { serviceCapabilityIds } from "@/lib/energy-service-catalogue.mjs";
 
 export const runtime = "edge";
 type Row = Record<string, unknown>;
@@ -91,11 +92,12 @@ export async function GET(request: Request) {
     const members = permissions.schedule || permissions.reschedule ? await getD1().prepare(`SELECT id, display_name FROM trade_team_members
       WHERE owner_uid = ? AND status = 'active'
         AND (? = 1 OR id IN (SELECT value FROM json_each(?)))
-        AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = ?))
-        AND (member_uid = ? OR ? = 0 OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = 'rental-inspection'))
+        AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value IN (SELECT value FROM json_each(?))))
+        AND (member_uid = ? OR ? = 0 OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value IN (SELECT value FROM json_each(?))))
         AND ${rentalAssignmentCredentialSql('trade_team_members.id', 'trade_team_members.owner_uid')}
       ORDER BY display_name COLLATE NOCASE LIMIT 100`).bind(access.ownerUid, scheduleMemberIds === null ? 1 : 0, JSON.stringify(scheduleMemberIds || []),
-        access.ownerUid, job.service_category, access.ownerUid, modules.results.length,
+        access.ownerUid, JSON.stringify(serviceCapabilityIds(String(job.service_category || ''))), access.ownerUid, modules.results.length,
+        JSON.stringify(serviceCapabilityIds('rental-inspection')),
         JSON.stringify(gates), credentialDate, credentialDate).all<Row>() : { results: [] };
     return adminJson({ ok: true, job: { id: job.id, revision: Number(job.revision), stage: job.stage },
       appointment: appointment ? { id: appointment.id, revision: Number(appointment.revision), status: appointment.status,
@@ -174,9 +176,10 @@ export async function PATCH(request: Request) {
         const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
         const checkedDate = date > today ? date : today;
         const eligible = !modules.results.length || await db.prepare(`SELECT id FROM trade_team_members WHERE id = ? AND owner_uid = ? AND status = 'active'
-          AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value = 'rental-inspection'))
+          AND (member_uid = ? OR EXISTS (SELECT 1 FROM json_each(capabilities) WHERE value IN (SELECT value FROM json_each(?))))
           AND ${rentalAssignmentCredentialSql('trade_team_members.id', 'trade_team_members.owner_uid')}`)
-          .bind(cleanAdminText(body.memberId, 180), access.ownerUid, access.ownerUid, JSON.stringify(gates), checkedDate, checkedDate).first<Row>();
+          .bind(cleanAdminText(body.memberId, 180), access.ownerUid, access.ownerUid,
+            JSON.stringify(serviceCapabilityIds('rental-inspection')), JSON.stringify(gates), checkedDate, checkedDate).first<Row>();
         if (!eligible) return adminJson({ ok: false, code: 'RENTAL_ASSIGNEE_CREDENTIAL_REQUIRED',
           error: 'Choose a team member with the required current licence and supporting Team document for that appointment date.' }, 409);
       }
