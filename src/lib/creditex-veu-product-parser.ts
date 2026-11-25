@@ -13,17 +13,19 @@ export const CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT =
   "creditex-veu-public-registry-powerbi-ndjson/v3" as const;
 const CREDITEX_VEU_LEGACY_BOUNDED_STREAM_ARTIFACT_CONTRACT =
   "creditex-veu-public-registry-powerbi-ndjson/v4" as const;
+const OCTOBER_STREAM_CONTRACT = "creditex-veu-public-registry-powerbi-ndjson/v5" as const;
 export const CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT =
-  "creditex-veu-public-registry-powerbi-ndjson/v5" as const;
+  "creditex-veu-public-registry-powerbi-ndjson/v6" as const;
 export const CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY =
   "veu-public-product-register" as const;
 export const CREDITEX_VEU_REPORT_ID =
-  "8fd064b2-c06c-44f0-8d9d-d7c5804fcd1f" as const;
+  "d4705c2a-63c9-43fc-9530-4ba99dfde58a" as const;
 export const CREDITEX_VEU_DATASET_ID =
-  "93dfde74-9213-4c52-ac47-5b3aec919ce2" as const;
-export const CREDITEX_VEU_MODEL_ID = 664626 as const;
+  "0fd4428d-ad4c-48a8-ba6c-8f46bd2493b0" as const;
+export const CREDITEX_VEU_MODEL_ID = 1725085 as const;
+export const CREDITEX_VEU_PRODUCT_ENTITY = "VEU_PR_Dim_Product" as const;
 
-export const CREDITEX_VEU_QUERY_FIELDS = [
+const ALL_QUERY_FIELDS = [
   "Id",
   "Product_ID__c",
   "Legacy_Product_Id__c",
@@ -43,7 +45,7 @@ export const CREDITEX_VEU_QUERY_FIELDS = [
   "WERS_Star_Rating_heating__c",
 ] as const;
 
-export const CREDITEX_VEU_QUERY_FIELD_TYPES = [
+const ALL_QUERY_FIELD_TYPES = [
   1, 1, 1, 1, 1, 1, 1, 1, 7, 7, 3, 3, 3, 3, 3, 1,
   3,
 ] as const;
@@ -153,6 +155,7 @@ export const CREDITEX_VEU_DIM_PRODUCT_SCHEMA = {
   Area_sqm__c: [3, "bfb26364-5238-4af2-919e-6cea31d5532f"],
   Width_mm__c: [3, "2e482bc2-445f-45ef-b054-8dd4d96c7edc"],
   Depth_mm__c: [3, "8e3dd825-0a80-4d14-b62d-46ee06ca18b3"],
+  Record_Type_NameFx__c: [1, "8888d429-140d-4442-953b-d0677cacf4b4"],
 } as const;
 
 /**
@@ -257,7 +260,7 @@ const CREDITEX_VEU_SUPPLEMENT_IDENTITY_FIELDS = [
   "Product_Status__c",
 ] as const;
 
-export const CREDITEX_VEU_SUPPLEMENTAL_QUERIES = [
+const ALL_SUPPLEMENTAL_QUERIES = [
   {
     key: "water-heater-model",
     categories: ["1C", "1D", "3C", "3D"],
@@ -460,6 +463,54 @@ export const CREDITEX_VEU_SUPPLEMENTAL_QUERIES = [
   },
 ] as const;
 
+// The replacement public report keeps the semantic identifiers and decimal
+// formats for retained columns. These columns are present only in old evidence.
+const unpublishedColumns = new Set<string>([
+  "Id", "Legacy_Product_Id__c", "Activity_Type__c",
+  "GEMS_Registered_Before_2_August_2024__c", "Total_LCP_W__c",
+  "RatedLifetime__c", "Power_Factor__c", "No_of_Lamps__c", "Efficacy__c",
+  "Product_Application__c", "Thermal_Capacity_kW__c", "Storage_Capacity_L__c",
+  "Area_sqm__c",
+]);
+
+function publishedFields<T extends string>(fields: readonly T[]): T[] {
+  return fields.filter((field) => !unpublishedColumns.has(field));
+}
+
+const PUBLIC_RECORD_TYPE = "Record_Type_NameFx__c";
+export const CREDITEX_VEU_QUERY_FIELDS = [...publishedFields(ALL_QUERY_FIELDS), PUBLIC_RECORD_TYPE] as const;
+export const CREDITEX_VEU_QUERY_FIELD_TYPES = CREDITEX_VEU_QUERY_FIELDS.map(
+  (field) => CREDITEX_VEU_DIM_PRODUCT_SCHEMA[field][0],
+);
+export const CREDITEX_VEU_SUPPLEMENTAL_QUERIES = ALL_SUPPLEMENTAL_QUERIES.map(
+  (definition) => ({ ...definition, fields: publishedFields<string>(definition.fields) }),
+);
+export const CREDITEX_VEU_ARCHIVED_REPORT = {
+  reportId: "8fd064b2-c06c-44f0-8d9d-d7c5804fcd1f",
+  datasetId: "93dfde74-9213-4c52-ac47-5b3aec919ce2",
+  modelId: 664626,
+  entity: "Dim_Product",
+  queryFields: ALL_QUERY_FIELDS,
+  queryFieldTypes: ALL_QUERY_FIELD_TYPES,
+  supplements: ALL_SUPPLEMENTAL_QUERIES,
+  contract: OCTOBER_STREAM_CONTRACT,
+} as const;
+const currentReport = {
+  reportId: CREDITEX_VEU_REPORT_ID,
+  datasetId: CREDITEX_VEU_DATASET_ID,
+  modelId: CREDITEX_VEU_MODEL_ID,
+  entity: CREDITEX_VEU_PRODUCT_ENTITY,
+  queryFields: CREDITEX_VEU_QUERY_FIELDS,
+  queryFieldTypes: CREDITEX_VEU_QUERY_FIELD_TYPES,
+} as const;
+
+type VeuReport = typeof currentReport | typeof CREDITEX_VEU_ARCHIVED_REPORT;
+
+function matchesReport(header: JsonObject, report: VeuReport) {
+  return header.reportId === report.reportId && header.datasetId === report.datasetId
+    && header.modelId === report.modelId;
+}
+
 const CREDITEX_VEU_SUPPLEMENT_ATTRIBUTE_KEYS: Readonly<Record<string, string>> = {
   System_Size__c: "veuSystemSize",
   Zone_4_Bs_GJyear_system_load_size__c: "bs2021Zone4SystemLoadGjPerYear",
@@ -649,9 +700,9 @@ type VeuDecodedPage = Readonly<{
 export type CreditexVeuProductArtifact = Readonly<{
   contract: typeof CREDITEX_VEU_PRODUCT_ARTIFACT_CONTRACT;
   sourceKey: typeof CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY;
-  reportId: typeof CREDITEX_VEU_REPORT_ID;
-  datasetId: typeof CREDITEX_VEU_DATASET_ID;
-  modelId: typeof CREDITEX_VEU_MODEL_ID;
+  reportId: typeof CREDITEX_VEU_ARCHIVED_REPORT.reportId;
+  datasetId: typeof CREDITEX_VEU_ARCHIVED_REPORT.datasetId;
+  modelId: typeof CREDITEX_VEU_ARCHIVED_REPORT.modelId;
   sourceRefreshedAt: string;
   queryFields: readonly string[];
   controls: Readonly<{
@@ -732,7 +783,10 @@ function exactKeys(value: JsonObject, expected: readonly string[], label: string
   }
 }
 
-export function validateCreditexVeuPowerBiModel(rawModelResponse: string) {
+export function validateCreditexVeuPowerBiModel(
+  rawModelResponse: string,
+  binding: VeuReport = currentReport,
+) {
   const modelDocument = requiredObject(
     parseJson(rawModelResponse, "Power BI model response"),
     "Power BI model response",
@@ -741,8 +795,8 @@ export function validateCreditexVeuPowerBiModel(rawModelResponse: string) {
   if (models.length !== 1) return sourceError("Power BI model count changed");
   const model = requiredObject(models[0], "Power BI model");
   if (
-    model.id !== CREDITEX_VEU_MODEL_ID
-    || model.dbName !== CREDITEX_VEU_DATASET_ID
+    model.id !== binding.modelId
+    || model.dbName !== binding.datasetId
   ) {
     return sourceError("Power BI model identity changed");
   }
@@ -753,17 +807,20 @@ export function validateCreditexVeuPowerBiModel(rawModelResponse: string) {
   const report = requiredObject(exploration.report, "Power BI report");
   const reportModel = requiredObject(report.model, "Power BI report model");
   if (
-    report.objectId !== CREDITEX_VEU_REPORT_ID
-    || report.modelId !== CREDITEX_VEU_MODEL_ID
-    || reportModel.id !== CREDITEX_VEU_MODEL_ID
-    || reportModel.dbName !== CREDITEX_VEU_DATASET_ID
+    report.objectId !== binding.reportId
+    || report.modelId !== binding.modelId
+    || reportModel.id !== binding.modelId
+    || reportModel.dbName !== binding.datasetId
   ) {
     return sourceError("Power BI report binding changed");
   }
   return true;
 }
 
-export function validateCreditexVeuPowerBiSchema(rawSchemaResponse: string) {
+export function validateCreditexVeuPowerBiSchema(
+  rawSchemaResponse: string,
+  binding: VeuReport = currentReport,
+) {
   const schemaDocument = requiredObject(
     parseJson(rawSchemaResponse, "Power BI schema response"),
     "Power BI schema response",
@@ -772,7 +829,7 @@ export function validateCreditexVeuPowerBiSchema(rawSchemaResponse: string) {
   if (schemas.length !== 1) return sourceError("Power BI schema count changed");
   const schemaResult = requiredObject(schemas[0], "Power BI schema result");
   if (
-    schemaResult.modelId !== CREDITEX_VEU_MODEL_ID
+    schemaResult.modelId !== binding.modelId
     || schemaResult.error !== null
   ) {
     return sourceError("Power BI schema identity changed");
@@ -780,7 +837,7 @@ export function validateCreditexVeuPowerBiSchema(rawSchemaResponse: string) {
   const schema = requiredObject(schemaResult.schema, "Power BI schema");
   const entities = requiredArray(schema.Entities, "Power BI entities");
   const productEntities = entities.filter((entity) => (
-    isObject(entity) && entity.Name === "Dim_Product"
+    isObject(entity) && entity.Name === binding.entity
   ));
   if (productEntities.length !== 1) {
     return sourceError("Dim_Product entity identity changed");
@@ -815,6 +872,8 @@ export function validateCreditexVeuPowerBiSchema(rawSchemaResponse: string) {
   for (const [name, [dataType, stableName]] of Object.entries(
     CREDITEX_VEU_DIM_PRODUCT_SCHEMA,
   )) {
+    if (binding === currentReport && unpublishedColumns.has(name)) continue;
+    if (binding === CREDITEX_VEU_ARCHIVED_REPORT && name === PUBLIC_RECORD_TYPE) continue;
     const matches = properties.filter((property) => (
       isObject(property) && property.Name === name
     ));
@@ -871,9 +930,10 @@ export function validateCreditexVeuPowerBiSchema(rawSchemaResponse: string) {
 export function validateCreditexVeuPowerBiModelAndSchema(
   rawModelResponse: string,
   rawSchemaResponse: string,
+  binding: VeuReport = currentReport,
 ) {
-  validateCreditexVeuPowerBiModel(rawModelResponse);
-  validateCreditexVeuPowerBiSchema(rawSchemaResponse);
+  validateCreditexVeuPowerBiModel(rawModelResponse, binding);
+  validateCreditexVeuPowerBiSchema(rawSchemaResponse, binding);
   return true;
 }
 
@@ -1225,6 +1285,31 @@ export function decodeCreditexVeuPowerBiProductPage(
   return { rows: decodedRows, continuation: false, restartRow: null };
 }
 
+// Historical evidence has a Salesforce cursor and the public product ID.
+// Current evidence uses the product ID itself as both the cursor and join key.
+// Reconcile both wire layouts here so formula fields keep one canonical order.
+function decodeEvidencePage(
+  report: VeuReport,
+  response: string,
+  fields: readonly (keyof typeof CREDITEX_VEU_DIM_PRODUCT_SCHEMA)[],
+  window = 30_000,
+) {
+  const isPublicBasePage = report === currentReport && fields === ALL_QUERY_FIELDS;
+  const wire = isPublicBasePage ? CREDITEX_VEU_QUERY_FIELDS
+    : report === currentReport ? publishedFields(fields) : fields;
+  const decoded = decodeCreditexVeuPowerBiProductPage(
+    response, wire, wire.map((field) => CREDITEX_VEU_DIM_PRODUCT_SCHEMA[field][0]), window,
+  );
+  if (report !== currentReport) return decoded;
+  const wireFields: readonly string[] = wire;
+  const indexes = fields.map((field, index) => index === 0 ? 0 : wireFields.indexOf(field));
+  if (isPublicBasePage) indexes.push(wireFields.indexOf(PUBLIC_RECORD_TYPE));
+  return {
+    ...decoded,
+    rows: decoded.rows.map((row) => indexes.map((index) => index === -1 ? null : row[index])),
+  };
+}
+
 export function decodeCreditexVeuPowerBiAggregateCount(
   rawResponse: string,
 ) {
@@ -1530,7 +1615,7 @@ type VeuSupplementalRecord = Readonly<{
 }>;
 
 function supplementalQueryForCategory(category: string) {
-  return CREDITEX_VEU_SUPPLEMENTAL_QUERIES.find(
+  return ALL_SUPPLEMENTAL_QUERIES.find(
     (definition) => (definition.categories as readonly string[]).includes(category),
   );
 }
@@ -1540,12 +1625,12 @@ function parseSupplementalEvidence(
   categoryCounts: Readonly<Record<string, number>>,
 ) {
   const supplements = requiredArray(value, "artifact supplements");
-  if (supplements.length !== CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length) {
+  if (supplements.length !== ALL_SUPPLEMENTAL_QUERIES.length) {
     return sourceError("artifact supplement count changed");
   }
   const records = new Map<string, VeuSupplementalRecord>();
   supplements.forEach((rawSupplement, supplementIndex) => {
-    const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[supplementIndex];
+    const definition = ALL_SUPPLEMENTAL_QUERIES[supplementIndex];
     const supplement = requiredObject(
       rawSupplement,
       `artifact supplement ${supplementIndex + 1}`,
@@ -1662,7 +1747,7 @@ function supplementalValue(
   field: string,
 ) {
   if (!supplement) return null;
-  const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[
+  const definition = ALL_SUPPLEMENTAL_QUERIES[
     supplement.definitionIndex
   ];
   const fieldIndex = (definition.fields as readonly string[]).indexOf(field);
@@ -1774,6 +1859,7 @@ function validateApprovedFormulaFields(
   supplement: VeuSupplementalRecord | undefined,
   attributes: Record<string, string | number | boolean | null>,
   wersHeatingStars: number | null,
+  binding: VeuReport,
 ) {
   if (sourceStatus !== "Approved") return;
   const label = `record ${index}`;
@@ -1885,11 +1971,13 @@ function validateApprovedFormulaFields(
       "GEMS_Class__c",
       `${label} GEMS class`,
     );
-    requiredSupplementalBoolean(
-      supplement,
-      "GEMS_Registered_Before_2_August_2024__c",
-      `${label} GEMS registration-date flag`,
-    );
+    if (binding === CREDITEX_VEU_ARCHIVED_REPORT) {
+      requiredSupplementalBoolean(
+        supplement,
+        "GEMS_Registered_Before_2_August_2024__c",
+        `${label} GEMS registration-date flag`,
+      );
+    }
   }
   if (category === "13A") {
     positiveFormulaNumber(wersHeatingStars, `${label} WERS heating stars`);
@@ -2088,8 +2176,9 @@ function productRecord(
   row: readonly VeuQueryValue[],
   index: number,
   supplement: VeuSupplementalRecord | undefined,
+  binding: VeuReport = CREDITEX_VEU_ARCHIVED_REPORT,
 ): CreditexOfficialProductRecord {
-  const salesforceId = requiredRowText(row[0], `record ${index} Salesforce Id`);
+  const cursor = requiredRowText(row[0], `record ${index} source cursor`);
   const productId = requiredRowText(row[1], `record ${index} Product ID`);
   const legacyProductId = optionalRowText(row[2], `record ${index} legacy Product ID`);
   const category = optionalRowText(row[3], `record ${index} category`);
@@ -2120,10 +2209,10 @@ function productRecord(
     !category
     && (
       !CREDITEX_VEU_PROJECT_BASED_LIGHTING_PRODUCT_IDS.has(productId)
-      || activityTypeId !== CREDITEX_VEU_PROJECT_BASED_LIGHTING_ACTIVITY_TYPE_ID
-      || !legacyProductId.endsWith(
-        CREDITEX_VEU_PROJECT_BASED_LIGHTING_LEGACY_SUFFIX,
-      )
+      || (binding === currentReport
+        ? row[ALL_QUERY_FIELDS.length] !== "PBA lighting products"
+        : activityTypeId !== CREDITEX_VEU_PROJECT_BASED_LIGHTING_ACTIVITY_TYPE_ID
+          || !legacyProductId.endsWith(CREDITEX_VEU_PROJECT_BASED_LIGHTING_LEGACY_SUFFIX))
     )
   ) {
     return sourceError(
@@ -2153,10 +2242,10 @@ function productRecord(
   );
   const attributes: Record<string, string | number | boolean | null> = {
     veuProductId: productId,
-    veuSalesforceRecordId: salesforceId,
     veuProductCategoryNumber: category,
     sourceStatus,
   };
+  if (binding === CREDITEX_VEU_ARCHIVED_REPORT) attributes.veuSalesforceRecordId = cursor;
   if (activityTypeId) attributes.veuActivityTypeId = activityTypeId;
   if (legacyProductId) attributes.veuLegacyProductId = legacyProductId;
   if (totalVolumeLitres !== null) attributes.totalVolumeLitres = totalVolumeLitres;
@@ -2173,7 +2262,7 @@ function productRecord(
     attributes.wersHeatingStars = wersHeatingStars;
   }
   if (supplement) {
-    const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[
+    const definition = ALL_SUPPLEMENTAL_QUERIES[
       supplement.definitionIndex
     ];
     definition.fields.slice(4).forEach((field, fieldIndex) => {
@@ -2199,6 +2288,7 @@ function productRecord(
     supplement,
     attributes,
     wersHeatingStars,
+    binding,
   );
   if (sourceStatus === "Approved" && category.startsWith("22")) {
     positiveFormulaNumber(totalVolumeLitres, `record ${index} total volume`);
@@ -2264,10 +2354,8 @@ function parseCreditexVeuLegacyProductArtifact(
   if (
     artifact.contract !== CREDITEX_VEU_PRODUCT_ARTIFACT_CONTRACT
     || artifact.sourceKey !== CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY
-    || artifact.reportId !== CREDITEX_VEU_REPORT_ID
-    || artifact.datasetId !== CREDITEX_VEU_DATASET_ID
-    || artifact.modelId !== CREDITEX_VEU_MODEL_ID
-    || JSON.stringify(artifact.queryFields) !== JSON.stringify(CREDITEX_VEU_QUERY_FIELDS)
+    || !matchesReport(artifact, CREDITEX_VEU_ARCHIVED_REPORT)
+    || JSON.stringify(artifact.queryFields) !== JSON.stringify(ALL_QUERY_FIELDS)
   ) {
     return sourceError("artifact identity or schema changed");
   }
@@ -2309,6 +2397,7 @@ function parseCreditexVeuLegacyProductArtifact(
       "artifact conceptualSchemaResponse",
       20_000_000,
     ),
+    CREDITEX_VEU_ARCHIVED_REPORT,
   );
   for (const evidenceField of [
     "modelResponse",
@@ -2393,10 +2482,11 @@ function parseCreditexVeuLegacyProductArtifact(
     if (terminalSeen) return sourceError("artifact has a page after completion");
     const decoded = decodeCreditexVeuPowerBiProductPage(
       requiredText(page.response, `artifact page ${pageIndex + 1} response`, 30_000_000),
+      ALL_QUERY_FIELDS, ALL_QUERY_FIELD_TYPES,
     );
     delete page.response;
     for (const row of decoded.rows) {
-      const id = requiredRowText(row[0], "page Salesforce Id");
+      const id = requiredRowText(row[0], "product cursor");
       if (
         expectedAfterId
         && id.toLowerCase() <= expectedAfterId.toLowerCase()
@@ -2481,20 +2571,21 @@ function validateVeuStreamHeader(header: JsonObject, bytes?: Uint8Array) {
     "queryFields",
     "controls",
   ], "artifact header");
+  const binding = header.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
+    ? currentReport : CREDITEX_VEU_ARCHIVED_REPORT;
   if (
     header.recordType !== "header"
     || (
       header.contract !== CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT
       && header.contract
         !== CREDITEX_VEU_LEGACY_BOUNDED_STREAM_ARTIFACT_CONTRACT
+      && header.contract !== OCTOBER_STREAM_CONTRACT
       && header.contract !== CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
     )
     || header.sourceKey !== CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY
-    || header.reportId !== CREDITEX_VEU_REPORT_ID
-    || header.datasetId !== CREDITEX_VEU_DATASET_ID
-    || header.modelId !== CREDITEX_VEU_MODEL_ID
+    || !matchesReport(header, binding)
     || JSON.stringify(header.queryFields)
-      !== JSON.stringify(CREDITEX_VEU_QUERY_FIELDS)
+      !== JSON.stringify(binding.queryFields)
   ) {
     return sourceError("stream artifact identity or schema changed");
   }
@@ -2505,6 +2596,7 @@ function validateVeuStreamHeader(header: JsonObject, bytes?: Uint8Array) {
   const controls = requiredObject(header.controls, "artifact controls");
   const boundedStream = header.contract
     === CREDITEX_VEU_LEGACY_BOUNDED_STREAM_ARTIFACT_CONTRACT
+    || header.contract === OCTOBER_STREAM_CONTRACT
     || header.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT;
   exactKeys(controls, [
     "total",
@@ -2536,9 +2628,9 @@ function validateVeuStreamHeader(header: JsonObject, bytes?: Uint8Array) {
       const key = requiredText(value.key, "artifact control key", 80);
       const response = requiredText(value.response, `artifact ${key}`, 12_000_000);
       if (seen.has(key)) return sourceError("artifact control is duplicated");
-      if (key === "modelResponse") validateCreditexVeuPowerBiModel(response);
+      if (key === "modelResponse") validateCreditexVeuPowerBiModel(response, binding);
       else if (key === "conceptualSchemaResponse") {
-        validateCreditexVeuPowerBiSchema(response);
+        validateCreditexVeuPowerBiSchema(response, binding);
       } else return sourceError("artifact control identity changed");
       seen.add(key);
     }
@@ -2557,6 +2649,7 @@ function validateVeuStreamHeader(header: JsonObject, bytes?: Uint8Array) {
         "artifact conceptualSchemaResponse",
         20_000_000,
       ),
+      binding,
     );
   }
   for (const evidenceField of [
@@ -2606,7 +2699,7 @@ function validateVeuStreamHeader(header: JsonObject, bytes?: Uint8Array) {
   ) {
     return sourceError("official aggregate controls do not reconcile");
   }
-  return { total, statuses, categories } as const;
+  return { total, statuses, categories, binding } as const;
 }
 
 function parseCreditexVeuStreamProductArtifact(bytes: Uint8Array) {
@@ -2660,10 +2753,11 @@ function parseCreditexVeuStreamProductArtifact(bytes: Uint8Array) {
   if (!header || pageCount < 1 || pageCount > 200) {
     return sourceError("stream artifact page count is outside the controlled bound");
   }
-  const { total, statuses, categories } = validateVeuStreamHeader(header, bytes);
+  const { total, statuses, categories, binding } = validateVeuStreamHeader(header, bytes);
   const supplementalRecords = new Map<string, VeuSupplementalRecord>();
   if (
     header.contract === CREDITEX_VEU_LEGACY_BOUNDED_STREAM_ARTIFACT_CONTRACT
+    || header.contract === OCTOBER_STREAM_CONTRACT
     || header.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
   ) {
     for (const batch of creditexVeuSupplementalBatches(bytes, "application/json")) {
@@ -2699,24 +2793,24 @@ function parseCreditexVeuStreamProductArtifact(bytes: Uint8Array) {
     if (value.afterId !== expectedAfterId || terminalSeen) {
       return sourceError(`artifact page ${decodedPageCount} cursor changed`);
     }
-    const decoded = decodeCreditexVeuPowerBiProductPage(
+    const decoded = decodeEvidencePage(
+      binding,
       requiredText(
         value.response,
         `artifact page ${decodedPageCount} response`,
         12_000_000,
       ),
-      CREDITEX_VEU_QUERY_FIELDS,
-      CREDITEX_VEU_QUERY_FIELD_TYPES,
+      ALL_QUERY_FIELDS,
       CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (const row of decoded.rows) {
-      const id = requiredRowText(row[0], "page Salesforce Id");
+      const id = requiredRowText(row[0], "product cursor");
       if (expectedAfterId && id.toLowerCase() <= expectedAfterId.toLowerCase()) {
         return sourceError("product pagination is not strictly monotonic");
       }
       expectedAfterId = id;
       const supplement = supplementalRecords.get(id);
-      const record = productRecord(row, records.length + 1, supplement);
+      const record = productRecord(row, records.length + 1, supplement, binding);
       if (supplement) supplementalRecords.delete(id);
       const category = String(record.attributes.veuProductCategoryNumber || "");
       const sourceStatus = String(record.attributes.sourceStatus);
@@ -2770,7 +2864,7 @@ function creditexVeuStreamHeader(bytes: Uint8Array) {
     !header
     || pageCount < 1
     || pageCount > 200
-    || supplementCount !== CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length
+    || supplementCount !== ALL_SUPPLEMENTAL_QUERIES.length
     || (
       header.contract === CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT
       && supplementPageCount !== 0
@@ -2789,9 +2883,10 @@ function* creditexVeuBoundedSupplementalBatches(
   bytes: Uint8Array,
   categories: Readonly<Record<string, number>>,
   contract: unknown,
+  binding: VeuReport,
 ): Generator<readonly CreditexOfficialProductStreamValue[]> {
   let supplementIndex = -1;
-  let definition: (typeof CREDITEX_VEU_SUPPLEMENTAL_QUERIES)[number] | null = null;
+  let definition: (typeof ALL_SUPPLEMENTAL_QUERIES)[number] | null = null;
   let expectedCount = 0;
   let decodedCount = 0;
   let expectedAfterId: string | null = null;
@@ -2811,10 +2906,10 @@ function* creditexVeuBoundedSupplementalBatches(
     if (value.recordType === "supplement") {
       finishCurrent();
       supplementIndex += 1;
-      definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[supplementIndex] || null;
+      definition = ALL_SUPPLEMENTAL_QUERIES[supplementIndex] || null;
       if (!definition) return sourceError("artifact supplement count changed");
-      const filteredControl = contract
-        === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
+      const filteredControl = (contract === OCTOBER_STREAM_CONTRACT
+        || contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT)
         && "productIds" in definition;
       exactKeys(value, [
         "recordType",
@@ -2835,7 +2930,7 @@ function* creditexVeuBoundedSupplementalBatches(
           );
       if (
         value.key !== definition.key
-        || JSON.stringify(value.queryFields) !== JSON.stringify(definition.fields)
+        || JSON.stringify(value.queryFields) !== JSON.stringify(binding === currentReport ? publishedFields<string>(definition.fields) : definition.fields)
         || value.expectedCount !== expectedCount
       ) {
         return sourceError(`artifact supplement ${definition.key} control changed`);
@@ -2858,15 +2953,10 @@ function* creditexVeuBoundedSupplementalBatches(
     if (value.key !== definition.key || value.afterId !== expectedAfterId) {
       return sourceError(`artifact supplement ${definition.key} cursor changed`);
     }
-    const fieldTypes = definition.fields.map((field) => (
-      CREDITEX_VEU_DIM_PRODUCT_SCHEMA[
-        field as keyof typeof CREDITEX_VEU_DIM_PRODUCT_SCHEMA
-      ][0]
-    ));
-    const decoded = decodeCreditexVeuPowerBiProductPage(
+    const decoded = decodeEvidencePage(
+      binding,
       requiredText(value.response, `artifact supplement ${definition.key} response`, 4_000_000),
       definition.fields,
-      fieldTypes,
       CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     const allowedCategories = new Set<string>(definition.categories);
@@ -2911,7 +3001,7 @@ function* creditexVeuBoundedSupplementalBatches(
     terminalSeen = !decoded.continuation;
   }
   finishCurrent();
-  if (supplementIndex + 1 !== CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length) {
+  if (supplementIndex + 1 !== ALL_SUPPLEMENTAL_QUERIES.length) {
     return sourceError("artifact supplement count changed");
   }
 }
@@ -2927,19 +3017,21 @@ function* creditexVeuSupplementalBatches(
   const { categories } = metadata;
   if (
     metadata.contract === CREDITEX_VEU_LEGACY_BOUNDED_STREAM_ARTIFACT_CONTRACT
+    || metadata.contract === OCTOBER_STREAM_CONTRACT
     || metadata.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
   ) {
     yield* creditexVeuBoundedSupplementalBatches(
       bytes,
       categories,
       metadata.contract,
+      metadata.binding,
     );
     return;
   }
   let supplementIndex = 0;
   for (const { value } of veuStreamLines(bytes)) {
     if (value.recordType !== "supplement") continue;
-    const definition = CREDITEX_VEU_SUPPLEMENTAL_QUERIES[supplementIndex];
+    const definition = ALL_SUPPLEMENTAL_QUERIES[supplementIndex];
     if (!definition) return sourceError("artifact supplement count changed");
     exactKeys(value, [
       "recordType",
@@ -3035,7 +3127,7 @@ function* creditexVeuSupplementalBatches(
     }
     supplementIndex += 1;
   }
-  if (supplementIndex !== CREDITEX_VEU_SUPPLEMENTAL_QUERIES.length) {
+  if (supplementIndex !== ALL_SUPPLEMENTAL_QUERIES.length) {
     return sourceError("artifact supplement count changed");
   }
 }
@@ -3052,6 +3144,7 @@ function inspectCreditexVeuStreamProductArtifact(
     statuses,
     categories,
     pageCount,
+    binding,
   } = creditexVeuStreamHeader(bytes);
   for (const batch of creditexVeuSupplementalBatches(bytes, contentType)) {
     // Exhausting the generator validates every supplemental page without
@@ -3075,14 +3168,14 @@ function inspectCreditexVeuStreamProductArtifact(
     if (value.afterId !== expectedAfterId || terminalSeen) {
       return sourceError(`artifact page ${decodedPageCount} cursor changed`);
     }
-    const decoded = decodeCreditexVeuPowerBiProductPage(
+    const decoded = decodeEvidencePage(
+      binding,
       requiredText(value.response, `artifact page ${decodedPageCount} response`, 4_000_000),
-      CREDITEX_VEU_QUERY_FIELDS,
-      CREDITEX_VEU_QUERY_FIELD_TYPES,
+      ALL_QUERY_FIELDS,
       CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (const row of decoded.rows) {
-      const id = requiredRowText(row[0], "page Salesforce Id");
+      const id = requiredRowText(row[0], "product cursor");
       if (expectedAfterId && id.toLowerCase() <= expectedAfterId.toLowerCase()) {
         return sourceError("product pagination is not strictly monotonic");
       }
@@ -3110,7 +3203,7 @@ function inspectCreditexVeuStreamProductArtifact(
   ) {
     return sourceError("stream artifact records did not reconcile");
   }
-  return recordCount;
+  return { recordCount, binding };
 }
 
 async function* creditexVeuRecordBatches(
@@ -3125,7 +3218,7 @@ async function* creditexVeuRecordBatches(
     maximumBatches: number;
   }>,
 ): AsyncGenerator<readonly CreditexOfficialProductRecord[]> {
-  const expectedTotal = inspectCreditexVeuStreamProductArtifact(bytes, contentType);
+  const { recordCount: expectedTotal, binding } = inspectCreditexVeuStreamProductArtifact(bytes, contentType);
   const afterRecordCount = resume?.afterRecordCount ?? 0;
   const afterSourceRecordKey = resume?.afterSourceRecordKey ?? "";
   const maximumBatches = resume?.maximumBatches;
@@ -3158,10 +3251,10 @@ async function* creditexVeuRecordBatches(
   let yieldedBatchCount = 0;
   for (const { value } of veuStreamLines(bytes)) {
     if (value.recordType !== "page") continue;
-    const decoded = decodeCreditexVeuPowerBiProductPage(
+    const decoded = decodeEvidencePage(
+      binding,
       requiredText(value.response, "artifact page response", 4_000_000),
-      CREDITEX_VEU_QUERY_FIELDS,
-      CREDITEX_VEU_QUERY_FIELD_TYPES,
+      ALL_QUERY_FIELDS,
       CREDITEX_VEU_LEGACY_STREAM_PAGE_SIZE,
     );
     for (let offset = 0; offset < decoded.rows.length; offset += CREDITEX_VEU_STREAM_BATCH_SIZE) {
@@ -3189,10 +3282,10 @@ async function* creditexVeuRecordBatches(
       const rows = batchStart < afterRecordCount
         ? pageRows.slice(afterRecordCount - batchStart)
         : pageRows;
-      const ids = rows.map((row) => requiredRowText(row[0], "page Salesforce Id"));
+      const ids = rows.map((row) => requiredRowText(row[0], "product cursor"));
       const values = await loadValues(ids);
       const records = rows.map((row, rowOffset) => {
-        const id = requiredRowText(row[0], "page Salesforce Id");
+        const id = requiredRowText(row[0], "product cursor");
         const rawSupplement = values.get(id);
         const supplement = rawSupplement
           ? rawSupplement as unknown as VeuSupplementalRecord
@@ -3201,6 +3294,7 @@ async function* creditexVeuRecordBatches(
           row,
           batchStart + (pageRows.length - rows.length) + rowOffset + 1,
           supplement,
+          binding,
         );
       });
       yield records;
@@ -3219,7 +3313,7 @@ async function* creditexVeuRecordBatches(
 }
 
 export const CREDITEX_VEU_STREAMING_PARSER = {
-  inspect: inspectCreditexVeuStreamProductArtifact,
+  inspect: (bytes: Uint8Array, contentType: string) => inspectCreditexVeuStreamProductArtifact(bytes, contentType).recordCount,
   supplementalBatches: creditexVeuSupplementalBatches,
   recordBatches: creditexVeuRecordBatches,
 } as const satisfies CreditexOfficialProductStreamingParser;
@@ -3247,6 +3341,7 @@ export function parseCreditexVeuProductArtifact(
         firstLine.contract === CREDITEX_VEU_STREAM_ARTIFACT_CONTRACT
         || firstLine.contract
           === CREDITEX_VEU_LEGACY_BOUNDED_STREAM_ARTIFACT_CONTRACT
+        || firstLine.contract === OCTOBER_STREAM_CONTRACT
         || firstLine.contract === CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT
       )
     ) {

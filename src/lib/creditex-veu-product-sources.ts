@@ -16,6 +16,7 @@ import {
   CREDITEX_VEU_DATASET_ID,
   CREDITEX_VEU_DIM_PRODUCT_SCHEMA,
   CREDITEX_VEU_MODEL_ID,
+  CREDITEX_VEU_PRODUCT_ENTITY,
   CREDITEX_VEU_STREAMING_PARSER,
   CREDITEX_VEU_PRODUCT_KINDS,
   CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY,
@@ -36,8 +37,16 @@ import {
 const VEU_PUBLIC_REGISTRY_URL =
   "https://veu.esc.vic.gov.au/vpr/s/public-registry";
 const VEU_AURA_URL = "https://veu.esc.vic.gov.au/vpr/s/sfsites/aura";
-const VEU_REPORT_WORKSPACE_ID = "7895247f-ddd9-458d-9e32-55d97b550e34";
-const VEU_DATASET_WORKSPACE_ID = "5bd343ff-dbe9-4093-8f4c-23f3756f99a7";
+const VEU_REPORT_WORKSPACE_ID = "2d1b4455-b012-49b6-8e10-d94a127fcf5d";
+const VEU_DATASET_WORKSPACE_ID = "8bc82bbc-1cb2-471f-947f-7d2c0283847d";
+const VEU_PRODUCT_ID = /^\d{9}$/;
+// Namespace the public key in the existing 15-18 character stream checkpoint.
+// Page evidence and upstream queries retain the regulator's exact nine digits.
+const VEU_PRODUCT_CHECKPOINT_PREFIX = "product:";
+
+function productCheckpoint(productId: string) {
+  return productId ? VEU_PRODUCT_CHECKPOINT_PREFIX + productId : "";
+}
 const VEU_AURA_APP = "siteforce:communityApp";
 const VEU_AURA_LOADED_KEY =
   "APPLICATION@markup://siteforce:communityApp";
@@ -541,14 +550,14 @@ function publicVisibleWhere(
   }];
   if (filter) where.push(inFilter(filter.property, filter.values));
   if (afterId) {
-    if (!/^[A-Za-z0-9]{15,18}$/.test(afterId)) {
+    if (!VEU_PRODUCT_ID.test(afterId)) {
       return sourceError("Power BI product cursor is invalid");
     }
     where.push({
       Condition: {
         Comparison: {
           ComparisonKind: 1,
-          Left: column("d", "Id"),
+          Left: column("d", "Product_ID__c"),
           Right: { Literal: { Value: `'${afterId}'` } },
         },
       },
@@ -584,11 +593,11 @@ function productQuery(
   return queryEnvelope({
     Query: {
       Version: 2,
-      From: [{ Name: "d", Entity: "Dim_Product", Type: 0 }],
+      From: [{ Name: "d", Entity: CREDITEX_VEU_PRODUCT_ENTITY, Type: 0 }],
       Where: publicVisibleWhere(afterId, filter),
       OrderBy: [{
         Direction: 1,
-        Expression: column("d", "Id"),
+        Expression: column("d", "Product_ID__c"),
       }],
       Select: select,
     },
@@ -625,7 +634,7 @@ function totalQuery(
   return queryEnvelope({
     Query: {
       Version: 2,
-      From: [{ Name: "d", Entity: "Dim_Product", Type: 0 }],
+      From: [{ Name: "d", Entity: CREDITEX_VEU_PRODUCT_ENTITY, Type: 0 }],
       Where: publicVisibleWhere(null, filter),
       Select: [countAggregation()],
     },
@@ -645,7 +654,7 @@ function groupedQuery(property: string) {
   return queryEnvelope({
     Query: {
       Version: 2,
-      From: [{ Name: "d", Entity: "Dim_Product", Type: 0 }],
+      From: [{ Name: "d", Entity: CREDITEX_VEU_PRODUCT_ENTITY, Type: 0 }],
       Where: publicVisibleWhere(),
       OrderBy: [{ Direction: 1, Expression: column("d", property) }],
       Select: [
@@ -765,7 +774,6 @@ async function acquireSupplementalEvidence(
     ? { property: "Product_ID__c", values: definition.productIds }
     : { property: "Product_Category_Number__c", values: definition.categories };
   const fieldTypes = supplementalFieldTypes(definition);
-  const allowedCategories = new Set<string>(definition.categories);
   let afterId: string | null = null;
   let rowCount = 0;
   let pageCount = 0;
@@ -802,25 +810,7 @@ async function acquireSupplementalEvidence(
       response,
     });
     pageCount += 1;
-    for (const row of decoded.rows) {
-      const id = row[0];
-      const productId = row[1];
-      const category = row[2] ?? "";
-      const status = row[3];
-      if (
-        typeof id !== "string"
-        || !/^[A-Za-z0-9]{15,18}$/.test(id)
-        || (afterId !== null && id.toLowerCase() <= afterId.toLowerCase())
-        || typeof productId !== "string"
-        || !productId
-        || typeof category !== "string"
-        || !allowedCategories.has(category)
-        || (status !== "Approved" && status !== "Legacy")
-      ) {
-        return sourceError(`supplement ${definition.key} identity drifted`);
-      }
-      afterId = id;
-    }
+    afterId = validateProductPageIdentity(decoded, afterId || "", definition);
     rowCount += decoded.rows.length;
     terminalSeen = !decoded.continuation;
     if (rowCount > expectedCount) {
@@ -1160,11 +1150,7 @@ async function acquirePowerBiEvidence(
     if (rowCount > total) {
       return sourceError("Power BI product pages exceeded the official total");
     }
-    const lastId = decoded.rows.at(-1)?.[0];
-    if (typeof lastId !== "string" || !lastId) {
-      return sourceError("Power BI product page has no final Salesforce Id");
-    }
-    afterId = lastId;
+    afterId = validateProductPageIdentity(decoded, afterId || "");
     if (!decoded.continuation && rowCount !== total) {
       return sourceError("Power BI product pages ended before the official total");
     }
@@ -1387,7 +1373,12 @@ async function loadVeuAcquisitionStreams(
     WHERE acquisition_id = ? ORDER BY stream_index`)
     .bind(acquisitionId)
     .all<VeuAcquisitionStreamRow>();
-  return result.results || [];
+  return (result.results || []).map((stream) => ({
+    ...stream,
+    last_record_id: stream.last_record_id.startsWith(VEU_PRODUCT_CHECKPOINT_PREFIX)
+      ? stream.last_record_id.slice(VEU_PRODUCT_CHECKPOINT_PREFIX.length)
+      : stream.last_record_id,
+  }));
 }
 
 async function loadVeuAcquisitionFragment(
@@ -1838,7 +1829,7 @@ async function persistVeuStaticFragment(
   return retained;
 }
 
-function validateDurablePageIdentity(
+function validateProductPageIdentity(
   decoded: ReturnType<typeof decodeCreditexVeuPowerBiProductPage>,
   cursorBefore: string,
   definition?: VeuSupplementalQuery,
@@ -1851,20 +1842,17 @@ function validateDurablePageIdentity(
     const id = row[0];
     if (
       typeof id !== "string"
-      || !/^[A-Za-z0-9]{15,18}$/.test(id)
+      || !VEU_PRODUCT_ID.test(id)
       || (cursor && id.toLowerCase() <= cursor.toLowerCase())
     ) {
       return sourceError("durable Power BI page cursor drifted");
     }
     cursor = id;
     if (definition) {
-      const productId = row[1];
-      const category = row[2] ?? "";
-      const status = row[3];
+      const category = row[1] ?? "";
+      const status = row[2];
       if (
-        typeof productId !== "string"
-        || !productId
-        || typeof category !== "string"
+        typeof category !== "string"
         || !allowedCategories?.has(category)
         || (status !== "Approved" && status !== "Legacy")
       ) {
@@ -1873,7 +1861,7 @@ function validateDurablePageIdentity(
     }
   }
   if (!cursor || decoded.rows.length < 1) {
-    return sourceError("durable Power BI page has no final Salesforce Id");
+    return sourceError("Power BI page has no final public product ID");
   }
   return cursor;
 }
@@ -1890,7 +1878,7 @@ async function persistVeuPageFragment(
   if (stream.page_count >= CREDITEX_VEU_MAX_PAGES) {
     return sourceError("durable Power BI pagination exceeded its page limit");
   }
-  const cursorAfter = validateDurablePageIdentity(
+  const cursorAfter = validateProductPageIdentity(
     decoded,
     stream.last_record_id,
     definition,
@@ -1956,7 +1944,7 @@ async function persistVeuPageFragment(
         stream.revision,
         stream.page_count,
         stream.record_count,
-        stream.last_record_id,
+        productCheckpoint(stream.last_record_id),
         ...ownership,
       ),
     context.database.prepare(`UPDATE
@@ -1970,7 +1958,7 @@ async function persistVeuPageFragment(
         ) AND ${acquisitionOwnershipPredicate()}`)
       .bind(
         nextRecordCount,
-        cursorAfter,
+        productCheckpoint(cursorAfter),
         terminal ? 1 : 0,
         context.checkedAt,
         acquisition.acquisition_id,
@@ -2602,7 +2590,7 @@ async function veuAssemblyRecord(
     fieldTypes,
     CREDITEX_VEU_PAGE_SIZE,
   );
-  const cursorAfter = validateDurablePageIdentity(decoded, cursor, definition);
+  const cursorAfter = validateProductPageIdentity(decoded, cursor, definition);
   const rowCountAfter = rowCountBefore + decoded.rows.length;
   const terminal = definition
     ? !decoded.continuation && rowCountAfter === stream.expected_record_count
@@ -3052,9 +3040,6 @@ CreditexOfficialProductSourceDefinition = {
 
 export const CREDITEX_VEU_PRODUCT_REGISTRY_FETCH =
   fetchCreditexVeuProductSources;
-
-export const CREDITEX_VEU_SCHEMA_PROPERTY_COUNT =
-  Object.keys(CREDITEX_VEU_DIM_PRODUCT_SCHEMA).length;
 
 async function openVeuPublicSession(fetchImpl: CreditexOfficialProductFetch) {
   const jar = new BoundedCookieJar();

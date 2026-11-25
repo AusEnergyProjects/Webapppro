@@ -4,6 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { CreditexOfficialProductError } from "../src/lib/creditex-official-product-registry.ts";
 import {
+  CREDITEX_VEU_ARCHIVED_REPORT as archivedReport,
+  CREDITEX_VEU_PRODUCT_ENTITY,
   CREDITEX_VEU_CATEGORY_PRODUCT_KIND,
   CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
   CREDITEX_VEU_DATASET_ID,
@@ -177,21 +179,34 @@ function refreshResponse() {
   );
 }
 
-function modelResponse() {
+const currentReport = {
+  reportId: CREDITEX_VEU_REPORT_ID,
+  datasetId: CREDITEX_VEU_DATASET_ID,
+  modelId: CREDITEX_VEU_MODEL_ID,
+  entity: CREDITEX_VEU_PRODUCT_ENTITY,
+  queryFields: CREDITEX_VEU_QUERY_FIELDS,
+  queryFieldTypes: CREDITEX_VEU_QUERY_FIELD_TYPES,
+  supplements: CREDITEX_VEU_SUPPLEMENTAL_QUERIES,
+  contract: CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
+};
+
+function modelResponse(report = archivedReport) {
   return JSON.stringify({
-    models: [{ id: CREDITEX_VEU_MODEL_ID, dbName: CREDITEX_VEU_DATASET_ID }],
+    models: [{ id: report.modelId, dbName: report.datasetId }],
     exploration: {
       report: {
-        objectId: CREDITEX_VEU_REPORT_ID,
-        modelId: CREDITEX_VEU_MODEL_ID,
-        model: { id: CREDITEX_VEU_MODEL_ID, dbName: CREDITEX_VEU_DATASET_ID },
+        objectId: report.reportId,
+        modelId: report.modelId,
+        model: { id: report.modelId, dbName: report.datasetId },
       },
     },
   });
 }
 
-function conceptualSchemaResponse(overrides = {}) {
+function conceptualSchemaResponse(overrides = {}, report = archivedReport) {
+  const published = new Set([...report.queryFields, ...report.supplements.flatMap(({ fields }) => fields)]);
   const productProperties = Object.entries(CREDITEX_VEU_DIM_PRODUCT_SCHEMA)
+    .filter(([name]) => published.has(name))
     .map(([Name, [DataType, StableName]]) => ({
       Name,
       DataType,
@@ -217,11 +232,11 @@ function conceptualSchemaResponse(overrides = {}) {
   }
   return JSON.stringify({
     schemas: [{
-      modelId: CREDITEX_VEU_MODEL_ID,
+      modelId: report.modelId,
       error: null,
       schema: {
         Entities: [
-          { Name: "Dim_Product", Properties: productProperties },
+          { Name: report.entity, Properties: productProperties },
           {
             Name: CREDITEX_VEU_REFRESH_SCHEMA.entity,
             Properties: [{
@@ -436,12 +451,16 @@ function compressedResponse(fields, fieldTypes, rows) {
   );
 }
 
-function compressedProductResponse(rows) {
-  return compressedResponse(
-    CREDITEX_VEU_QUERY_FIELDS,
-    CREDITEX_VEU_QUERY_FIELD_TYPES,
-    rows,
-  );
+function wireProductRows(rows, report) {
+  return rows.map((row) => report.queryFields.map(
+    (field) => field === "Record_Type_NameFx__c"
+      ? (row[3] === null ? "PBA lighting products" : null)
+      : row[archivedReport.queryFields.indexOf(field)],
+  ));
+}
+
+function compressedProductResponse(rows, report = archivedReport) {
+  return compressedResponse(report.queryFields, report.queryFieldTypes, wireProductRows(rows, report));
 }
 
 function defaultSupplementalValues(productId) {
@@ -461,8 +480,8 @@ function defaultSupplementalValues(productId) {
   return {};
 }
 
-function supplementsForRows(rows, overrides = {}) {
-  return CREDITEX_VEU_SUPPLEMENTAL_QUERIES.map((definition) => {
+function supplementsForRows(rows, overrides = {}, report = archivedReport) {
+  return report.supplements.map((definition) => {
     const matching = rows.filter((row) => {
       const category = row[3] ?? "";
       return definition.categories.includes(category)
@@ -474,11 +493,11 @@ function supplementsForRows(rows, overrides = {}) {
         ...defaultSupplementalValues(row[1]),
         ...(overrides[row[1]] || {}),
       };
-      return definition.fields.map((field, index) => {
-        if (index === 0) return row[0];
-        if (index === 1) return row[1];
-        if (index === 2) return row[3];
-        if (index === 3) return row[7];
+      return definition.fields.map((field) => {
+        if (field === "Id") return row[0];
+        if (field === "Product_ID__c") return row[1];
+        if (field === "Product_Category_Number__c") return row[3];
+        if (field === "Product_Status__c") return row[7];
         return values[field] ?? null;
       });
     });
@@ -524,11 +543,11 @@ function artifact(overrides = {}) {
   const value = {
     contract: CREDITEX_VEU_PRODUCT_ARTIFACT_CONTRACT,
     sourceKey: CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY,
-    reportId: CREDITEX_VEU_REPORT_ID,
-    datasetId: CREDITEX_VEU_DATASET_ID,
-    modelId: CREDITEX_VEU_MODEL_ID,
+    reportId: archivedReport.reportId,
+    datasetId: archivedReport.datasetId,
+    modelId: archivedReport.modelId,
     sourceRefreshedAt: "2026-08-08T20:17:49.000Z",
-    queryFields: CREDITEX_VEU_QUERY_FIELDS,
+    queryFields: archivedReport.queryFields,
     controls: {
       total: rows.length,
       statuses,
@@ -611,7 +630,7 @@ function productionProductRow(index, category = "22A") {
 function productionProductPageResponse(
   recordCount,
   offset,
-  { includeInductionSupplement = false } = {},
+  { includeInductionSupplement = false, report = archivedReport } = {},
 ) {
   const length = Math.min(CREDITEX_VEU_PAGE_SIZE, recordCount - offset);
   const rows = Array.from({ length }, (_, pageIndex) => {
@@ -621,18 +640,18 @@ function productionProductPageResponse(
       includeInductionSupplement && index === 0 ? "46A" : "22A",
     );
   });
-  const raw = JSON.parse(compressedProductResponse(rows));
+  const raw = JSON.parse(compressedProductResponse(rows, report));
   const dataset = raw.results[0].result.data.dsr.DS[0];
   const continuation = offset + length < recordCount;
   if (continuation) {
     dataset.IC = false;
-    dataset.RT = [rows.at(-1).map((value, index) => (
-      powerBiRestartLiteral(value, CREDITEX_VEU_QUERY_FIELD_TYPES[index])
+    dataset.RT = [wireProductRows([rows.at(-1)], report)[0].map((value, index) => (
+      powerBiRestartLiteral(value, report.queryFieldTypes[index])
     ))];
   }
   return {
     response: JSON.stringify(raw),
-    lastId: rows.at(-1)[0],
+    lastId: rows.at(-1)[report === archivedReport ? 0 : 1],
   };
 }
 
@@ -640,7 +659,7 @@ function boundedProductionStreamArtifact(
   recordCount,
   {
     includeInductionSupplement = false,
-    extraBlankCategoryControl = 0,
+    report = archivedReport, extraBlankCategoryControl = 0,
   } = {},
 ) {
   const categories = Object.fromEntries([
@@ -658,13 +677,13 @@ function boundedProductionStreamArtifact(
   ]));
   const lines = [JSON.stringify({
     recordType: "header",
-    contract: CREDITEX_VEU_BOUNDED_STREAM_ARTIFACT_CONTRACT,
+    contract: report.contract,
     sourceKey: CREDITEX_VEU_PUBLIC_REGISTRY_SOURCE_KEY,
-    reportId: CREDITEX_VEU_REPORT_ID,
-    datasetId: CREDITEX_VEU_DATASET_ID,
-    modelId: CREDITEX_VEU_MODEL_ID,
+    reportId: report.reportId,
+    datasetId: report.datasetId,
+    modelId: report.modelId,
     sourceRefreshedAt: "2026-08-08T20:17:49.000Z",
-    queryFields: CREDITEX_VEU_QUERY_FIELDS,
+    queryFields: report.queryFields,
     controls: {
       total: recordCount,
       statuses: { Approved: recordCount, Legacy: 0 },
@@ -695,17 +714,17 @@ function boundedProductionStreamArtifact(
   lines.push(JSON.stringify({
     recordType: "control",
     key: "modelResponse",
-    response: modelResponse(),
+    response: modelResponse(report),
   }));
   lines.push(JSON.stringify({
     recordType: "control",
     key: "conceptualSchemaResponse",
-    response: conceptualSchemaResponse(),
+    response: conceptualSchemaResponse({}, report),
   }));
   let afterId = null;
   for (let offset = 0; offset < recordCount; offset += CREDITEX_VEU_PAGE_SIZE) {
     const page = productionProductPageResponse(recordCount, offset, {
-      includeInductionSupplement,
+      includeInductionSupplement, report,
     });
     lines.push(JSON.stringify({
       recordType: "page",
@@ -715,9 +734,9 @@ function boundedProductionStreamArtifact(
     afterId = page.lastId;
   }
   const supplementalArtifacts = supplementsForRows(
-    includeInductionSupplement ? [productionProductRow(0, "46A")] : [],
+    includeInductionSupplement ? [productionProductRow(0, "46A")] : [], {}, report,
   );
-  for (const definition of CREDITEX_VEU_SUPPLEMENTAL_QUERIES) {
+  for (const definition of report.supplements) {
     const supplement = supplementalArtifacts.find(
       ({ key }) => key === definition.key,
     );
@@ -742,6 +761,60 @@ function boundedProductionStreamArtifact(
   lines.push("");
   return textEncoder.encode(lines.join("\n"));
 }
+
+test("current VEU reports bind public evidence to stable IDs and only expose published attributes", () => {
+  const rows = formulaProductRows().sort((a, b) => a[1].localeCompare(b[1]));
+  const previous = JSON.parse(new TextDecoder().decode(artifact({
+    rows, supplementalValues: formulaSupplementalValues(),
+  })));
+  const controls = { ...previous.controls };
+  delete controls.modelResponse;
+  delete controls.conceptualSchemaResponse;
+  const lines = [
+    {
+      recordType: "header", contract: currentReport.contract,
+      sourceKey: previous.sourceKey, reportId: currentReport.reportId,
+      datasetId: currentReport.datasetId, modelId: currentReport.modelId,
+      sourceRefreshedAt: previous.sourceRefreshedAt, queryFields: currentReport.queryFields, controls,
+    },
+    { recordType: "control", key: "modelResponse", response: modelResponse(currentReport) },
+    { recordType: "control", key: "conceptualSchemaResponse", response: conceptualSchemaResponse({}, currentReport) },
+    { recordType: "page", afterId: null, response: compressedProductResponse(rows, currentReport) },
+  ];
+  for (const supplement of supplementsForRows(rows, formulaSupplementalValues(), currentReport)) {
+    const { pages, ...header } = supplement;
+    lines.push({
+      recordType: "supplement", ...header,
+      ...(header.key === "project-based-lighting" ? { controlResponse: aggregateResponse(header.expectedCount) } : {}),
+    });
+    for (const page of pages) lines.push({ recordType: "supplement-page", key: header.key, ...page });
+  }
+  const parse = () => parseCreditexVeuProductArtifact(
+    textEncoder.encode(lines.map((line) => JSON.stringify(line)).join("\n") + "\n"), "application/json",
+  );
+  const records = parse();
+  assert.equal(records.length, rows.length);
+  assert.equal(records.find(({ registrationNumber }) => registrationNumber === "000029304").productKind, "veu_project_based_lighting_product");
+  const heatPump = records.find(({ registrationNumber }) => registrationNumber === "000100006");
+  assert.equal(heatPump.sourceRecordKey, "000100006");
+  assert.equal(heatPump.attributes.veuZone4ModelDataAvailable, true);
+  assert.equal(heatPump.attributes.veuSalesforceRecordId, undefined);
+  assert.equal(heatPump.attributes.veuActivityTypeId, undefined);
+  const air = records.find(({ registrationNumber }) => registrationNumber === "000100007");
+  assert.equal(air.approvalStatus, "approved");
+  assert.equal(air.attributes.gemsRegisteredBefore2August2024, undefined);
+  const productPage = lines[3].response;
+  lines[3].response = productPage.replace("PBA lighting products", "Different activity");
+  assert.throws(parse, /blank-category product identity/);
+  lines[3].response = productPage;
+  lines[1].response = modelResponse(archivedReport);
+  assert.throws(parse, /model identity changed/);
+  lines[1].response = modelResponse(currentReport);
+  lines[2].response = conceptualSchemaResponse({}, archivedReport);
+  assert.throws(parse, /schema identity changed/);
+  lines[0].datasetId = archivedReport.datasetId;
+  assert.throws(parse, /artifact identity or schema changed/);
+});
 
 test("VEU acquisition has a fixed Worker heap envelope and exact page capacity", () => {
   assert.equal(CREDITEX_VEU_ARTIFACT_MAXIMUM_BYTES, 32_000_000);
@@ -869,9 +942,9 @@ test("VEU durable acquisition resumes exact pages and assembles canonical bytes"
     const url = new URL(input);
     let body;
     if (url.pathname.includes("modelsAndExploration")) {
-      body = modelResponse();
+      body = modelResponse(currentReport);
     } else if (url.pathname.endsWith("/conceptualschema")) {
-      body = conceptualSchemaResponse();
+      body = conceptualSchemaResponse({}, currentReport);
     } else if (url.pathname.endsWith("/querydata")) {
       const payload = JSON.parse(String(init.body));
       const command = payload.queries[0].Query.Commands[0]
@@ -898,18 +971,17 @@ test("VEU durable acquisition resumes exact pages and assembles canonical bytes"
       } else if (names[0]?.includes("Last Refreshed DateTime")) {
         body = refreshResponse();
       } else if (names.length === CREDITEX_VEU_QUERY_FIELDS.length) {
-        const matches = String(init.body).match(/a0O\d{12}/g) || [];
-        const cursor = matches.at(-1) || "";
-        const offset = cursor ? Number(cursor.slice(3)) + 1 : 0;
+        const cursor = command.Query.Where.at(-1).Condition.Comparison?.Right?.Literal?.Value?.replaceAll("'", "") || "";
+        const offset = /^\d{9}$/.test(cursor) ? Number(cursor) + 1 : 0;
         productFetches.set(cursor, (productFetches.get(cursor) || 0) + 1);
         body = productionProductPageResponse(recordCount, offset, {
-          includeInductionSupplement,
+          includeInductionSupplement, report: currentReport,
         }).response;
       } else {
         supplementalFetches += 1;
         const supplement = supplementsForRows([
           productionProductRow(0, "46A"),
-        ]).find(({ key }) => key === "induction-cooktop");
+        ], {}, currentReport).find(({ key }) => key === "induction-cooktop");
         assert.equal(supplement.pages.length, 1);
         body = supplement.pages[0].response;
       }
@@ -1047,7 +1119,7 @@ test("VEU durable acquisition resumes exact pages and assembles canonical bytes"
     assert.deepEqual(
       fifth.sources[0].bytes,
       boundedProductionStreamArtifact(recordCount, {
-        includeInductionSupplement,
+        includeInductionSupplement, report: currentReport,
         extraBlankCategoryControl: 1,
       }),
     );
@@ -1067,7 +1139,7 @@ test("VEU durable acquisition resumes exact pages and assembles canonical bytes"
     assert.deepEqual({ ...finalStream }, {
       page_count: 15,
       record_count: recordCount,
-      last_record_id: "a0O000000070000",
+      last_record_id: "product:000070000",
       terminal: 1,
     });
     await t.test("a stale retained assembly reports failure and preserves recoverable cleanup", async () => {
