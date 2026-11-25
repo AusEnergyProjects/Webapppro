@@ -55,6 +55,7 @@ import { CreditexHomeDashboard } from "./CreditexHomeDashboard";
 const CreditexCustomerDirectory = dynamic(() => import("./CreditexCustomerDirectory").then((module) => module.CreditexCustomerDirectory), { loading: (props) => <PortalWorkspaceLoading {...props} message="Opening customers..." /> });
 import { CreditexNotifications } from './CreditexNotifications';
 import { hasCreditexPermission, type CreditexPermission } from '@/lib/creditex-permissions';
+import { CreditexGemsCountReview } from './CreditexGemsCountReview';
 import type { CreditexNotificationTarget } from '@/lib/creditex-notifications';
 const CreditexCustomerMap = dynamic(() => import('./CreditexCustomerMap').then(module => module.CreditexCustomerMap), { loading: () => <p role="status">Loading map...</p> });
 const CreditexAllProgramCalculator = dynamic(() => import('./CreditexAllProgramCalculator').then(module => module.CreditexAllProgramCalculator), { loading: () => <p role="status">Loading calculator...</p> });
@@ -1281,7 +1282,12 @@ export function CreditexCompliancePortal() {
         {tab === "tasks" && <section id="creditex-panel-tasks" role="tabpanel" aria-labelledby="creditex-tab-tasks"><PortalTeamWorkspace key={`${user.uid}:${taskTarget}`} workspace="creditex" user={user} view="tasks" initialTaskId={taskTarget}/></section>}
         {tab === 'profile' && <section id="creditex-panel-profile" role="tabpanel" aria-labelledby="creditex-tab-profile"><PortalWorkspacePreferences controller={preferences}/></section>}
         {tab === 'customers' && <section id="creditex-panel-customers" role="tabpanel" aria-labelledby="creditex-tab-customers"><CreditexCustomerDirectory user={user} initialCustomerId={customerTarget} onOpenJob={openJob} onContact={openContact} canOpenJobs={permitted('jobs')}/></section>}
-        {tab === 'calculator' && <section className={styles.calculatorPanel} id="creditex-panel-calculator" role="tabpanel" aria-labelledby="creditex-tab-calculator"><h1>Calculator</h1><CreditexAllProgramCalculator api={api} role={session.role}/></section>}
+        {tab === 'calculator' && <section className={styles.calculatorPanel} id="creditex-panel-calculator" role="tabpanel" aria-labelledby="creditex-tab-calculator">
+          <h1>Calculator</h1>
+          {session.role === 'admin' && session.governanceIdentityVerified && permitted('governance_manage') &&
+            <CreditexGemsCountReview api={api}/>}
+          <CreditexAllProgramCalculator api={api} role={session.role}/>
+        </section>}
         {tab === 'map' && <section id="creditex-panel-map" role="tabpanel" aria-labelledby="creditex-tab-map"><CreditexCustomerMap user={user} canViewCustomers={permitted('customers')} canViewJobs={permitted('jobs')} onOpenRecord={record => { if (record.kind === 'job') openJob(record.id); else if (selectTab('customers')) setCustomerTarget(record.id); }}/></section>}
         {tab === "settings" && <section className={styles.settingsPanel} id="creditex-panel-settings" role="tabpanel" aria-labelledby="creditex-tab-settings"><h1>Workspace settings</h1><p>Manage your workspace and specialist compliance tools.</p><button className={styles.secondaryButton} type="button" onClick={() => selectTab('profile')}>My profile &amp; appearance</button>{permitted('governance') && <details className={styles.supportingTools}><summary>Rules &amp; source management</summary><div><p>Maintain the official documents and rules used by published compliance forms and calculations.</p><div className={styles.settingsActions}><button className={styles.secondaryButton} type="button" onClick={() => selectTab('sources')}>Official sources</button>{session.role === 'admin' && <button className={styles.secondaryButton} type="button" onClick={() => selectTab('governance')}>Government rules</button>}</div></div></details>}{permitted('voice_setup') && <details className={styles.voiceSettings}><summary>Audit phone setup</summary><CreditexVoiceSetupPanel user={user}/></details>}</section>}
 

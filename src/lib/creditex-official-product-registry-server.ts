@@ -2080,11 +2080,12 @@ async function loadStreamingValues(
       `Official source ${sourceKey} requested an invalid stream lookup.`,
     );
   }
+  // Keep the small requested list outermost so each key seeks its exact supplement.
   const rows = await db.prepare(`WITH requested AS (
       SELECT value source_record_key FROM json_each(?)
     ) SELECT staged.source_record_key, staged.value_json
     FROM requested
-    JOIN compliance_official_product_stream_values staged
+    CROSS JOIN compliance_official_product_stream_values staged
       ON staged.snapshot_id = ?
       AND staged.source_key = ?
       AND staged.source_record_key = requested.source_record_key`)

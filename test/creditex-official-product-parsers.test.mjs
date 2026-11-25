@@ -7,6 +7,7 @@ import {
 } from "../src/lib/creditex-official-product-parsers.ts";
 import {
   CER_CEC_PRODUCT_SOURCES,
+  ARCHIVED_GEMS_PRODUCT_SOURCES,
   GEMS_PRODUCT_SOURCES,
   LICENCE_REQUIRED_PRODUCT_CONNECTORS,
   OFFICIAL_PRODUCT_SOURCES,
@@ -176,7 +177,7 @@ test("formula-critical inverter, battery and GEMS air-conditioner values are num
   assert.equal(battery.attributes.ratedAcPowerKw, null);
   assert.equal(battery.attributes.ratedDcPowerKw, null);
 
-  const airConditionerSource = ckanFixtureSource(GEMS_PRODUCT_SOURCES[0]);
+  const airConditionerSource = ckanFixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES[0]);
   const airConditionerRecord = ckanRecord(airConditionerSource, {
     _id: 7,
     Brand: "Example Air",
@@ -218,7 +219,7 @@ test("formula-critical inverter, battery and GEMS air-conditioner values are num
 
 test("direct VEU and NSW GEMS product classes expose normalized formula inputs", () => {
   const sourceFor = (productKind) => {
-    const source = GEMS_PRODUCT_SOURCES.find((candidate) => (
+    const source = ARCHIVED_GEMS_PRODUCT_SOURCES.find((candidate) => (
       candidate.productKind === productKind
     ));
     assert.ok(source, `missing controlled source for ${productKind}`);
@@ -456,7 +457,7 @@ test("CSV schema drift and count regression fail closed", () => {
 });
 
 test("GEMS CKAN parsing preserves primitive values and stable registration identity", () => {
-  const source = ckanFixtureSource(GEMS_PRODUCT_SOURCES[1]);
+  const source = ckanFixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES[1]);
   const record = ckanRecord(source, {
     _id: 41,
     Brand: "Rheem",
@@ -492,7 +493,7 @@ test("GEMS CKAN parsing preserves primitive values and stable registration ident
 });
 
 test("identical CKAN datastore duplicates collapse without using volatile row ids", () => {
-  const source = ckanFixtureSource(GEMS_PRODUCT_SOURCES[0]);
+  const source = ckanFixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES[0]);
   const first = ckanRecord(source, {
     _id: 100,
     Brand: "Example Air",
@@ -526,7 +527,7 @@ test("identical CKAN datastore duplicates collapse without using volatile row id
 
 test("superseded GEMS rows retain an absent registration without changing current identities", () => {
   for (const sourceKey of ["gems-air-conditioners", "gems-commercial-refrigerators"]) {
-    const source = fixtureSource(GEMS_PRODUCT_SOURCES.find((candidate) => (
+    const source = fixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES.find((candidate) => (
       candidate.sourceKey === sourceKey
     )));
     const jsonSource = ckanFixtureSource(source);
@@ -596,7 +597,7 @@ test("superseded GEMS rows retain an absent registration without changing curren
 });
 
 test("official CKAN CSV dumps reconcile only exact datastore duplicates", () => {
-  const source = fixtureSource(GEMS_PRODUCT_SOURCES[0]);
+  const source = fixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES[0]);
   const first = ckanRecord(source, {
     _id: 100,
     Brand: "Example Air",
@@ -642,8 +643,8 @@ test("largest reviewed GEMS CSV shape parses inside a 48 MiB old-space ceiling",
   ).href;
   const script = `
     import { parseOfficialProductSource } from ${JSON.stringify(parserUrl)};
-    import { GEMS_PRODUCT_SOURCES } from ${JSON.stringify(sourcesUrl)};
-    const source = GEMS_PRODUCT_SOURCES.find((candidate) => (
+    import { ARCHIVED_GEMS_PRODUCT_SOURCES } from ${JSON.stringify(sourcesUrl)};
+    const source = ARCHIVED_GEMS_PRODUCT_SOURCES.find((candidate) => (
       candidate.sourceKey === "gems-air-conditioners"
     ));
     if (!source) throw new Error("missing air-conditioner source");
@@ -689,11 +690,11 @@ test("largest reviewed GEMS CSV shape parses inside a 48 MiB old-space ceiling",
   const measurement = JSON.parse(result.stdout.trim());
   assert.equal(measurement.recordCount, 6_000);
   assert.ok(measurement.byteLength > 5_000_000);
-  assert.ok(measurement.byteLength <= GEMS_PRODUCT_SOURCES[0].maxBytes);
+  assert.ok(measurement.byteLength <= ARCHIVED_GEMS_PRODUCT_SOURCES[0].maxBytes);
 });
 
 test("CKAN field drift, partial pagination and non-primitive attributes fail closed", () => {
-  const source = ckanFixtureSource(GEMS_PRODUCT_SOURCES[2]);
+  const source = ckanFixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES[2]);
   const record = ckanRecord(source, {
     _id: 1,
     Submit_ID: "9001",
@@ -760,6 +761,60 @@ test("wrong media type and malformed CSV are rejected before import", () => {
     ),
     expectedSourceError("OFFICIAL_PRODUCT_SOURCE_CSV_MALFORMED"),
   );
+});
+
+test("November GEMS exports use published registration identities, dates and field units", () => {
+  const air = fixtureSource(GEMS_PRODUCT_SOURCES[0]);
+  const cells = (source, fields) => source.expectedFields.map((name) => String(fields[name] ?? ""));
+  const published = {
+    Brand: "Carrier", Model_No: "38QUH060N8L/42QCE060N8P", "Registration Number": "ZAC0834",
+    SubmitStatus: "Approved", "Effective date": "2025-12-23", ExpDate: "2125-11-29",
+    "Rated Total Cool Capacity kW": "6.100", "Rated Heating Capacity kW": "6.550",
+    "Rated cooling power input W": "1782.000",
+  };
+  const [unit] = parseOfficialProductSource(air, csvFixture(air, cells(air, published)), "text/csv");
+  assert.equal(unit.sourceRecordKey, "gems-air-conditioners:7:ZAC0834|7:Carrier|23:38QUH060N8L/42QCE060N8P");
+  assert.equal(unit.eligibleFrom, "2025-12-23");
+  assert.equal(unit.eligibleTo, "2125-11-29");
+  assert.equal(unit.availableInAustralia, null);
+  assert.equal(unit.attributes.ratedCoolingCapacityKw, 6.1);
+  assert.equal(unit.attributes.ratedHeatingCapacityKw, 6.55);
+  assert.equal(unit.attributes.ratedCoolingInputKw, 1.782);
+  assert.equal(unit.attributes.sourceSchemaKey, "gems-air-conditioners@2026-11-26");
+  assert.ok(unit.attributes.sourceFormulaFields.split("|").every((field) => air.expectedFields.includes(field)));
+  assert.throws(() => parseOfficialProductSource(air, csvFixture(air, cells(air, {
+    ...published, "Registration Number": "", SubmitStatus: "Superseded",
+  })), "text/csv"), expectedSourceError("OFFICIAL_PRODUCT_SOURCE_IDENTITY_MISSING"));
+
+  const motor = fixtureSource(GEMS_PRODUCT_SOURCES.find(({ productKind }) => productKind === "electric_motor"));
+  const fields = {
+    Brand: "Techtop", "Model No": "TCI 132M-8", "Registration Number": "AEM13157",
+    SubmitStatus: "Approved", ExpDate: "2028-10-22T00:00:00", Regulator: "AUS",
+    MEPS_compl_load: "Both 100% and 75% rated load",
+  };
+  const [record] = parseOfficialProductSource(motor, csvFixture(motor, cells(motor, fields)), "text/csv");
+  assert.equal(record.eligibleFrom, null);
+  assert.equal(record.eligibleTo, "2028-10-22");
+  assert.equal(record.availableInAustralia, null);
+  assert.equal(record.attributes.mepsCompliantAt75Percent, true);
+  assert.equal(record.attributes.mepsCompliantAt100Percent, true);
+  assert.equal(record.attributes.fullLoadTorqueNm, null);
+  assert.throws(() => parseOfficialProductSource(motor, csvFixture(motor, cells(motor, {
+    ...fields, ExpDate: "2028-10-22T12:00:00",
+  })), "text/csv"), expectedSourceError("OFFICIAL_PRODUCT_SOURCE_DATE_INVALID"));
+  assert.throws(() => parseOfficialProductSource(motor, csvFixture(motor, cells(motor, {
+    ...fields, MEPS_compl_load: "75% estimated",
+  })), "text/csv"), expectedSourceError("OFFICIAL_PRODUCT_SOURCE_FIELD_INVALID"));
+
+  const archive = fixtureSource(ARCHIVED_GEMS_PRODUCT_SOURCES[0]);
+  const retained = csvFixture(archive, cells(archive, {
+    ...published, Submit_ID: "21234", GrandDate: "23/12/2025", Sold_in: "Australia",
+  }));
+  assert.throws(() => parseOfficialProductSource(air, retained, "text/csv"),
+    expectedSourceError("OFFICIAL_PRODUCT_SOURCE_SCHEMA_CHANGED"));
+  const [historical] = parseOfficialProductSource(archive, retained, "text/csv");
+  assert.equal(historical.attributes.sourceSchemaKey, "gems-air-conditioners@2026-08-08");
+  assert.equal(historical.sourceRecordKey, "gems-air-conditioners:5:21234|7:ZAC0834|7:Carrier|23:38QUH060N8L/42QCE060N8P");
 });
 
 test("live official feeds satisfy their controlled schemas and record floors", {

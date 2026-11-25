@@ -4,6 +4,7 @@ import type {
 } from "./creditex-official-product-sources";
 import {
   CREDITEX_OFFICIAL_PRODUCT_SOURCE_CONTRACT,
+  PUBLISHED_GEMS_SCHEMA_DATE,
 } from "./creditex-official-product-sources.ts";
 
 export type OfficialProductAttribute = string | number | boolean | null;
@@ -302,7 +303,15 @@ function normalizeDate(
       `${fieldName} must be a date string`,
     );
   }
-  const dateParts = parseIsoDateParts(value.trim());
+  // CKAN's motor resource publishes date-only expiries as unzoned midnight.
+  const text = value.trim();
+  const dateOnly = source.verifiedAt === PUBLISHED_GEMS_SCHEMA_DATE
+    && source.productKind === "electric_motor"
+    && fieldName === "ExpDate"
+    && /^\d{4}-\d{2}-\d{2}T00:00:00$/.test(text)
+    ? text.slice(0, 10)
+    : text;
+  const dateParts = parseIsoDateParts(dateOnly);
   if (!dateParts) {
     throw sourceError(
       "OFFICIAL_PRODUCT_SOURCE_DATE_INVALID",
@@ -373,6 +382,7 @@ function createSourceRecordKey(
       if (
         source.registryCode === "gems-products"
         && fieldName === "Registration Number"
+        && source.identityFields.includes("Submit_ID")
         && source.approvalStatusField !== null
         && attributes[source.approvalStatusField] === "Superseded"
       ) return "0:";
@@ -468,7 +478,7 @@ function recordTextMapping(source: OfficialProductSource): Readonly<{
     case "chiller":
       return {
         manufacturerField: null,
-        brandField: "Brand_Reg",
+        brandField: source.expectedFields.includes("Brand_reg") ? "Brand_reg" : "Brand_Reg",
         modelField: "Model_No",
         seriesField: "Family Name",
         registrationNumberField: "Registration Number",
@@ -631,19 +641,20 @@ function airConditionerFormulaAttributes(
   const normalized: Record<string, OfficialProductAttribute> = {
     ratedCoolingCapacityKw: firstNumber(source, attributes, [
       { fieldName: "Rated Total Cool Capacity W", divisor: 1_000 },
+      { fieldName: "Rated Total Cool Capacity kW" },
       { fieldName: "C-Total Cool Rated" },
     ]),
     ratedHeatingCapacityKw: firstNumber(source, attributes, [
       { fieldName: "Rated Heating Capacity watts", divisor: 1_000 },
+      { fieldName: "Rated Heating Capacity kW" },
       { fieldName: "H-Total Heat Rated" },
     ]),
     aeeR: optionalNumber(source, attributes, "Rated AEER"),
     acop: optionalNumber(source, attributes, "Rated ACOP"),
-    ratedCoolingInputKw: optionalNumber(
-      source,
-      attributes,
-      "Rated cooling power input kW",
-    ),
+    ratedCoolingInputKw: firstNumber(source, attributes, [
+      { fieldName: "Rated cooling power input kW" },
+      { fieldName: "Rated cooling power input W", divisor: 1_000 },
+    ]),
   };
   for (const field of mappedFields) {
     normalized[field.normalized] = optionalNumber(source, attributes, field.raw);
@@ -660,9 +671,9 @@ function motorLoadCoverage(
   if (value === null || UNAVAILABLE_NUMBERS.has(value.toLowerCase())) {
     return { at75Percent: null, at100Percent: null };
   }
-  if (value === "75") return { at75Percent: true, at100Percent: false };
-  if (value === "100") return { at75Percent: false, at100Percent: true };
-  if (value.toLowerCase() === "both") {
+  if (value === "75" || value === "75% rated load") return { at75Percent: true, at100Percent: false };
+  if (value === "100" || value === "100% rated load") return { at75Percent: false, at100Percent: true };
+  if (value.toLowerCase() === "both" || value === "Both 100% and 75% rated load") {
     return { at75Percent: true, at100Percent: true };
   }
   throw sourceError(
@@ -1002,6 +1013,11 @@ function formulaSourceFields(source: OfficialProductSource): string {
         "h_star_cold",
         "h_star_mixed",
         "h_star_hot",
+        ...(source.verifiedAt === PUBLISHED_GEMS_SCHEMA_DATE ? [
+          "Rated Total Cool Capacity kW",
+          "Rated Heating Capacity kW",
+          "Rated cooling power input W",
+        ] : []),
       ].join("|");
     case "electric_water_heater":
       return "Gross Store Cap|Decl Stand Heat";
@@ -1068,7 +1084,9 @@ function eligibilityAttributes(
     sourceSchemaVersion: CREDITEX_OFFICIAL_PRODUCT_SOURCE_CONTRACT,
     sourceSchemaKey: `${source.sourceKey}@${source.verifiedAt}`,
     sourceFieldCount: source.expectedFields.length,
-    sourceFormulaFields: formulaSourceFields(source),
+    sourceFormulaFields: source.verifiedAt === PUBLISHED_GEMS_SCHEMA_DATE
+      ? formulaSourceFields(source).split("|").filter((field) => source.expectedFields.includes(field)).join("|")
+      : formulaSourceFields(source),
   };
   if (source.productKind === "solar_pv_module") {
     normalized.fireTested = strictYesNo(source, attributes, "Fire Tested");

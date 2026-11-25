@@ -4,6 +4,8 @@ export const CREDITEX_OFFICIAL_PRODUCT_SOURCE_CONTRACT =
 export const CREDITEX_OFFICIAL_PRODUCT_SOURCES_VERIFIED_AT =
   "2026-08-08" as const;
 
+export const PUBLISHED_GEMS_SCHEMA_DATE = "2026-11-26" as const;
+
 export type OfficialProductRegistryCode =
   | "cer-cec-products"
   | "gems-products";
@@ -56,7 +58,7 @@ export type OfficialProductSource = Readonly<{
   resourceId: string | null;
   verifiedRecordCount: number;
   verifiedUniqueRecordCount: number;
-  verifiedAt: typeof CREDITEX_OFFICIAL_PRODUCT_SOURCES_VERIFIED_AT;
+  verifiedAt: typeof CREDITEX_OFFICIAL_PRODUCT_SOURCES_VERIFIED_AT | typeof PUBLISHED_GEMS_SCHEMA_DATE;
 }>;
 
 export type LicenceRequiredProductConnector = Readonly<{
@@ -262,7 +264,7 @@ export const CER_CEC_PRODUCT_SOURCES: readonly OfficialProductSource[] = [
   },
 ] as const;
 
-export const GEMS_PRODUCT_SOURCES: readonly OfficialProductSource[] = [
+export const ARCHIVED_GEMS_PRODUCT_SOURCES: readonly OfficialProductSource[] = [
   {
     registryCode: "gems-products",
     sourceKey: "gems-air-conditioners",
@@ -517,6 +519,197 @@ export const GEMS_PRODUCT_SOURCES: readonly OfficialProductSource[] = [
     verifiedAt: CREDITEX_OFFICIAL_PRODUCT_SOURCES_VERIFIED_AT,
   },
 ] as const;
+
+// Data.gov.au replaced its GEMS exports in 2026. Preserve the reviewed
+// schemas above for retained evidence and bind new imports to the public
+// registration number, brand and model. CKAN row IDs change between dumps.
+const publishedGemsSchemas = [
+  {
+    sourceKey: "gems-air-conditioners",
+    expectedFields: [
+      "_id|ApplStandard|MEPSComp|N-Standard|Model_No|Family Name|Brand|C-Dehumid_Rated|Configuration1|Configuration2",
+      "Configuration2-unitmount|Configuration3_Sink|Configuration3_Source|Country|IndoorType|EERtestAvg|COPtestAvg",
+      "Setting_cool|Setting_heat|VSCP_EER50|VSCP_COP50|Outdoortype|Phase|Refrigerant|Sold_in|ExpDate|SubmitStatus|Type",
+      "Demand Response Capability|Product Class|Product Website|Registration Number|Is variable speed|Type variable output",
+      "Var output compressor|Variable output rated as fixed sp|No HSPF|Rated Total Cool Capacity W",
+      "Rated Total Cool Capacity kW|Rated cooling power input W|Have T1 half cap results|T1_half_cap_power_rated",
+      "T1_half_cap_cooling_cap_rated|Have T1 min cap results|T1_min_cap_power_rated|T1_min_cap_cooling_cap_rated",
+      "Have low temp cool full cap results|Low temp cooling full cap power rated|Low temp cooling full cap rated",
+      "Have low temp cool half cap results|Have low temp cool min cap results|Low temp cooling min cap power rated",
+      "Low temp cooling min cap rated|Rated Heating Capacity kW|Rated Heating Capacity watts|Rated heating power input W",
+      "H1_half_cap_power_rated|H1_half_cap_heat_cap_rated|Have H1 min cap results|H1_min_cap_power_rated",
+      "H1_min_cap_heat_cap_rated|Have H2 extended mode results|H2_ext_cap_power_rated|H2_ext_cap_heat_cap_rated",
+      "Have H2 full mode results|H2_full_cap_power_rated|H2_full_cap_heat_cap_rated|Have H2 half capacity results",
+      "H2_half_cap_power_rated|H2_half_cap_heat_cap_rated|Have H2 min capacity results|H2_min_cap_power_rated",
+      "H2_min_cap_heat_cap_rated|Have H3 extended mode results|H3_ext_cap_power_rated|H3_ext_cap_heat_cap_rated",
+      "Have H3 full mode results|H3_full_cap_power_rated|H3_full_cap_heat_cap_rated|Have H3 half capacity results",
+      "H3_half_cap_power_rated|H3_half_cap_heat_cap_rated|indoor_sound_level|outdoor_sound_level|Residential TCSPF_cold",
+      "Residential TCSPF_mixed|Residential TCSPF_hot|Commercial TCSPF_cold|Commercial TCSPF_mixed|Commercial TCSPF_hot",
+      "Residential tcec_cold|Residential tcec_mixed|Residential tcec_hot|Commercial tcec_cold|Commercial tcec_mixed",
+      "Commercial tcec_hot|c_star_cold|c_star_mixed|c_star_hot|Residential HSPF_cold|Residential HSPF_mixed",
+      "Residential HSPF_hot|Commercial HSPF_cold|Commercial HSPF_mixed|Commercial HSPF_hot|Residential thec_cold",
+      "Residential thec_mixed|Residential thec_hot|Commercial thec_cold|Commercial thec_mixed|Commercial thec_hot",
+      "h_star_cold|h_star_mixed|h_star_hot|Outdoor unit only|Have_water_tank|Rated cool power input with water",
+      "Rated cool cap with water W|Residential tcec_cold with water|Residential tcec_mixed with water",
+      "Residential tcec_hot with water|PIA inoperative power|Rated AEER|Rated ACOP|Regulator",
+      "Low temp cooling half cap power rated|Low temp cooling half cap rated|Rated cool cap with water kW|Effective date",
+      "H2_full_cap_heat_cap_rated_kW|Heating Total Heat Test1|Jurisdiction",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model_No"],
+    eligibleFromField: "Effective date",
+    minimumRecords: 5_500,
+    verifiedRecordCount: 5_703,
+    verifiedUniqueRecordCount: 5_700,
+  },
+  {
+    sourceKey: "gems-electric-water-heaters",
+    expectedFields: [
+      "_id|adjust_temp|ApplStandard|Brand|Cap|Country|Decl Stand Heat|Depth|Gross Store Cap|Heating Elements|Height|Model No",
+      "Family Name|N-Standard|Sold_in|SubmitStatus|tot_expan_valves|tot_feed_tanks|tot_hotwat_fittings|TPR Valves|Type",
+      "vent_displacement|Width|ExpDate|Product Class|Product Website|Registration Number|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model No"],
+    eligibleFromField: null,
+    minimumRecords: 1_300,
+    verifiedRecordCount: 1_382,
+    verifiedUniqueRecordCount: 1_382,
+  },
+  {
+    sourceKey: "gems-gas-water-heaters",
+    expectedFields: [
+      "_id|SubmitStatus|Sold_in|Brand|Model Number|Family Name|Country|N-Standard|ApplStandard|Width|Height|Depth",
+      "Product Class|Product Website|Representative Brand URL|Suitable for Gas Types|Expiry Date",
+      "Nominal Gas Consumption (MJ/Hour)|Nominal Delivery output (x Litres per min. @ 45AdegC rise)",
+      "Comparative Annual Energy Consumption (MJ/Year)|Suitable for Solar boosting|Storage Capacity (Litres)",
+      "Water Heater Type|Registration Number|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model Number"],
+    eligibleFromField: null,
+    minimumRecords: 600,
+    verifiedRecordCount: 641,
+    verifiedUniqueRecordCount: 641,
+  },
+  {
+    sourceKey: "gems-close-control-air-conditioners",
+    expectedFields: [
+      "_id|Brand|Model Number|Family Name|Sold_in|Country|Width|Height|Depth|Product Class|EER|Rated Power Input",
+      "Cooling Capacity|Variable output compressor|SubmitStatus|Expiry Date|Product Website|N-Standard|ApplStandard",
+      "Registration Number|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model Number"],
+    eligibleFromField: null,
+    minimumRecords: 300,
+    verifiedRecordCount: 386,
+    verifiedUniqueRecordCount: 386,
+  },
+  {
+    sourceKey: "gems-household-refrigerators-freezers",
+    expectedFields: [
+      "_id|ApplStandard|Brand|Labelled energy consumption (kWh/year)|CompartGrVol|CompartType|Configuration|Country|Depth",
+      "Designation|FF Vol|FZ Vol|Group|Height|Icemaker|MEPSApproval|Model No|Family Name|N-Standard|Star2009|SRI2009",
+      "No_Doors|S-MEPS_Ad|S-MEPScutoff|Sold_in|SubmitStatus|Tot Vol|Width|ExpDate|Product Class|Product Website",
+      "Fixed MEPS allowance factor|Variable MEPS allowance factor|Adjusted volume|Type|Registration Number",
+      "Defrost_System_Controller|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model No"],
+    eligibleFromField: null,
+    minimumRecords: 3_300,
+    verifiedRecordCount: 3_452,
+    verifiedUniqueRecordCount: 3_452,
+  },
+  {
+    sourceKey: "gems-televisions",
+    expectedFields: [
+      "_id|Brand_Reg|Model_No|Family Name|SoldIn|Country|screensize|Screen_Area|Screen_Tech|Pasv_stnd_power|Act_stnd_power",
+      "Act_stnd_time|Avg_mode_power|Labelled energy consumption (kWh/year)|SubmitStatus|ExpDate|Star2|Product Website",
+      "Star Rating Index|Power supply|Tuner Type|What test standard was used|Registration Number|Regulatory Standard",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand_Reg", "Model_No"],
+    eligibleFromField: null,
+    minimumRecords: 4_500,
+    verifiedRecordCount: 4_643,
+    verifiedUniqueRecordCount: 4_643,
+  },
+  {
+    sourceKey: "gems-clothes-dryers",
+    expectedFields: [
+      "_id|ApplStandard|Brand|Cap|Combination|Control|Country|Depth|Height|Model No|Family Name|N-Standard",
+      "Labelled energy consumption (kWh/year)|New SRI|New Star|Prog Name|Prog Time|Sold_in|Registration Number|SubmitStatus",
+      "Type|Width|ExpDate|Product Website|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model No"],
+    eligibleFromField: null,
+    minimumRecords: 800,
+    verifiedRecordCount: 850,
+    verifiedUniqueRecordCount: 850,
+  },
+  {
+    sourceKey: "gems-swimming-pool-pumps",
+    expectedFields: [
+      "_id|Brand|Model|Product Website|Available|Pool Pump Type|Nameplate Input Power|Input Power|Current|Star Rating Index",
+      "Star Rating|Weighted Energy Factor|Daily Run Time|Labelled energy consumption (kWh/year)|Date Available Until",
+      "Registration Number|High|Low",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model"],
+    eligibleFromField: null,
+    minimumRecords: 500,
+    verifiedRecordCount: 565,
+    verifiedUniqueRecordCount: 565,
+  },
+  {
+    sourceKey: "gems-electric-motors",
+    expectedFields: [
+      "_id|ApplStandard|Brand|Country Of Manufacturer|Eff50|Eff75|EffFL|Enclr|Frame|High_eff_compl|High_eff_load|kWatt",
+      "MEPS_Applic|MEPS_compl_load|Model No|Family Name|N-Standard|N-TestMethod|NumPls|Sold_in|SubmitStatus|ExpDate",
+      "Mount_Code|Voltage|Product Website|Registration Number|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model No"],
+    eligibleFromField: null,
+    minimumRecords: 4_400,
+    verifiedRecordCount: 5_344,
+    verifiedUniqueRecordCount: 5_344,
+  },
+  {
+    sourceKey: "gems-commercial-refrigerators",
+    expectedFields: [
+      "_id|ApplStandard|Brand|Model No|Family Name|Sold_in|Country|Temp_Class|total_dis_area|Length",
+      "Climate Class For Energy Consumption Test|Climate Class For M-package Temperature Test|Climate Class For Duty Type",
+      "Depth|Cabinet Description|Total Energy Consumption(kWh/24h)|Total Energy Consumption (Reference)|Cabinet Type",
+      "Star Rating|Energy Efficiency Index|Net Volume|Height|Product Class Number|SubmitStatus|ExpDate|Product Website",
+      "N-Standard|Registration Number|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand", "Model No"],
+    eligibleFromField: null,
+    minimumRecords: 7_000,
+    verifiedRecordCount: 7_647,
+    verifiedUniqueRecordCount: 7_647,
+  },
+  {
+    sourceKey: "gems-chillers",
+    expectedFields: [
+      "_id|Brand_reg|Model_No|Sing_or_fam|standard_rating|Country|SoldIn|Family Name|condenser_type|cert_program",
+      "cooling_capacity|Decl_COP|Decl_IPLV|Registration Number|SubmitStatus|ExpDate|Product Website|Regulator",
+    ].join("|").split("|"),
+    identityFields: ["Registration Number", "Brand_reg", "Model_No"],
+    eligibleFromField: null,
+    minimumRecords: 160,
+    verifiedRecordCount: 193,
+    verifiedUniqueRecordCount: 193,
+  },
+] as const;
+
+export const GEMS_PRODUCT_SOURCES: readonly OfficialProductSource[] = publishedGemsSchemas.map(
+  (published) => {
+    const source = ARCHIVED_GEMS_PRODUCT_SOURCES.find(({ sourceKey }) => sourceKey === published.sourceKey);
+    if (!source) throw new Error("Unrecognised GEMS publication");
+    return {
+      ...source,
+      ...published,
+      availabilityField: published.expectedFields.includes("Available") ? "Available" : null,
+      verifiedAt: PUBLISHED_GEMS_SCHEMA_DATE,
+    };
+  },
+);
 
 export const OFFICIAL_PRODUCT_SOURCES: readonly OfficialProductSource[] = [
   ...CER_CEC_PRODUCT_SOURCES,

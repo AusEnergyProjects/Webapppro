@@ -77,12 +77,16 @@ function tokens(value: string) {
 }
 
 const generated = library as GeneratedIndustryLibrary;
-const searchableChunks = generated.chunks.map((chunk) => ({
-  chunk,
-  normalizedText: ` ${normalize(chunk.text)} `,
-  tokenSet: new Set(tokens(chunk.text)),
-  titleTokens: new Set(tokens(chunk.sourceTitle)),
-}));
+function buildSearchIndex() {
+  return generated.chunks.map((chunk) => ({
+    chunk,
+    normalizedText: ` ${normalize(chunk.text)} `,
+    tokenSet: new Set(tokens(chunk.text)),
+    titleTokens: new Set(tokens(chunk.sourceTitle)),
+  }));
+}
+
+let searchIndex: ReturnType<typeof buildSearchIndex> | undefined;
 
 export const SURGE_INDUSTRY_LIBRARY_SUMMARY = Object.freeze({
   schemaVersion: generated.schemaVersion,
@@ -215,7 +219,8 @@ function rankedPassages(
   ));
   const asksAboutHotWater = /\b(?:hot[- ]?water|water heater|HPWH|heat[- ]?pump hot[- ]?water)\b/i.test(subjectQuery);
 
-  return searchableChunks
+  searchIndex ??= buildSearchIndex();
+  return searchIndex
     .map((candidate) => {
       const matchedConcepts = requiredConcepts.filter((concept) => concept.passagePattern.test(candidate.chunk.text));
       if (requiredConcepts.length && !matchedConcepts.length) {

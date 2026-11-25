@@ -11,6 +11,7 @@ import {
 import {
   CREDITEX_AUTOMATIC_STREAMING_REFRESH_RECORD_BUDGET,
   ensureAutomaticOfficialProductRegistryCurrent,
+  hasPendingCreditexOfficialProductRefresh,
   loadOfficialProductRegistryStatus,
   searchOfficialProducts,
   syncOfficialProductRegistry,
@@ -30,8 +31,9 @@ import {
   CREDITEX_VEU_DURABLE_ACQUISITION_MAX_CURRENT_SCALE_QUANTA,
 } from "../src/lib/creditex-veu-product-sources.ts";
 import { parseOfficialProductSource } from "../src/lib/creditex-official-product-parsers.ts";
-import { GEMS_PRODUCT_SOURCES } from "../src/lib/creditex-official-product-sources.ts";
+import { ARCHIVED_GEMS_PRODUCT_SOURCES } from "../src/lib/creditex-official-product-sources.ts";
 import { CREDITEX_TESSA_PRODUCT_MINIMUM_RECORDS } from "../src/lib/creditex-tessa-product-parser.ts";
+import { creditexAutomaticProductRegistryStreamingBudget } from "../src/lib/creditex-product-registry-maintenance.ts";
 
 const sresMigration = fs.readFileSync(
   new URL(
@@ -2099,6 +2101,27 @@ function persistedRefreshProgress(database, registryCode) {
     WHERE registry_code = ?`).get(registryCode) || null;
 }
 
+test("streamed supplements seek each requested product through the complete primary key", async (t) => {
+  let lookupPlan;
+  const { database, d1, artifactStore } = fixture({
+    onBind(sql, values) {
+      if (!lookupPlan && sql.includes("SELECT staged.source_record_key, staged.value_json")) {
+        lookupPlan = database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...values);
+      }
+    },
+  });
+  t.after(() => database.close());
+  const harness = resumableStreamingHarness({ recordCount: 501 });
+  const result = await syncOfficialProductRegistry(d1, harness.definition, {
+    artifactStore,
+    now: new Date("2026-08-01T00:00:00.000Z"),
+  });
+  assert.equal(result.recordCount, 501);
+  assert.ok(lookupPlan?.some(({ detail }) =>
+    /SEARCH staged USING PRIMARY KEY \(snapshot_id=\? AND source_key=\? AND source_record_key=\?\)/.test(detail),
+  ), JSON.stringify(lookupPlan));
+});
+
 test("bounded streaming refresh resumes monotonically, activates, then finishes cleanup", async (t) => {
   const recordCount = 2_501;
   const { database, d1, artifactStore } = fixture();
@@ -3068,7 +3091,7 @@ test("GEMS retains superseded rows without registration numbers but rejects thei
   const { database, d1, artifactStore } = fixture();
   t.after(() => database.close());
   const officialSource = {
-    ...GEMS_PRODUCT_SOURCES.find(({ sourceKey }) => sourceKey === "gems-air-conditioners"),
+    ...ARCHIVED_GEMS_PRODUCT_SOURCES.find(({ sourceKey }) => sourceKey === "gems-air-conditioners"),
     minimumRecords: 2,
     maximumRecords: 10,
   };
@@ -4723,19 +4746,31 @@ test("VEU retains Legacy custody but requires review before any source-count dec
 });
 
 test("live automatic feeds activate official products into searchable snapshots", async (t) => {
-  const { database, d1, artifactStore } = fixture();
+  const { database, d1 } = fixture();
+  const artifactStore = fileArtifactStore();
   t.after(() => database.close());
+  t.after(() => fs.rmSync(artifactStore.directory, { recursive: true, force: true }));
   const results = [];
   const now = new Date();
   const installationDate = now.toLocaleDateString("en-CA", {
     timeZone: "Australia/Sydney",
   });
   for (const registry of CREDITEX_AUTOMATIC_PRODUCT_REGISTRIES) {
-    const result = await syncOfficialProductRegistry(d1, registry, {
+    const refresh = () => syncOfficialProductRegistry(d1, registry, {
       fetchImpl: fetch,
       artifactStore,
       now,
+      maximumStreamingRecordsPerRun: creditexAutomaticProductRegistryStreamingBudget(registry),
     });
+    let result = await refresh();
+    let calls = 1;
+    while (await hasPendingCreditexOfficialProductRefresh(d1, registry.registryCode)) {
+      assert.ok(calls < VEU_WORKER_SELF_CALL_LIMIT, `${registry.registryCode} did not finish scheduled work`);
+      result = await refresh();
+      calls += 1;
+    }
+    assert.ok(result.snapshotId, `${registry.registryCode} must activate a snapshot`);
+    assert.notEqual(result.complete, false);
     results.push(result);
     t.diagnostic(`${registry.registryCode}: activated ${result.recordCount} official records`);
   }
