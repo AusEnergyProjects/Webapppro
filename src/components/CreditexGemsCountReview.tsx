@@ -10,7 +10,10 @@ type Api = (
 
 const endpoint = "/api/creditex/official-products";
 
-export function CreditexGemsCountReview({ api }: { api: Api }) {
+export function CreditexGemsCountReview({ api, governanceIdentityVerified }: {
+  api: Api;
+  governanceIdentityVerified: boolean;
+}) {
   const [review, setReview] = useState<ReturnType<typeof gemsCountReview>>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,7 +37,7 @@ export function CreditexGemsCountReview({ api }: { api: Api }) {
 
   const reviewNote = note.trim().replace(/\s+/g, " ");
   async function submitReview() {
-    if (busy || !review?.sources.length || reviewNote.length < 20 || reviewNote.length > 1000) return;
+    if (!governanceIdentityVerified || busy || !review?.sources.length || reviewNote.length < 20 || reviewNote.length > 1000) return;
     setBusy(true);
     setNotice("Rechecking the official files and applying your review…");
     try {
@@ -63,6 +66,7 @@ export function CreditexGemsCountReview({ api }: { api: Api }) {
     <details className={styles.supportingTools}>
       <summary>Review GEMS product counts</summary>
       <div>
+        {!governanceIdentityVerified && <p>You can check GEMS product counts with this account. To approve decreases, sign in with a Creditex administrator account whose governance identity has been independently verified.</p>}
         <button className={styles.secondaryButton} type="button" disabled={busy} onClick={loadReview}>
           Check latest GEMS status
         </button>
@@ -80,12 +84,14 @@ export function CreditexGemsCountReview({ api }: { api: Api }) {
                 <td>{source.acceptedRecordCount.toLocaleString("en-AU")}</td>
               </tr>)}</tbody>
             </table>
-            <p><label>Reason for accepting these decreases (20 to 1,000 characters)
-              <textarea className={styles.textarea} value={note} maxLength={1000} disabled={busy}
-                onChange={event => setNote(event.target.value)} />
-            </label></p>
-            <button className={styles.button} type="button" disabled={busy || reviewNote.length < 20}
-              onClick={submitReview}>Approve these decreases and refresh GEMS</button>
+            {governanceIdentityVerified && <>
+              <p><label>Reason for accepting these decreases (20 to 1,000 characters)
+                <textarea className={styles.textarea} value={note} maxLength={1000} disabled={busy}
+                  onChange={event => setNote(event.target.value)} />
+              </label></p>
+              <button className={styles.button} type="button" disabled={busy || reviewNote.length < 20}
+                onClick={submitReview}>Approve these decreases and refresh GEMS</button>
+            </>}
           </> : <p>{review.message || "The latest refresh has no count decreases awaiting approval."}</p>}
         </>}
         <p role="status">{notice}</p>

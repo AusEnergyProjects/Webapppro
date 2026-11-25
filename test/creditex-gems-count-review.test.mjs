@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import test from "node:test";
+import { build } from "esbuild";
+import { chromium } from "playwright-core";
 import { gemsCountReview, gemsReviewWasPublished } from "../src/lib/creditex-gems-count-review.ts";
 
 function status(message, overrides = {}) {
@@ -47,4 +50,45 @@ test("a review succeeds only when the returned reviewed snapshot is current with
   }
   assert.equal(gemsReviewWasPublished({...response, results: [{...result, reviewedCountDecrease: false}]}), null);
   assert.equal(gemsReviewWasPublished({ok: true, queued: true}), null);
+});
+
+const browserPath = [process.env.FORM_QA_BROWSER, "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "/usr/bin/chromium"].find(path => path && existsSync(path));
+
+test("unverified governance admins can inspect the same candidate counts with approval controls reserved for verified admins", {
+  skip: !browserPath && "Native browser unavailable",
+}, async () => {
+  const { outputFiles } = await build({
+    stdin: { resolveDir: process.cwd(), loader: "tsx", contents: `
+      import { createRoot } from "react-dom/client";
+      import { CreditexGemsCountReview } from "./src/components/CreditexGemsCountReview";
+      const api = async (path, init) => {
+        window.requests.push([path, init?.method ?? "GET"]);
+        return {registries: [window.registry]};
+      };
+      createRoot(document.body.appendChild(document.createElement("div"))).render(
+        <CreditexGemsCountReview api={api} governanceIdentityVerified={window.verified} />);
+    ` }, outfile: "gems-count-review.js", jsx: "automatic", format: "iife", bundle: true, write: false,
+  });
+  const script = outputFiles.find(file => file.path.endsWith(".js")).text;
+  const browser = await chromium.launch({ executablePath: browserPath, headless: true });
+  try {
+    for (const verified of [false, true]) {
+      const page = await browser.newPage();
+      await page.evaluate(state => Object.assign(window, state), {
+        registry: status(failure("gems-chillers:12->10")), requests: [], verified,
+      });
+      await page.addScriptTag({ content: script });
+      await page.getByText("Review GEMS product counts", { exact: true }).click();
+      await page.getByRole("button", { name: "Check latest GEMS status" }).click();
+      await page.getByRole("row", { name: "chillers 12 10" }).waitFor();
+      assert.equal(await page.getByText(/sign in with a Creditex administrator account/).count(), verified ? 0 : 1);
+      assert.equal(await page.getByRole("textbox", { name: /Reason for accepting/ }).count(), verified ? 1 : 0);
+      assert.equal(await page.getByRole("button", { name: /Approve these decreases/ }).count(), verified ? 1 : 0);
+      assert.deepEqual(await page.evaluate(() => window.requests), [["/api/creditex/official-products", "GET"]]);
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
 });

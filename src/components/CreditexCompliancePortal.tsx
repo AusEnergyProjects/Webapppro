@@ -1284,8 +1284,8 @@ export function CreditexCompliancePortal() {
         {tab === 'customers' && <section id="creditex-panel-customers" role="tabpanel" aria-labelledby="creditex-tab-customers"><CreditexCustomerDirectory user={user} initialCustomerId={customerTarget} onOpenJob={openJob} onContact={openContact} canOpenJobs={permitted('jobs')}/></section>}
         {tab === 'calculator' && <section className={styles.calculatorPanel} id="creditex-panel-calculator" role="tabpanel" aria-labelledby="creditex-tab-calculator">
           <h1>Calculator</h1>
-          {session.role === 'admin' && session.governanceIdentityVerified && permitted('governance_manage') &&
-            <CreditexGemsCountReview api={api}/>}
+          {session.role === 'admin' && permitted('governance_manage') &&
+            <CreditexGemsCountReview api={api} governanceIdentityVerified={session.governanceIdentityVerified}/>}
           <CreditexAllProgramCalculator api={api} role={session.role}/>
         </section>}
         {tab === 'map' && <section id="creditex-panel-map" role="tabpanel" aria-labelledby="creditex-tab-map"><CreditexCustomerMap user={user} canViewCustomers={permitted('customers')} canViewJobs={permitted('jobs')} onOpenRecord={record => { if (record.kind === 'job') openJob(record.id); else if (selectTab('customers')) setCustomerTarget(record.id); }}/></section>}
