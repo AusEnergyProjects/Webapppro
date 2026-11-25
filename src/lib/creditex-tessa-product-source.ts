@@ -65,7 +65,9 @@ export const CREDITEX_TESSA_WATER_HEATER_EXPORT_FIELDS = [
 ] as const;
 
 export const CREDITEX_TESSA_WATER_HEATER_EXPORT_QUERY =
-  "u_statusINactive,cancelled^u_report_activity_definitionIND17,D18,D19,D20" as const;
+  // Filtering on TESSA's multi-value activity field omits some D17/D19 heat
+  // pumps. Select the two product types, then enforce activity on each CSV row.
+  "u_statusINactive,cancelled^u_report_product_typeINWater Heater - Heat Pump,Water Heater - Solar (Electric Boosted)" as const;
 
 export const CREDITEX_TESSA_WATER_HEATER_EXPORT_URL = [
   "https://tessa.energysustainabilityschemes.nsw.gov.au/",

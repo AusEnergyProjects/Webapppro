@@ -1,10 +1,12 @@
 import { strFromU8, unzipSync } from "fflate";
+import { workbookToCsv } from "./xlsx-import.ts";
 import {
   CER_SRES_PRODUCT_SOURCES,
   CER_SRES_PRODUCT_REGISTER_URL,
   CER_SRES_REFERENCE_SOURCES,
   CREDITEX_SRES_REGISTRY_CONTRACT,
   CreditexSresRegistryError,
+  assertCerSresWorkbookRows,
   parseCerSresProductCsv,
   registeredStcsForZone,
   resolveCerSresPostcode,
@@ -30,6 +32,7 @@ const REGISTRY_CODE = "cer_sres_swh" as const;
 const SOURCE_MAXIMUM_BYTES = 1_900_000;
 const SOURCE_MAXIMUM_TOTAL_BYTES = 5 * 1024 * 1024;
 const REGISTER_METADATA_MAXIMUM_EXPANDED_BYTES = 1_000_000;
+const REGISTER_WORKBOOK_MAXIMUM_EXPANDED_BYTES = 12 * 1024 * 1024;
 const XLSX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PRODUCT_INSERT_CHUNK = 1_000;
@@ -546,9 +549,11 @@ function registerPublishedDate(day: string, monthName: string, year: string) {
 export function parseCerSresRegisterMetadataXlsx(value: Uint8Array) {
   let sharedStrings: Uint8Array | undefined;
   let oversized = false;
+  let totalExpandedBytes = 0;
   try {
     sharedStrings = unzipSync(Uint8Array.from(value), {
       filter(file) {
+        totalExpandedBytes += file.originalSize;
         if (file.name !== "xl/sharedStrings.xml") return false;
         if (file.originalSize > REGISTER_METADATA_MAXIMUM_EXPANDED_BYTES) {
           oversized = true;
@@ -564,7 +569,7 @@ export function parseCerSresRegisterMetadataXlsx(value: Uint8Array) {
       "The official CER register workbook could not be read safely.",
     );
   }
-  if (!sharedStrings || oversized) {
+  if (!sharedStrings || oversized || totalExpandedBytes > REGISTER_WORKBOOK_MAXIMUM_EXPANDED_BYTES) {
     return fail(
       "SRES_REGISTER_METADATA_INVALID",
       502,
@@ -677,14 +682,20 @@ async function fetchRegisterMetadata(
   };
 }
 
+type CerRegisterReleasePin = {
+  version: number;
+  publishedOn: string;
+  recordCount: number;
+  csvSha256: string;
+  workbookSha256: string;
+};
+
 function validateReviewedRegisterRelease(
-  source: CerSresProductSource,
+  reviewed: CerRegisterReleasePin,
   csvSha256: string,
   records: readonly CerSresProductRecord[],
   metadata: RegisterMetadataArtifact,
 ) {
-  const reviewed = source.reviewedRelease;
-  if (!reviewed) return;
   if (
     metadata.registerVersion < reviewed.version
     || metadata.publishedOn < reviewed.publishedOn
@@ -713,6 +724,37 @@ function validateReviewedRegisterRelease(
       503,
       "The reviewed CER register version changed without a new official release and was quarantined.",
     );
+  }
+}
+
+function validateAcceptedCerReleases(current: SnapshotRow, artifacts: SourceArtifact[]) {
+  const manifest = manifestRecord(parseManifest(current.source_manifest_json));
+  const sources = Array.isArray(manifest?.sources) ? manifest.sources : [];
+  for (const artifact of artifacts) {
+    if (!artifact.source.reviewedRelease) continue;
+    const previous = manifestRecord(sources.find((entry) => (
+      manifestRecord(entry)?.sourceKey === artifact.source.sourceKey
+    )));
+    const metadata = manifestRecord(previous?.registerMetadata);
+    // Snapshots predating workbook custody contain no release to compare.
+    if (!metadata || !previous) continue;
+    // Before per-workbook releases, all three sources shared the manifest release.
+    const release = "version" in metadata ? metadata : manifestRecord(manifest?.registerRelease);
+    if (
+      typeof release?.version !== "number" || !Number.isSafeInteger(release.version)
+      || typeof release.publishedOn !== "string" || !DATE_PATTERN.test(release.publishedOn)
+      || typeof previous.recordCount !== "number" || typeof previous.sha256 !== "string"
+      || typeof metadata.sha256 !== "string"
+    ) {
+      return fail("SRES_REGISTRY_INTEGRITY_FAILED", 503, "The accepted CER workbook release is invalid.");
+    }
+    validateReviewedRegisterRelease({
+      version: release.version,
+      publishedOn: release.publishedOn,
+      recordCount: previous.recordCount,
+      csvSha256: previous.sha256,
+      workbookSha256: metadata.sha256,
+    }, artifact.sha256, artifact.records, artifact.registerMetadata);
   }
 }
 
@@ -792,7 +834,22 @@ async function fetchSource(
   const records = parseCerSresProductCsv(body, source);
   const sha256 = await sha256Hex(bytes);
   const registerMetadata = await fetchRegisterMetadata(source, fetchImpl);
-  validateReviewedRegisterRelease(source, sha256, records, registerMetadata);
+  if (source.reviewedRelease) {
+    validateReviewedRegisterRelease(source.reviewedRelease, sha256, records, registerMetadata);
+    if (registerMetadata.registerVersion > source.reviewedRelease.version) {
+      // A future workbook can advance before the linked CSV. Bind every value
+      // to its dated publication before accepting this unpinned release.
+      let workbookCsv: string;
+      try {
+        workbookCsv = await workbookToCsv(new File(
+          [Uint8Array.from(registerMetadata.bytes)], "cer-register.xlsx",
+        ));
+      } catch {
+        return fail("SRES_REGISTER_METADATA_INVALID", 502, "The official CER workbook table could not be read.");
+      }
+      assertCerSresWorkbookRows(workbookCsv, body);
+    }
+  }
   return {
     source,
     contentType,
@@ -1198,18 +1255,24 @@ export async function syncCerSresProductRegistry(
     const registerMetadataArtifacts = productArtifacts.map(
       (artifact) => artifact.registerMetadata,
     );
-    const registerRelease = registerMetadataArtifacts[0];
+    const orderedReleases = [...registerMetadataArtifacts].sort(
+      (left, right) => left.registerVersion - right.registerVersion,
+    );
+    const registerRelease = orderedReleases.at(-1);
     if (
       !registerRelease
-      || registerMetadataArtifacts.some((artifact) => (
-        artifact.registerVersion !== registerRelease.registerVersion
-        || artifact.publishedOn !== registerRelease.publishedOn
-      ))
+      || orderedReleases.some((release, index) => {
+        const previous = orderedReleases[index - 1];
+        if (!previous) return false;
+        return release.registerVersion === previous.registerVersion
+          ? release.publishedOn !== previous.publishedOn
+          : release.publishedOn <= previous.publishedOn;
+      })
     ) {
       return fail(
         "SRES_REGISTER_RELEASE_INCONSISTENT",
         503,
-        "The official CER product workbooks do not identify one consistent register release.",
+        "The versions and publication dates in the official CER product workbooks are inconsistent.",
       );
     }
     const artifacts: (SourceArtifact | ReferenceArtifact)[] = [
@@ -1243,6 +1306,7 @@ export async function syncCerSresProductRegistry(
     LIMIT 1`).bind(REGISTRY_CODE).first<SnapshotRow>();
     const decreases: SourceCountDecrease[] = [];
     if (current) {
+      validateAcceptedCerReleases(current, productArtifacts);
       const previousSourceCounts = await db.prepare(`SELECT
           artifact.source_key, artifact.record_count
         FROM compliance_product_registry_source_artifacts artifact
@@ -1302,6 +1366,9 @@ export async function syncCerSresProductRegistry(
         registerUrl: CER_SRES_PRODUCT_REGISTER_URL,
         version: registerRelease.registerVersion,
         publishedOn: registerRelease.publishedOn,
+        ...(orderedReleases[0].registerVersion !== registerRelease.registerVersion
+          ? { scope: "latest_source_release" }
+          : {}),
       },
       sources: artifacts.map((artifact) => ({
         sourceKey: artifact.source.sourceKey,
@@ -1310,6 +1377,8 @@ export async function syncCerSresProductRegistry(
               technology: artifact.source.technology,
               category: artifact.source.category,
               registerMetadata: {
+                version: artifact.registerMetadata.registerVersion,
+                publishedOn: artifact.registerMetadata.publishedOn,
                 url: artifact.registerMetadata.source.url,
                 contentType: artifact.registerMetadata.contentType,
                 byteLength: artifact.registerMetadata.bytes.byteLength,

@@ -6,9 +6,6 @@ import test from "node:test";
 import { strToU8, zipSync } from "fflate";
 import {
   CER_SRES_PRODUCT_SOURCES,
-  CER_SRES_REGISTER_RELEASE_URL,
-  CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
-  CER_SRES_REGISTER_REVIEWED_VERSION,
   CER_SRES_REGISTRY_REVIEWED_ON,
   CreditexSresRegistryError,
   parseCerSresProductCsv,
@@ -257,16 +254,31 @@ function multiRowCsvFixture(source, rowOverrides) {
 }
 
 function registerMetadataFixture(
-  version = CER_SRES_REGISTER_REVIEWED_VERSION,
+  version = 58,
   published = "10 August 2026",
+  productCsv,
 ) {
   const sharedStrings = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">
       <si><t>Version ${version} - Published ${published}</t></si>
     </sst>`;
-  return zipSync({
+  const files = {
     "xl/sharedStrings.xml": strToU8(sharedStrings),
-  }, {
+  };
+  if (productCsv) {
+    const rows = productCsv.trimEnd().split("\r\n").map((row, rowIndex) => {
+      const cells = row.split(",").map((cell, col) => {
+        const value = rowIndex > 0 && (col === 3 || col === 4)
+          ? new Date(cell + " 00:00:00 GMT").toISOString().slice(0, 10)
+          : cell;
+        const ref = String.fromCharCode(65 + col) + (rowIndex + 1);
+        return '<c r="' + ref + '" t="inlineStr"><is><t>' + value + '</t></is></c>';
+      });
+      return "<row>" + cells.join("") + "</row>";
+    });
+    files["xl/worksheets/sheet1.xml"] = strToU8("<worksheet><sheetData>" + rows.join("") + "</sheetData></worksheet>");
+  }
+  return zipSync(files, {
     mtime: new Date("2026-08-10T00:00:00.000Z"),
   });
 }
@@ -398,14 +410,8 @@ test("official CER postcode transcriptions resolve technology-specific zones", (
   );
 });
 
-test("reviewed CER register release 58 pins every official product export", () => {
-  assert.equal(CER_SRES_REGISTRY_REVIEWED_ON, "2026-08-10");
-  assert.equal(CER_SRES_REGISTER_REVIEWED_VERSION, 58);
-  assert.equal(CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON, "2026-08-10");
-  assert.equal(
-    CER_SRES_REGISTER_RELEASE_URL,
-    "https://cer.gov.au/news-and-media/news/2026/august/register-solar-water-heaters-version-58-now-available",
-  );
+test("reviewed CER workbooks pin each official product export to its published release", () => {
+  assert.equal(CER_SRES_REGISTRY_REVIEWED_ON, "2026-11-26");
   assert.deepEqual(
     CER_SRES_PRODUCT_SOURCES.map((source) => ({
       sourceKey: source.sourceKey,
@@ -420,13 +426,13 @@ test("reviewed CER register release 58 pins every official product export", () =
           "https://cer.gov.au/document/air-source-heat-pump-models-0",
         minimumRecords: 1_178,
         reviewedRelease: {
-          version: 58,
-          publishedOn: "2026-08-10",
+          version: 59,
+          publishedOn: "2026-11-12",
           recordCount: 1_178,
           csvSha256:
-            "b764b58c6717a82563da6db498e03c9e63940de35865e483f6395e33ac12916b",
+            "1e07a33446de0302b535478dfe59be22416f1a6e87f156b27f5aaf77bf300aa4",
           workbookSha256:
-            "12c9b300992d29c88a35e0a70c486ebff862fa8e5febdd6576000c3f9045e241",
+            "992acca397f846fc2aae1bf793ab685335e0cb1ebf7c16a5fa5c5ed8073b7edb",
         },
       },
       {
@@ -617,12 +623,12 @@ test("reviewed register bytes fail closed unless CER publishes a newer release",
   );
 
   const newer = fixture();
-  const version59 = registerMetadataFixture(59, "1 September 2026");
+  const nextFile = csvFixture(SOURCES[0], { 2: "VERSION-59" });
   const metadataOverrides = new Map([
-    ["cer-ashp", csvFixture(SOURCES[0], { 2: "VERSION-59" })],
+    ["cer-ashp", nextFile],
     ...SOURCES.map((source) => [
       `${source.sourceKey}-register-metadata`,
-      version59,
+      registerMetadataFixture(59, "1 September 2026", source === SOURCES[0] ? nextFile : csvFixture(source)),
     ]),
   ]);
   const accepted = await syncCerSresProductRegistry(newer.d1, {
@@ -633,6 +639,38 @@ test("reviewed register bytes fail closed unless CER publishes a newer release",
     sources: pinnedSources,
   });
   assert.equal(accepted.changed, true);
+
+  // An independently published heat-pump update must retain the exact solar workbook releases.
+  const partial = new Map([
+    ["cer-ashp", nextFile],
+    ["cer-ashp-register-metadata", metadataOverrides.get("cer-ashp-register-metadata")],
+  ]);
+  const sync = (overrides) => syncCerSresProductRegistry(first.d1, {
+    fetchImpl: fetchFixture(overrides), artifactStore: first.artifactStore,
+    now: new Date("2026-09-02T00:30:00.000Z"), references: REFERENCES, sources: pinnedSources,
+  });
+  await assert.rejects(sync(new Map([["cer-ashp-register-metadata", partial.get("cer-ashp-register-metadata")]])),
+    expectedRegistryError("SRES_REGISTER_EXPORT_MISMATCH"));
+  const partialResult = await sync(partial);
+  assert.equal(partialResult.changed, true);
+  assert.equal((await sync(partial)).changed, false);
+  const revisedCsv = csvFixture(SOURCES[0], { 2: "CHANGED-AFTER-ACCEPTANCE" });
+  const rewritten = new Map([
+    ["cer-ashp", revisedCsv],
+    ["cer-ashp-register-metadata", registerMetadataFixture(59, "1 September 2026", revisedCsv)],
+  ]);
+  await assert.rejects(sync(rewritten), expectedRegistryError("SRES_REGISTER_RELEASE_CHANGED"));
+  const mismatchedDate = new Map(partial);
+  mismatchedDate.set("cer-swh-lt-700l-register-metadata",
+    registerMetadataFixture(59, "2 September 2026", csvFixture(SOURCES[1])));
+  await assert.rejects(sync(mismatchedDate), expectedRegistryError("SRES_REGISTER_RELEASE_INCONSISTENT"));
+  await assert.rejects(sync(new Map()), expectedRegistryError("SRES_REGISTER_RELEASE_REGRESSION"));
+  const status = await loadCerSresRegistryStatus(first.d1);
+  assert.equal(status.snapshot.id, partialResult.snapshotId);
+  assert.deepEqual(status.snapshot.sourceManifest.sources.filter((s) => s.registerMetadata)
+    .map((s) => [s.sourceKey, s.registerMetadata.version]), [
+    ["cer-ashp", 59], ["cer-swh-lt-700l", 58], ["cer-swh-ge-700l", 58],
+  ]);
 });
 
 test("registry sync rejects official source redirects without following them", async () => {
@@ -2220,8 +2258,9 @@ test("live CER product exports satisfy the controlled ingestion contract", {
   assert.deepEqual(status.snapshot.sourceManifest.registerRelease, {
     registerUrl:
       "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters",
-    version: 58,
-    publishedOn: "2026-08-10",
+    version: 59,
+    publishedOn: "2026-11-12",
+    scope: "latest_source_release",
   });
   assert.deepEqual(
     status.snapshot.sourceManifest.sources
@@ -2229,12 +2268,16 @@ test("live CER product exports satisfy the controlled ingestion contract", {
       .map((source) => ({
         sourceKey: source.sourceKey,
         recordCount: source.recordCount,
+        version: source.registerMetadata.version,
+        publishedOn: source.registerMetadata.publishedOn,
         csvSha256: source.sha256,
         workbookSha256: source.registerMetadata.sha256,
       })),
     CER_SRES_PRODUCT_SOURCES.map((source) => ({
       sourceKey: source.sourceKey,
       recordCount: source.reviewedRelease.recordCount,
+      version: source.reviewedRelease.version,
+      publishedOn: source.reviewedRelease.publishedOn,
       csvSha256: source.reviewedRelease.csvSha256,
       workbookSha256: source.reviewedRelease.workbookSha256,
     })),
@@ -2252,7 +2295,7 @@ test("live CER product exports satisfy the controlled ingestion contract", {
         brand: "Rinnai",
         model: "KSHP250M24L70",
         eligible_from: "2026-08-10",
-        eligible_to: "2026-12-13",
+        eligible_to: "2030-12-31",
         zone_1_stcs: 26,
         zone_2_stcs: 25,
         zone_3_stcs: 31,
@@ -2264,7 +2307,7 @@ test("live CER product exports satisfy the controlled ingestion contract", {
         brand: "Rinnai",
         model: "KSHP250M24L70H",
         eligible_from: "2026-08-10",
-        eligible_to: "2026-12-13",
+        eligible_to: "2030-12-31",
         zone_1_stcs: 26,
         zone_2_stcs: 25,
         zone_3_stcs: 31,
@@ -2276,7 +2319,7 @@ test("live CER product exports satisfy the controlled ingestion contract", {
         brand: "Rinnai",
         model: "KSHP315M24L70",
         eligible_from: "2026-08-10",
-        eligible_to: "2026-12-13",
+        eligible_to: "2030-12-31",
         zone_1_stcs: 26,
         zone_2_stcs: 25,
         zone_3_stcs: 31,

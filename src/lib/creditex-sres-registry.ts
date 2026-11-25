@@ -6,11 +6,7 @@ import {
 
 export const CREDITEX_SRES_REGISTRY_CONTRACT =
   "creditex-sres-official-registry/v1";
-export const CER_SRES_REGISTRY_REVIEWED_ON = "2026-08-10";
-export const CER_SRES_REGISTER_REVIEWED_VERSION = 58;
-export const CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON = "2026-08-10";
-export const CER_SRES_REGISTER_RELEASE_URL =
-  "https://cer.gov.au/news-and-media/news/2026/august/register-solar-water-heaters-version-58-now-available";
+export const CER_SRES_REGISTRY_REVIEWED_ON = "2026-11-26";
 export const CER_SRES_PRODUCT_REGISTER_URL =
   "https://cer.gov.au/schemes/renewable-energy-target/small-scale-renewable-energy-scheme/small-scale-renewable-energy-systems/solar-water-heaters/register-solar-water-heaters";
 export const CER_SRES_POSTCODE_ZONE_URL =
@@ -48,13 +44,13 @@ export const CER_SRES_PRODUCT_SOURCES = [
     expectedColumns: 10,
     minimumRecords: 1_178,
     reviewedRelease: {
-      version: CER_SRES_REGISTER_REVIEWED_VERSION,
-      publishedOn: CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+      version: 59,
+      publishedOn: "2026-11-12",
       recordCount: 1_178,
       csvSha256:
-        "b764b58c6717a82563da6db498e03c9e63940de35865e483f6395e33ac12916b",
+        "1e07a33446de0302b535478dfe59be22416f1a6e87f156b27f5aaf77bf300aa4",
       workbookSha256:
-        "12c9b300992d29c88a35e0a70c486ebff862fa8e5febdd6576000c3f9045e241",
+        "992acca397f846fc2aae1bf793ab685335e0cb1ebf7c16a5fa5c5ed8073b7edb",
     },
   },
   {
@@ -67,8 +63,8 @@ export const CER_SRES_PRODUCT_SOURCES = [
     expectedColumns: 9,
     minimumRecords: 6_591,
     reviewedRelease: {
-      version: CER_SRES_REGISTER_REVIEWED_VERSION,
-      publishedOn: CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+      version: 58,
+      publishedOn: "2026-08-10",
       recordCount: 6_591,
       csvSha256:
         "c93c34b33011f0688d09cdb9278f563a782c06464ddb9abed96aa870b6078c9b",
@@ -86,8 +82,8 @@ export const CER_SRES_PRODUCT_SOURCES = [
     expectedColumns: 9,
     minimumRecords: 8_989,
     reviewedRelease: {
-      version: CER_SRES_REGISTER_REVIEWED_VERSION,
-      publishedOn: CER_SRES_REGISTER_REVIEWED_PUBLISHED_ON,
+      version: 58,
+      publishedOn: "2026-08-10",
       recordCount: 8_989,
       csvSha256:
         "95162d637f75ae5b94b1a687c262f503c897607f5143ba03a1f3bc88b3659903",
@@ -410,6 +406,31 @@ const COMMON_HEADERS = [
   "Number of certificates for an installation in Zone3",
   "Number of certificates for an installation in Zone4",
 ];
+
+export function assertCerSresWorkbookRows(workbookCsv: string, sourceCsv: string) {
+  const [header, ...rows] = csvRows(sourceCsv.replace(/^\uFEFF/, ""));
+  const workbook = csvRows(workbookCsv);
+  const headerIndex = workbook.findIndex((row) => row[0] === "Item");
+  const byItem = new Map(rows.map((row) => [row[0].trim(), row]));
+  const mismatch = () => fail(
+    "SRES_REGISTER_EXPORT_MISMATCH", 503,
+    "The official CER CSV and its release workbook contain different product data.",
+  );
+  if (headerIndex < 0 || workbook[headerIndex].length !== header.length
+    || workbook[headerIndex].some((value, index) => value.trim() !== header[index].trim())) {
+    return mismatch();
+  }
+  for (const row of workbook.slice(headerIndex + 1)) {
+    const expected = byItem.get(row[0]?.trim());
+    if (!expected || row.length !== expected.length) return mismatch();
+    if (row.some((value, index) => {
+      const source = expected[index].trim();
+      return value.trim() !== (index === 3 || index === 4 ? cerDate(source) : source);
+    })) return mismatch();
+    byItem.delete(expected[0].trim());
+  }
+  if (byItem.size) return mismatch();
+}
 
 export function parseCerSresProductCsv(
   value: string,

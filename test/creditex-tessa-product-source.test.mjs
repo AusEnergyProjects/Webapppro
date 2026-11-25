@@ -234,6 +234,9 @@ test("live TESSA export matches the reviewed CSV contract", {
     record.attributes.tessaAcceptedActivities.split(",")
       .every((activity) => ["D17", "D18", "D19", "D20"].includes(activity))
   )));
+  const previouslyOmitted = records.find((record) => record.sourceRecordKey === "ACC0388802");
+  assert.equal(previouslyOmitted?.model, "AGMHP320W-E");
+  assert.deepEqual(previouslyOmitted.attributes.tessaAcceptedActivities.split(",").sort(), ["D17", "D19"]);
   const sample = records.find((record) => record.sourceRecordKey === "ACC0309607");
   assert.ok(sample);
   assert.equal(sample.brand, "Emerald Energy");
