@@ -46,11 +46,15 @@ import {
   type CreditexSresArtifactStore,
 } from "@/lib/creditex-sres-registry-server";
 import {
+  CREDITEX_COMPLETE_REGISTER_TIMEOUT_MS,
   CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER,
+  creditexAutomaticProductRegistryMaintenanceTargets,
   creditexProductRegistryRefreshDue,
+  creditexRequiresCompleteRegisterImport,
   enqueueCreditexProductRegistryRefresh,
   hasDueCreditexProductRegistryRefreshRequest,
   hasQueuedCreditexProductRegistryRefreshRequest,
+  maintainNextCreditexProductRegistry,
   withCreditexProductRegistryFleetLease,
 } from
   "@/lib/creditex-product-registry-maintenance";
@@ -193,6 +197,28 @@ export async function GET(request: Request) {
           "The selected official registry does not support automatic continuation.",
         );
       }
+      // A maintenance client may wait for a whole-register import. Ordinary
+      // picker polls still return immediately. The fleet lease rechecks the
+      // durable queue before doing any work, including its retry time.
+      const waitPreference = /^wait=(\d{1,3})$/i.exec(request.headers.get("Prefer") || "");
+      const importWaitSeconds = CREDITEX_COMPLETE_REGISTER_TIMEOUT_MS / 1000;
+      const waitForImport = waitPreference !== null && Number(waitPreference[1]) >= importWaitSeconds
+        && creditexRequiresCompleteRegisterImport(continuationRegistryCode);
+      if (waitForImport && await hasDueCreditexProductRegistryRefreshRequest(database, requestedRegistryCodes)) {
+        await maintainNextCreditexProductRegistry({
+          database,
+          preferredRegistryCode: continuationRegistryCode,
+          queuedOnly: true,
+          returnScheduledFailures: true,
+          scheduledOperationTimeoutMs: CREDITEX_COMPLETE_REGISTER_TIMEOUT_MS,
+          targets: creditexAutomaticProductRegistryMaintenanceTargets({
+            artifactStore: (env as unknown as {
+              EVIDENCE?: CreditexOfficialProductArtifactStore & CreditexSresArtifactStore;
+            }).EVIDENCE,
+            environment: runtimeEnvironment,
+          }),
+        });
+      }
       const [refreshQueued, continuationDue] = await Promise.all([
         hasQueuedCreditexProductRegistryRefreshRequest(
           database,
@@ -203,18 +229,11 @@ export async function GET(request: Request) {
           requestedRegistryCodes,
         ),
       ]);
-      return json({
-        ok: true,
-        refreshQueued,
-        continuationDue,
-      }, continuationDue ? 202 : 200,
-        continuationDue
-          ? {
-              "Retry-After": "3",
-              [CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER]:
-                continuationRegistryCode,
-            }
-          : {});
+      const headers: Record<string, string> = {};
+      if (continuationDue) headers["Retry-After"] = "3";
+      if (waitForImport) headers["Preference-Applied"] = `wait=${importWaitSeconds}`;
+      else if (continuationDue) headers[CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER] = continuationRegistryCode;
+      return json({ ok: true, refreshQueued, continuationDue }, continuationDue ? 202 : 200, headers);
     }
     const productKind = parameters.get("productKind");
     const installationDate = parameters.get("installationDate");

@@ -633,6 +633,7 @@ const worker = {
         }),
         drainCreditexProductRegistryMaintenance({
           database: getD1(),
+          scheduled: true,
           targets: creditexAutomaticProductRegistryMaintenanceTargets({
             artifactStore: registryArtifactStore,
             environment: registryEnvironment,

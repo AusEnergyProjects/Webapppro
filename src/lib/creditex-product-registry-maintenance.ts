@@ -33,6 +33,12 @@ export const CREDITEX_PRODUCT_REGISTRY_FLEET_HEARTBEAT_MS = 30 * 1000;
 export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MS = 22_000;
 export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS = 64;
 export const CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS = 18_000;
+// These whole-register imports must finish validation and activation in one
+// invocation. Cron and a waiting client can keep the invocation alive during I/O.
+export const CREDITEX_COMPLETE_REGISTER_TIMEOUT_MS = 120_000;
+export function creditexRequiresCompleteRegisterImport(registryCode: string) {
+  return registryCode === "gems-products" || registryCode === "cer_sres_swh";
+}
 export const CREDITEX_PRODUCT_REGISTRY_CONTINUATION_HEADROOM_MS = 4_000;
 export const CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS = 30_000;
 export const CREDITEX_PRODUCT_REGISTRY_DISPATCH_HEADER =
@@ -288,8 +294,8 @@ export function creditexAutomaticProductRegistryMaintenanceTargets({
           fleetLeaseId,
           maximumStreamingRecordsPerRun:
             creditexAutomaticProductRegistryStreamingBudget(definition),
-          sourceFetchTimeoutMs:
-            CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+          sourceFetchTimeoutMs: creditexRequiresCompleteRegisterImport(definition.registryCode)
+            ? undefined : CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
           signal,
         })
       ),
@@ -312,8 +318,6 @@ export function creditexAutomaticProductRegistryMaintenanceTargets({
           artifactStore,
           now,
           fleetLeaseId,
-          sourceFetchTimeoutMs:
-            CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
           signal,
         })
       ),
@@ -472,10 +476,11 @@ async function deferQueuedRefreshRequest(
   attemptCount = 0,
 ) {
   const rapidRetryDelays = [3_000, 6_000, 12_000] as const;
-  const retryDelay = error === undefined
-    ? CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS
-    : rapidRetryDelays[attemptCount]
-      ?? CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS;
+  const needsReview = (error instanceof CreditexOfficialProductError && error.code === "OFFICIAL_PRODUCT_SOURCE_COUNT_REGRESSION")
+    || (error instanceof CreditexSresRegistryError && error.code === "SRES_PRODUCT_SOURCE_COUNT_REGRESSION");
+  let retryDelay = CREDITEX_PRODUCT_REGISTRY_RETRY_BACKOFF_MS;
+  if (needsReview) retryDelay = CREDITEX_PRODUCT_REGISTRY_PROACTIVE_REFRESH_MS;
+  else if (error !== undefined) retryDelay = rapidRetryDelays[attemptCount] ?? CREDITEX_PRODUCT_REGISTRY_QUEUED_RETRY_MAX_MS;
   const notBefore = new Date(
     now.getTime() + retryDelay,
   ).toISOString();
@@ -524,6 +529,7 @@ export async function maintainNextCreditexProductRegistry({
   loadQueuedRefresh = loadQueuedRefreshRequest,
   now = new Date(),
   preferredRegistryCode,
+  queuedOnly = false,
   returnScheduledFailures = false,
   scheduledOperationTimeoutMs =
     CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
@@ -536,6 +542,7 @@ export async function maintainNextCreditexProductRegistry({
   loadQueuedRefresh?: typeof loadQueuedRefreshRequest;
   now?: Date;
   preferredRegistryCode?: string;
+  queuedOnly?: boolean;
   returnScheduledFailures?: boolean;
   scheduledOperationTimeoutMs?: number;
   targets: readonly CreditexProductRegistryMaintenanceTarget[];
@@ -553,7 +560,7 @@ export async function maintainNextCreditexProductRegistry({
           : targets.map((target) => target.registryCode),
         now,
       );
-      if (!queued && targets.length === 0) {
+      if (!queued && (targets.length === 0 || queuedOnly)) {
         return { outcome: "no_targets" as const };
       }
       let target: CreditexProductRegistryMaintenanceTarget;
@@ -656,7 +663,8 @@ export async function maintainNextCreditexProductRegistry({
               positiveBoundedMilliseconds(
                 scheduledOperationTimeoutMs,
                 CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
-                CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
+                creditexRequiresCompleteRegisterImport(target.registryCode)
+                  ? CREDITEX_COMPLETE_REGISTER_TIMEOUT_MS : CREDITEX_PRODUCT_REGISTRY_BACKGROUND_SOURCE_TIMEOUT_MS,
               ),
             )
           : undefined;
@@ -791,6 +799,7 @@ export async function maintainNextCreditexProductRegistry({
 
 export async function drainCreditexProductRegistryMaintenance({
   database,
+  scheduled = false,
   maximumElapsedMs = CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MS,
   maximumSteps = CREDITEX_PRODUCT_REGISTRY_BACKGROUND_DRAIN_MAX_STEPS,
   now = () => new Date(),
@@ -801,6 +810,7 @@ export async function drainCreditexProductRegistryMaintenance({
   maintain = maintainNextCreditexProductRegistry,
 }: {
   database: D1Database;
+  scheduled?: boolean;
   maximumElapsedMs?: number;
   maximumSteps?: number;
   now?: () => Date;
@@ -853,7 +863,9 @@ export async function drainCreditexProductRegistryMaintenance({
       now: now(),
       preferredRegistryCode: nextPreferredRegistryCode,
       returnScheduledFailures: true,
-      scheduledOperationTimeoutMs: Math.min(operationBudgetMs, remainingMs),
+      scheduledOperationTimeoutMs: scheduled
+        ? CREDITEX_COMPLETE_REGISTER_TIMEOUT_MS
+        : Math.min(operationBudgetMs, remainingMs),
       targets,
     });
     steps += 1;

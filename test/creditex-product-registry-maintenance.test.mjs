@@ -1115,6 +1115,50 @@ test("orphaned retained cleanup recreates its queue until a healthy receipt exis
   );
 });
 
+test("whole-register cron has time to finish while picker and streaming operations remain bounded", async (t) => {
+  const scheduledDelays = [];
+  const realTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, "setTimeout", (fn, ms, ...args) => {
+    scheduledDelays.push(ms);
+    return realTimeout(fn, ms, ...args);
+  });
+  for (const [registryCode, scheduled, expected] of [
+    ["gems-products", true, 120_000], ["cer_sres_swh", true, 120_000],
+    ["gems-products", false, 18_000], ["veu-approved-products", true, 18_000],
+  ]) {
+    const database = fleetDatabase();
+    await enqueueCreditexProductRegistryRefresh(database, registryCode, NOW, { ensureSchema: withoutSchemaInstall });
+    const result = await drainCreditexProductRegistryMaintenance({
+      database, preferredRegistryCode: registryCode, scheduled, now: () => NOW,
+      maintain: input => maintainNextCreditexProductRegistry({ ...input, withFleetLease: realFleetLease }),
+      targets: [{ registryCode, loadStatus: async () => registryStatus({ registryCode, status: "stale" }),
+        refresh: async () => ({ changed: true }) }],
+    });
+    assert.equal(result.outcome, "refreshed");
+    assert.equal(scheduledDelays.at(-1), expected);
+  }
+});
+
+test("a reviewed decrease waits until the next daily check and a waiting client respects that hold", async () => {
+  const database = fleetDatabase();
+  const registryCode = "gems-products";
+  let attempts = 0;
+  const target = { registryCode, loadStatus: async () => registryStatus({ registryCode, status: "stale" }), refresh: async () => {
+    attempts++;
+    throw new CreditexOfficialProductError("OFFICIAL_PRODUCT_SOURCE_COUNT_REGRESSION", 409, "Count decrease needs review");
+  } };
+  const run = () => maintainNextCreditexProductRegistry({
+    database, preferredRegistryCode: registryCode, queuedOnly: true, now: NOW,
+    returnScheduledFailures: true, targets: [target], withFleetLease: realFleetLease,
+  });
+  assert.equal((await run()).outcome, "no_targets");
+  await enqueueCreditexProductRegistryRefresh(database, registryCode, NOW, { ensureSchema: withoutSchemaInstall });
+  assert.equal((await run()).retryAfterMs, CREDITEX_PRODUCT_REGISTRY_PROACTIVE_REFRESH_MS);
+  assert.equal((await run()).outcome, "no_targets");
+  assert.equal(attempts, 1);
+  assert.equal(database.state.refreshRequests.get(registryCode).notBefore, new Date(NOW.getTime() + CREDITEX_PRODUCT_REGISTRY_PROACTIVE_REFRESH_MS).toISOString());
+});
+
 test("background drain advances consecutive replay quanta in one invocation", async () => {
   let calls = 0;
   const result = await drainCreditexProductRegistryMaintenance({
